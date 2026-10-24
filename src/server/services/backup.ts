@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import type { BackupFileCheck, BackupInfo } from '@shared/types'
 import type { DB } from '../db/connection'
-import { DATA_TABLES, latestSchemaVersion } from '../db/migrations'
+import { DATA_TABLES, latestSchemaVersion, PLATFORM_TABLES } from '../db/migrations'
 import { ensureRoles } from './roles'
 
 export const BACKUP_EXT = '.pfmbackup'
@@ -57,7 +57,8 @@ export async function dumpDatabase(db: DB, opts: { orgId?: number | null; now?: 
   return db.transaction(async () => {
     const version = (await db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get()) as { v: number }
     const tables: BackupData['tables'] = {}
-    for (const t of DATA_TABLES) {
+    // Platform tables (plans, subscriptions, platform accounts) only in whole-database backups.
+    for (const t of orgId === null ? [...DATA_TABLES, ...PLATFORM_TABLES] : DATA_TABLES) {
       const columns = await tableColumns(db, t)
       if (columns.length === 0) continue // not created yet (a database from before organizations)
       let where = ''
@@ -225,13 +226,16 @@ interface Link {
 }
 
 /** The links between records (organization-aware foreign keys), excluding the organization column itself. */
-async function links(db: DB): Promise<Link[]> {
-  return (await db
+/** Links between records; with `orgOnly`, those between an organization's own tables (not the platform's plans and subscriptions). */
+async function links(db: DB, orgOnly = false): Promise<Link[]> {
+  const all = (await db
     .prepare(
       `SELECT table_name AS \`table\`, column_name AS \`column\`, referenced_table_name AS parent FROM information_schema.key_column_usage
        WHERE table_schema = DATABASE() AND referenced_table_name IS NOT NULL AND column_name <> 'organization_id'`
     )
     .all()) as Link[]
+  const scoped = new Set<string>(DATA_TABLES)
+  return orgOnly ? all.filter((l) => scoped.has(l.table) && scoped.has(l.parent)) : all
 }
 
 /**
@@ -240,7 +244,7 @@ async function links(db: DB): Promise<Link[]> {
  */
 export async function foreignKeyProblems(db: DB, orgId?: number): Promise<string[]> {
   const problems: string[] = []
-  for (const fk of await links(db)) {
+  for (const fk of await links(db, orgId !== undefined)) {
     const org = orgId !== undefined ? 'AND x.organization_id = ?' : ''
     const r = (await db
       .prepare(`SELECT COUNT(*) AS n FROM ${fk.table} x LEFT JOIN ${fk.parent} p ON p.id = x.${fk.column} WHERE x.${fk.column} IS NOT NULL AND p.id IS NULL ${org}`)
@@ -259,8 +263,9 @@ export async function restoreDatabase(db: DB, data: BackupData) {
   await db.transaction(async () => {
     await db.query('SET FOREIGN_KEY_CHECKS = 0')
     try {
-      for (const t of [...DATA_TABLES].reverse()) await db.query(`DELETE FROM ${t}`)
-      for (const t of DATA_TABLES) await insertRows(db, t, data.tables[t], (_c, v) => v)
+      const all = [...DATA_TABLES, ...PLATFORM_TABLES]
+      for (const t of [...all].reverse()) await db.query(`DELETE FROM ${t}`)
+      for (const t of all) await insertRows(db, t, data.tables[t], (_c, v) => v)
       await db.query('DELETE FROM sessions')
     } finally {
       await db.query('SET FOREIGN_KEY_CHECKS = 1')
@@ -346,7 +351,7 @@ export async function restoreOrganization(db: DB, orgId: number, data: BackupDat
         shift.set(t, max + 1 - minOld)
       }
       const moved = (table: string, v: unknown) => (v === null || v === undefined ? null : Number(v) + (shift.get(table) ?? 0))
-      const parentOf = new Map((await links(db)).map((l) => [`${l.table}.${l.column}`, l.parent]))
+      const parentOf = new Map((await links(db, true)).map((l) => [`${l.table}.${l.column}`, l.parent]))
       // Desktop backups have no farms: their cages and days go to the organization's first farm.
       const farm = hasFarms
         ? null
@@ -410,7 +415,7 @@ export async function restoreOrganization(db: DB, orgId: number, data: BackupDat
     const problems = await foreignKeyProblems(db, orgId)
     if (problems.length) throw new Error('foreign_key_errors: ' + problems.slice(0, 3).join('; '))
     // Every link must stay inside the organization (MySQL does not re-check links added while checks were off).
-    for (const fk of await links(db)) {
+    for (const fk of await links(db, true)) {
       const r = (await db
         .prepare(`SELECT COUNT(*) AS n FROM ${fk.table} x JOIN ${fk.parent} p ON p.id = x.${fk.column} WHERE x.organization_id = ? AND p.organization_id <> ?`)
         .get(orgId, orgId)) as { n: number }

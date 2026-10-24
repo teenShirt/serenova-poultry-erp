@@ -5,6 +5,10 @@ import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import type { ApiResponse } from '@shared/api'
+import { createPlatformHandlers, dispatchPlatform } from './platform-api'
+import { loadPlatformUser } from './services/platform'
+import type { PlatformUser } from '@shared/platform'
+import { assertModule } from './services/subscriptions'
 import { createHandlers, dispatch, loadSessionUser, recordReport, buildReport, sessionFarm, APP_VERSION, type PublicCtx, type RequestCtx } from './api'
 import { loadConfig, type ServerConfig } from './config'
 import { Databases } from './databases'
@@ -36,6 +40,7 @@ export async function createServer(cfg: ServerConfig) {
   const sessions = new Sessions(dbs, cfg.sessionIdleHours)
   const restoreTokens = new RestoreTokens()
   const handlers = createHandlers({ cfg, dbs, restoreTokens })
+  const platformHandlers = createPlatformHandlers(APP_VERSION)
 
   const cookie = (req: Request, value: string | null) => {
     const secure = cfg.secureCookies || req.secure ? '; Secure' : ''
@@ -47,18 +52,18 @@ export async function createServer(cfg: ServerConfig) {
   /** Saves what the request changed about its browser session (sign-in, sign-out, demonstration mode). */
   async function saveSession(req: Request, res: Response, current: Session | null, ctx: PublicCtx) {
     const change = ctx.session
-    if (!('userId' in change) && !('orgId' in change) && !('farmId' in change) && !change.mode && !change.rotate) {
+    if (!('userId' in change) && !('orgId' in change) && !('farmId' in change) && !('platformUserId' in change) && !change.mode && !change.rotate) {
       if (current) await sessions.touch(current)
       return
     }
-    const pick = <K extends 'userId' | 'orgId' | 'farmId'>(k: K) => (k in change ? (change[k] ?? null) : (current?.[k] ?? null))
-    const next = { userId: pick('userId'), orgId: pick('orgId'), farmId: pick('farmId'), mode: change.mode ?? current?.mode ?? 'farm' }
+    const pick = <K extends 'userId' | 'orgId' | 'farmId' | 'platformUserId'>(k: K) => (k in change ? (change[k] ?? null) : (current?.[k] ?? null))
+    const next = { userId: pick('userId'), orgId: pick('orgId'), farmId: pick('farmId'), platformUserId: pick('platformUserId'), mode: change.mode ?? current?.mode ?? 'farm' }
     if (current && !change.rotate) {
       await sessions.update(current.id, next)
       return
     }
     if (current) await sessions.destroy(current.id)
-    if (next.userId === null && next.mode === 'farm') {
+    if (next.userId === null && next.platformUserId === null && next.mode === 'farm') {
       res.setHeader('Set-Cookie', cookie(req, null))
       return
     }
@@ -70,15 +75,22 @@ export async function createServer(cfg: ServerConfig) {
    * Runs `fn` with the request's database (farm or demonstration), signed-in user, and the
    * organization and farm from the session. The browser never chooses the organization.
    */
-  async function withRequest<T>(req: Request, res: Response, fn: (ctx: PublicCtx) => Promise<T>, keepSession?: (result: T) => boolean): Promise<T> {
+  async function withRequest<T>(
+    req: Request,
+    res: Response,
+    fn: (ctx: PublicCtx, platformUser: PlatformUser | null) => Promise<T>,
+    keepSession?: (result: T) => boolean
+  ): Promise<T> {
     const session = await sessions.find(readCookie(req, SESSION_COOKIE))
     const mode = session?.mode === 'demo' && dbs.demoAvailable ? 'demo' : 'farm'
     return dbs.with(mode, async (db) => {
       const user = await loadSessionUser({ db }, session?.userId ?? null, session?.orgId ?? null)
       const org = user ? session!.orgId : null
       const farm = org !== null ? await sessionFarm({ db }, org, session?.farmId ?? null) : null
+      // Platform administrators sign in to the console on the real database only.
+      const platformUser = mode === 'farm' ? await loadPlatformUser(db, session?.platformUserId ?? null) : null
       const ctx: PublicCtx = { db, user, org, farm, now: () => new Date(), mode, session: {} }
-      const result = await fn(ctx)
+      const result = await fn(ctx, platformUser)
       if (!keepSession || keepSession(result)) await saveSession(req, res, session, ctx)
       return result
     })
@@ -119,7 +131,16 @@ export async function createServer(cfg: ServerConfig) {
 
   app.post('/api/call/:method', sameOrigin, express.json({ limit: '2mb' }), async (req, res) => {
     const input = (req.body as { input?: unknown } | undefined)?.input
-    const out = await withRequest<ApiResponse<unknown>>(req, res, (ctx) => dispatch(handlers, String(req.params['method']), input, ctx), (r) => r.ok)
+    const method = String(req.params['method'])
+    const out = await withRequest<ApiResponse<unknown>>(
+      req,
+      res,
+      (ctx, platformUser) =>
+        method.startsWith('platform.')
+          ? dispatchPlatform(platformHandlers, method, input, { db: ctx.db, now: ctx.now, mode: ctx.mode, session: ctx.session, platformUser })
+          : dispatch(handlers, method, input, ctx),
+      (r) => r.ok
+    )
     res.setHeader('Cache-Control', 'no-store')
     res.json(out)
   })
@@ -137,6 +158,7 @@ export async function createServer(cfg: ServerConfig) {
     const file = await withSignedIn(req, res, async (ctx) => {
       await checkAccess(ctx, 'reports.preview', spec.data)
       requirePermission(ctx, 'reports.export')
+      await assertModule(ctx, 'exports')
       const model = await buildReport(ctx, spec.data)
       const data = await renderXlsx(model, (await getSettings(ctx)).language)
       await recordReport(ctx, spec.data, 'xlsx', `${model.fileStem}.xlsx`)

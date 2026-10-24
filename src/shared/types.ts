@@ -1,3 +1,5 @@
+import type { Entitlements } from './platform'
+
 import type { FeedMethod, MortalityDenominator, ProductionDenominator } from './calc'
 
 export type Role = 'admin' | 'operator'
@@ -444,6 +446,8 @@ export interface AppStatus {
   today: string
   backupWarning: string | null
   pendingSignups: number
+  /** The organization's plan, its limits and usage, and whether it is read-only (null before signing in) */
+  subscription: Entitlements | null
 }
 
 export interface Party {

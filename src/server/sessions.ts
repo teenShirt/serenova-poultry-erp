@@ -10,6 +10,8 @@ export interface Session {
   /** The signed-in user's organization, and the farm they are working on. */
   orgId: number | null
   farmId: number | null
+  /** A Serenova platform administrator (never together with an organization user). */
+  platformUserId: number | null
   mode: Mode
   lastSeenAt: string
 }
@@ -22,6 +24,7 @@ export interface SessionChange {
   userId?: number | null
   orgId?: number | null
   farmId?: number | null
+  platformUserId?: number | null
   mode?: Mode
   /** Replace the session id (sign-in / sign-out) so an old cookie can never be reused. */
   rotate?: boolean
@@ -44,35 +47,35 @@ export class Sessions {
     if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null
     const id = hash(token)
     return this.dbs.with('farm', async (db) => {
-      const row = (await db.prepare('SELECT id, user_id, organization_id, farm_id, mode, last_seen_at, expires_at FROM sessions WHERE id = ?').get(id)) as
-        | { id: string; user_id: number | null; organization_id: number | null; farm_id: number | null; mode: Mode; last_seen_at: string; expires_at: string }
+      const row = (await db.prepare('SELECT id, user_id, organization_id, farm_id, platform_user_id, mode, last_seen_at, expires_at FROM sessions WHERE id = ?').get(id)) as
+        | { id: string; user_id: number | null; organization_id: number | null; farm_id: number | null; platform_user_id: number | null; mode: Mode; last_seen_at: string; expires_at: string }
         | undefined
       if (!row) return null
       if (row.expires_at <= now.toISOString()) {
         await db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
         return null
       }
-      return { id: row.id, userId: row.user_id, orgId: row.organization_id, farmId: row.farm_id, mode: row.mode, lastSeenAt: row.last_seen_at }
+      return { id: row.id, userId: row.user_id, orgId: row.organization_id, farmId: row.farm_id, platformUserId: row.platform_user_id, mode: row.mode, lastSeenAt: row.last_seen_at }
     })
   }
 
   /** Creates a session and returns the cookie value. */
-  async create(s: Pick<Session, 'userId' | 'orgId' | 'farmId' | 'mode'>, meta: { userAgent?: string; ip?: string }, now = new Date()): Promise<string> {
+  async create(s: Pick<Session, 'userId' | 'orgId' | 'farmId' | 'platformUserId' | 'mode'>, meta: { userAgent?: string; ip?: string }, now = new Date()): Promise<string> {
     const token = randomBytes(32).toString('base64url')
     const at = now.toISOString()
     await this.dbs.with('farm', (db) =>
       db
-        .prepare('INSERT INTO sessions (id, user_id, organization_id, farm_id, mode, created_at, last_seen_at, expires_at, user_agent, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(hash(token), s.userId, s.orgId, s.farmId, s.mode, at, at, this.expiry(now), meta.userAgent?.slice(0, 255) ?? null, meta.ip?.slice(0, 64) ?? null)
+        .prepare('INSERT INTO sessions (id, user_id, organization_id, farm_id, platform_user_id, mode, created_at, last_seen_at, expires_at, user_agent, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(hash(token), s.userId, s.orgId, s.farmId, s.platformUserId, s.mode, at, at, this.expiry(now), meta.userAgent?.slice(0, 255) ?? null, meta.ip?.slice(0, 64) ?? null)
     )
     return token
   }
 
-  async update(id: string, s: Pick<Session, 'userId' | 'orgId' | 'farmId' | 'mode'>, now = new Date()) {
+  async update(id: string, s: Pick<Session, 'userId' | 'orgId' | 'farmId' | 'platformUserId' | 'mode'>, now = new Date()) {
     await this.dbs.with('farm', (db) =>
       db
-        .prepare('UPDATE sessions SET user_id = ?, organization_id = ?, farm_id = ?, mode = ?, last_seen_at = ?, expires_at = ? WHERE id = ?')
-        .run(s.userId, s.orgId, s.farmId, s.mode, now.toISOString(), this.expiry(now), id)
+        .prepare('UPDATE sessions SET user_id = ?, organization_id = ?, farm_id = ?, platform_user_id = ?, mode = ?, last_seen_at = ?, expires_at = ? WHERE id = ?')
+        .run(s.userId, s.orgId, s.farmId, s.platformUserId, s.mode, now.toISOString(), this.expiry(now), id)
     )
   }
 

@@ -5,6 +5,7 @@ import { assert } from '../errors'
 import { audit } from './audit'
 import { createUserRaw, toSessionUser } from './auth'
 import { ensureRoles } from './roles'
+import { createSubscription, DEFAULT_TRIAL } from './subscriptions'
 import { insertCageRaw } from './cages'
 import { getOrCreateBatch, insertItemRaw } from './inventory'
 import { saveSettings } from './settings'
@@ -61,12 +62,16 @@ export interface NewOrganization {
  * Creates an organization with its first farm, administrator, cages and starting stock, in one
  * transaction so a failure leaves nothing half-created.
  */
-export async function createOrganization(anon: AnonCtx, s: SetupInput): Promise<NewOrganization> {
+export async function createOrganization(
+  anon: AnonCtx,
+  s: SetupInput,
+  opts: { planCode?: string; planId?: number; trialDays?: number; allowNoCages?: boolean } = {}
+): Promise<NewOrganization> {
   assert(s.farmName.trim(), 'required_field', { field: 'farmName' })
   assert(isValidTimezone(s.timezone), 'invalid_timezone')
   const today = todayInTimezone(s.timezone, anon.now())
   assert(isIsoDate(s.startDate) && s.startDate <= today && s.startDate >= addDays(today, -60), 'invalid_start_date')
-  assert(s.cages.length > 0 && s.cages.length <= 200, 'no_active_cages')
+  assert((opts.allowNoCages || s.cages.length > 0) && s.cages.length <= 200, 'no_active_cages')
   return anon.db.transaction(async () => {
     const at = anon.now().toISOString()
     const name = s.farmName.trim()
@@ -78,6 +83,13 @@ export async function createOrganization(anon: AnonCtx, s: SetupInput): Promise<
         .run(org, 'main', name, s.farmLocation.trim() || null, at)
     ).lastInsertRowid
     const ctx: Ctx = { db: anon.db, now: anon.now, org, farm, user: null }
+    // The subscription comes first: creating the administrator already counts against its limits.
+    await createSubscription(anon.db, org, {
+      planCode: opts.planId ? undefined : (opts.planCode ?? DEFAULT_TRIAL.plan),
+      planId: opts.planId,
+      trialDays: opts.trialDays ?? (opts.planCode || opts.planId ? 0 : DEFAULT_TRIAL.days),
+      today: anon.now().toISOString().slice(0, 10)
+    })
     await ensureRoles(anon.db, org)
     const adminRole = (await anon.db.prepare('SELECT id FROM roles WHERE organization_id = ? AND is_admin = 1').get(org)) as { id: number }
     const { id: adminId, recoveryCode } = await createUserRaw(ctx, { ...s.admin, roleId: adminRole.id })
@@ -136,5 +148,6 @@ export async function platformHasOrganizations(anon: Pick<AnonCtx, 'db'>): Promi
 /** First-run setup of a new installation: creates its first organization. Later organizations are added by the platform owner. */
 export async function completeSetup(anon: AnonCtx, s: SetupInput): Promise<NewOrganization> {
   assert(!(await platformHasOrganizations(anon)), 'setup_already_done')
-  return createOrganization(anon, s)
+  // The installation's own first organization is not limited by a plan (Enterprise, no end date).
+  return createOrganization(anon, s, { planCode: 'enterprise', trialDays: 0 })
 }

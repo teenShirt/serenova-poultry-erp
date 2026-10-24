@@ -3,6 +3,7 @@ import { isIsoDate } from '@shared/dates'
 import { EGG_SESSIONS, INVENTORY_CATEGORIES, TXN_TYPES } from '@shared/types'
 import type { ApiMethod } from '@shared/api'
 import { PERMISSIONS } from '@shared/permissions'
+import { MODULES, SUBSCRIPTION_STATUSES } from '@shared/platform'
 
 /** Input schemas for every API method. Unknown keys are stripped; wrong types are rejected. */
 const date = z.string().refine(isIsoDate, 'date')
@@ -16,6 +17,7 @@ const none = z.unknown().optional()
 const lang = z.enum(['en', 'si'])
 const category = z.enum(INVENTORY_CATEGORIES)
 const range = z.object({ from: date, to: date, cageId: id.nullable().optional() })
+const limit = z.number().int().min(0).max(100000)
 const withReason = z.object({ id, reason: text(500) })
 const payMethod = z.enum(['cash', 'bank', 'cheque', 'other'])
 const partyInput = z.object({ id: id.nullable(), name: text(100), phone: optText(40), address: optText(200), notes: optText(), active: z.boolean() })
@@ -302,5 +304,47 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
 
   'backup.list': none,
   'backup.create': none,
-  'backup.restore': z.object({ token: text(100) })
+  'backup.restore': z.object({ token: text(100) }),
+
+  'platform.status': none,
+  'platform.login': z.object({ email: text(255), password: text(200) }),
+  'platform.logout': none,
+  'platform.metrics': none,
+  'platform.organizations': none,
+  'platform.createOrganization': z.object({
+    name: text(100),
+    location: text(200),
+    timezone: text(64),
+    language: lang,
+    adminEmail: text(255),
+    adminName: text(80),
+    adminPassword: text(200),
+    planId: id,
+    trialDays: z.number().int().min(0).max(365)
+  }),
+  'platform.setOrganizationStatus': z.object({ id, status: z.enum(['active', 'suspended', 'archived']), reason: text(500) }),
+  'platform.plans': none,
+  'platform.savePlan': z.object({
+    id: id.nullable(),
+    code: text(40),
+    name: text(100),
+    maxUsers: limit,
+    maxAdmins: limit,
+    maxRoles: limit,
+    maxFarms: limit,
+    maxWarehouses: limit,
+    modules: z.array(z.enum(MODULES)).max(MODULES.length),
+    active: z.boolean()
+  }),
+  'platform.setSubscription': z.object({
+    organizationId: id,
+    planId: id,
+    status: z.enum(SUBSCRIPTION_STATUSES),
+    startsOn: date,
+    endsOn: date.nullable(),
+    trialEndsOn: date.nullable(),
+    graceDays: z.number().int().min(0).max(365),
+    overrides: z.object({ maxUsers: limit, maxAdmins: limit, maxRoles: limit, maxFarms: limit, maxWarehouses: limit }).partial().nullable(),
+    note: text(500)
+  })
 }

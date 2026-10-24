@@ -4,6 +4,7 @@ import { type AnonCtx, type Ctx, requireUser } from '../context'
 import { AppError, assert } from '../errors'
 import { audit } from './audit'
 import { parseCages } from './duties'
+import { assertSeat, assertWritable } from './subscriptions'
 import { assertCanAssignRole, assertCanManageUser, dutiesOf, ensureRoles, getRole, listRoles, requirePermission, rolePermissions, WORKER_ROLE } from './roles'
 import { getSettings } from './settings'
 
@@ -233,6 +234,7 @@ export async function createUserRaw(ctx: Ctx, u: NewUser, opts: { pending?: bool
   const username = await usernameFor(ctx, email)
   const role = await getRole(ctx, u.roleId)
   const pending = !!opts.pending
+  await assertSeat(ctx, { user: true, admin: !!role.is_admin && !pending })
   const info = await ctx.db
     .prepare(
       'INSERT INTO users (organization_id, username, email, display_name, password_hash, role, role_id, active, pending, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -255,6 +257,7 @@ export async function signup(anon: AnonCtx, u: { organizationCode: string; email
   assert(org, 'organization_not_found')
   const ctx = await orgCtx(anon, org.id)
   assert((await getSettings(ctx)).allowSignup, 'signup_disabled')
+  await assertWritable(ctx)
   return ctx.db.transaction(async () => {
     // Someone signing up gets the data-entry role; the administrator chooses the final role on approval.
     await ensureRoles(ctx.db, ctx.org)
@@ -343,6 +346,7 @@ export async function approveSignup(ctx: Ctx, id: number, roleId: number) {
     assert(row.pending, 'not_pending')
     await assertCanAssignRole(ctx, roleId)
     const role = await getRole(ctx, roleId)
+    if (role.is_admin) await assertSeat(ctx, { admin: true })
     await ctx.db.prepare('UPDATE users SET pending = 0, active = 1, role = ?, role_id = ? WHERE id = ?').run(role.is_admin ? 'admin' : 'operator', roleId, id)
     await audit(ctx, { action: 'approve_signup', entity: 'user', entityId: id, details: { username: row.username, email: row.email, role: role.name } })
   })()
@@ -384,6 +388,9 @@ export async function updateUser(ctx: Ctx, u: { id: number; email: string; displ
     if (before.role === 'admin' && (!role.is_admin || !u.active)) {
       assert((await otherActiveAdmins(ctx, u.id)) > 0, 'last_admin')
     }
+    // Reactivating an account takes a seat again; becoming an administrator takes an administrator seat.
+    if (u.active && !before.active) await assertSeat(ctx, { user: true })
+    if (u.active && role.is_admin && !(before.active && before.role === 'admin')) await assertSeat(ctx, { admin: true })
     assert(!(u.id === admin.id && !u.active), 'cannot_disable_self')
     assert(!(await ctx.db.prepare('SELECT 1 AS x FROM users WHERE email = ? AND id <> ?').get(email, u.id)), 'email_taken')
     await ctx.db

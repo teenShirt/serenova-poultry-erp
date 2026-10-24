@@ -46,7 +46,10 @@ async function seedDemoData(db: DB, now: Date, days: number) {
   const today = todayInTimezone(tz, now)
   const start = addDays(today, -days)
   const anon: AnonCtx = { db, now: () => now }
-  const created = await createOrganization(anon, {
+  // The demonstration shows every module, so it is on the Enterprise plan.
+  const created = await createOrganization(
+    anon,
+    {
     farmName: 'DEMO – Sample Poultry Farm',
     farmLocation: 'Demonstration only',
     timezone: tz,
@@ -66,7 +69,9 @@ async function seedDemoData(db: DB, now: Date, days: number) {
       { category: 'medicine', name: 'Electrolyte', unit: 'g', lowStockThreshold: 200, openingBalance: 1000, batchNo: 'EL-118', expiryDate: addDays(today, 20) },
       { category: 'supply', name: 'Egg trays', unit: 'pcs', lowStockThreshold: 500, openingBalance: 3000, batchNo: null, expiryDate: null }
     ]
-  })
+    },
+    { planCode: 'enterprise', trialDays: 0 }
+  )
   const scope = { db, org: created.organizationId, farm: created.farmId, now: () => now }
   const admin: Ctx = { ...scope, user: (await login(anon, DEMO_USERS.admin.email, DEMO_USERS.admin.password)).user }
   // Two data-entry roles sharing the cages, to show what roles and cage assignments do (Settings → Users and Roles).

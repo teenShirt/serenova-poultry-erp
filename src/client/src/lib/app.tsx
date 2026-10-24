@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { formatDate, formatDateTime, formatNumber, translate, type Params } from '@shared/i18n'
 import type { AppStatus, Language } from '@shared/types'
 import type { Permission } from '@shared/permissions'
+import type { Module } from '@shared/platform'
 import { ApiError, call, onDataChanged } from './api'
 
 interface Toast {
@@ -29,6 +30,8 @@ interface AppCtx {
   isAdmin: boolean
   /** Whether the signed-in user's role allows this (the server checks it again on every request) */
   can: (p: Permission) => boolean
+  /** Whether the organization's plan includes this module (the server checks it again) */
+  hasModule: (m: Module) => boolean
   dataVersion: number
 }
 
@@ -83,6 +86,7 @@ export function AppProvider({ initial, children }: { initial: AppStatus; childre
         const params = { ...e.params }
         if (typeof params.session === 'string') params.session = translate(lang, 'session.' + params.session)
         if (typeof params.field === 'string' && !params.field) params.field = '—'
+        if (e.code === 'subscription_read_only' && typeof params.status === 'string') params.status = translate(lang, 'sub.status.' + params.status)
         const key = 'err.' + e.code
         const msg = translate(lang, key, params)
         return msg === key ? translate(lang, 'err.unknown', { message: e.code }) : msg
@@ -128,6 +132,7 @@ export function AppProvider({ initial, children }: { initial: AppStatus; childre
       errorText,
       isAdmin: status.user?.role === 'admin',
       can: (p) => !!status.user?.permissions.includes(p),
+      hasModule: (m) => !status.subscription || status.subscription.modules.includes(m),
       dataVersion
     }),
     [status, lang, t, refreshStatus, workDate, toast, fail, errorText, dataVersion]

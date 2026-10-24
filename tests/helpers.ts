@@ -42,9 +42,11 @@ export function testServer() {
 /**
  * The final schema, captured once per test file: a template database is migrated step by step
  * (as a real installation is), and its CREATE TABLE statements are replayed into each test
- * database. Much faster than running every migration for every test.
+ * database, with the reference data the migrations seed (the plans). Much faster than running
+ * every migration for every test.
  */
-let schema: Promise<{ tables: string[]; versions: unknown[][] }> | null = null
+const SEEDED = ['plans']
+let schema: Promise<{ tables: string[]; versions: unknown[][]; seeds: { table: string; rows: Record<string, unknown>[] }[] }> | null = null
 function finalSchema() {
   schema ??= (async () => {
     const server = testServer()
@@ -59,8 +61,10 @@ function finalSchema() {
       const tables: string[] = []
       for (const { t } of names) tables.push(((await db.query(`SHOW CREATE TABLE \`${t}\``)) as Record<string, string>[])[0]['Create Table'])
       const versions = ((await db.prepare('SELECT version, name, applied_at FROM schema_migrations').all()) as { version: number; name: string; applied_at: string }[]).map((r) => [r.version, r.name, r.applied_at])
+      const seeds: { table: string; rows: Record<string, unknown>[] }[] = []
+      for (const table of SEEDED) seeds.push({ table, rows: (await db.prepare(`SELECT * FROM \`${table}\` ORDER BY id`).all()) as Record<string, unknown>[] })
       db.release()
-      return { tables, versions }
+      return { tables, versions, seeds }
     } finally {
       await pool.end()
       await admin.query(`DROP DATABASE IF EXISTS ${name}`)
@@ -81,11 +85,16 @@ export async function openTestDb(migrated = true): Promise<DB> {
   const db = await DB.connect(pool, name)
   created.push({ name, pool, dbs: [db] })
   if (migrated) {
-    const { tables, versions } = await finalSchema()
+    const { tables, versions, seeds } = await finalSchema()
     await db.query('SET FOREIGN_KEY_CHECKS = 0')
     for (const ddl of tables) await db.query(ddl)
     await db.query('SET FOREIGN_KEY_CHECKS = 1')
     await db.query('INSERT INTO schema_migrations (version, name, applied_at) VALUES ?', [versions])
+    for (const { table, rows } of seeds) {
+      if (!rows.length) continue
+      const cols = Object.keys(rows[0]!)
+      await db.query(`INSERT INTO \`${table}\` (${cols.map((c) => `\`${c}\``).join(', ')}) VALUES ?`, [rows.map((r) => cols.map((c) => r[c]))])
+    }
   }
   return db
 }
@@ -109,14 +118,18 @@ afterAll(async () => {
 
 /**
  * A farm organization with an administrator (admin@<domain>) and a data-entry worker
- * (worker@<domain>). Pass `db` to add another organization to the same database.
+ * (worker@<domain>). Pass `db` to add another organization to the same database. It is on the
+ * Enterprise plan unless `plan` says otherwise (the subscription tests use the smaller plans).
  */
-export async function makeFarm(opts: { db?: DB; name?: string; domain?: string } = {}) {
+export async function makeFarm(opts: { db?: DB; name?: string; domain?: string; plan?: string; trialDays?: number } = {}) {
   const db = opts.db ?? (await openTestDb())
   const domain = opts.domain ?? 'test.farm'
   let now = NOW
   const anon: AnonCtx = { db, now: () => now }
-  const org = await createOrganization(anon, setupInput({ farmName: opts.name ?? 'Test Farm', admin: { email: `admin@${domain}`, displayName: 'Admin', password: 'secret123' } }))
+  const org = await createOrganization(anon, setupInput({ farmName: opts.name ?? 'Test Farm', admin: { email: `admin@${domain}`, displayName: 'Admin', password: 'secret123' } }), {
+    planCode: opts.plan ?? 'enterprise',
+    trialDays: opts.trialDays ?? 0
+  })
   const scope = { db, org: org.organizationId, farm: org.farmId, now: () => now }
   const adminCtx: Ctx = { ...scope, user: (await login(anon, `admin@${domain}`, 'secret123')).user }
   const roleId = async (where: string) => ((await db.prepare(`SELECT id FROM roles WHERE organization_id = ? AND ${where}`).get(org.organizationId)) as { id: number }).id

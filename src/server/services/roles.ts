@@ -4,6 +4,7 @@ import type { Ctx } from '../context'
 import type { DB } from '../db/connection'
 import { AppError, assert } from '../errors'
 import { audit } from './audit'
+import { assertRoleSlot } from './subscriptions'
 
 export const ADMIN_ROLE = 'Organization Admin'
 export const WORKER_ROLE = 'Farm Worker'
@@ -144,6 +145,7 @@ export async function saveRole(ctx: Ctx, r: { id: number | null; name: string; d
       await ctx.db.prepare('DELETE FROM role_permissions WHERE role_id = ? AND organization_id = ?').run(id, ctx.org)
       if (permissions.length) await ctx.db.query('INSERT INTO role_permissions (organization_id, role_id, permission) VALUES ?', [permissions.map((p) => [ctx.org, id, p])])
     } else {
+      await assertRoleSlot(ctx)
       id = await insertRole(ctx.db, ctx.org, { name, description: r.description?.trim() || null, isAdmin: false, permissions })
     }
     await audit(ctx, { action: r.id ? 'update' : 'create', entity: 'role', entityId: id, details: { name, before: r.id ? before : undefined, after: permissions } })

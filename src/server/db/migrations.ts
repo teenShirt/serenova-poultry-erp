@@ -519,8 +519,99 @@ ALTER TABLE users ADD COLUMN role_id INT NULL AFTER role,
       const orgs = (await db.prepare('SELECT id FROM organizations').all()) as { id: number }[]
       for (const o of orgs) await ensureRoles(db, o.id)
     }
+  },
+  {
+    version: 7,
+    name: 'platform: super admins, plans, subscriptions',
+    up: async (db) => {
+      await db.exec(`
+-- Platform (Serenova) accounts. Separate from every organization's users.
+CREATE TABLE platform_users (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(255) NOT NULL,
+  display_name VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  active TINYINT NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  failed_attempts INT NOT NULL DEFAULT 0,
+  locked_until VARCHAR(32),
+  created_at VARCHAR(32) NOT NULL,
+  last_login_at VARCHAR(32),
+  UNIQUE KEY ux_platform_users_email (email)
+) ${T};
+
+CREATE TABLE plans (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(40) NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  max_users INT NOT NULL CHECK (max_users >= 1),
+  max_admins INT NOT NULL CHECK (max_admins >= 1),
+  max_roles INT NOT NULL CHECK (max_roles >= 0),
+  max_farms INT NOT NULL CHECK (max_farms >= 1),
+  max_warehouses INT NOT NULL CHECK (max_warehouses >= 0),
+  modules TEXT NOT NULL,
+  active TINYINT NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  created_at VARCHAR(32) NOT NULL,
+  UNIQUE KEY ux_plans_code (code)
+) ${T};
+
+-- One current subscription per organization. Its state is worked out from the dates on
+-- every request (trial → active → grace → expired); data is never deleted on expiry.
+CREATE TABLE subscriptions (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  plan_id INT NOT NULL,
+  status VARCHAR(16) NOT NULL CHECK (status IN ('trial','active','grace','past_due','suspended','cancelled','expired')),
+  starts_on DATE NOT NULL,
+  ends_on DATE,
+  trial_ends_on DATE,
+  grace_days INT NOT NULL DEFAULT 14 CHECK (grace_days >= 0),
+  overrides TEXT,
+  updated_at VARCHAR(32) NOT NULL,
+  UNIQUE KEY ux_subscriptions_org (organization_id),
+  CONSTRAINT fk_subscriptions_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_subscriptions_plan FOREIGN KEY (plan_id) REFERENCES plans(id)
+) ${T};
+
+-- What platform administrators did (organization changes, plan and subscription changes, sign-ins).
+CREATE TABLE platform_audit (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  at VARCHAR(32) NOT NULL,
+  platform_user_id INT,
+  email VARCHAR(255),
+  action VARCHAR(64) NOT NULL,
+  organization_id INT,
+  details MEDIUMTEXT,
+  KEY ix_platform_audit_at (at)
+) ${T};
+
+ALTER TABLE sessions ADD COLUMN platform_user_id INT NULL AFTER farm_id;
+`)
+      const at = new Date().toISOString()
+      const all = JSON.stringify(['purchasing', 'sales', 'advanced_reports', 'multi_farm', 'exports'])
+      await db.query(
+        'INSERT INTO plans (code, name, max_users, max_admins, max_roles, max_farms, max_warehouses, modules, created_at) VALUES ?',
+        [
+          [
+            ['starter', 'Starter', 5, 1, 3, 1, 1, '[]', at],
+            ['growth', 'Growth', 15, 2, 10, 3, 3, all, at],
+            ['enterprise', 'Enterprise', 50, 5, 30, 10, 10, all, at]
+          ]
+        ]
+      )
+      // Organizations from before subscriptions keep everything they have: Enterprise, no end date.
+      const enterprise = ((await db.prepare("SELECT id FROM plans WHERE code = 'enterprise'").get()) as { id: number }).id
+      const today = at.slice(0, 10)
+      for (const o of (await db.prepare('SELECT id FROM organizations').all()) as { id: number }[]) {
+        await db
+          .prepare("INSERT INTO subscriptions (organization_id, plan_id, status, starts_on, updated_at) VALUES (?, ?, 'active', ?, ?)")
+          .run(o.id, enterprise, today, at)
+      }
+    }
   }
 ]
+
+/** Platform tables: only in whole-database backups, never in (or restored from) an organization's backup. */
+export const PLATFORM_TABLES = ['platform_users', 'plans', 'subscriptions', 'platform_audit'] as const
 
 /** Tables holding farm data, parents before children (the order used by backup and restore). */
 export const DATA_TABLES = [

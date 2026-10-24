@@ -20,6 +20,7 @@
     "migrate": "tsx --tsconfig tsconfig.node.json --env-file-if-exists=.env scripts/migrate.ts",
     "import-sqlite": "tsx --tsconfig tsconfig.node.json --env-file-if-exists=.env scripts/import-sqlite.ts",
     "reset-password": "tsx --tsconfig tsconfig.node.json --env-file-if-exists=.env scripts/reset-password.ts",
+    "create-super-admin": "tsx --tsconfig tsconfig.node.json --env-file-if-exists=.env scripts/create-super-admin.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint src/server src/shared tests scripts",
     "test": "vitest run"

@@ -608,3 +608,59 @@ table.mini td:first-child {
     display: none;
   }
 }
+
+/* Subscription notices (trial ending, grace period, read-only) */
+.sub-banner {
+  padding: 10px 24px;
+  font-weight: 600;
+  font-size: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sub-banner.info {
+  background: #e8f1ff;
+  color: #1747a6;
+}
+.sub-banner.warn {
+  background: #fff4e0;
+  color: #8a5300;
+}
+.sub-banner.bad {
+  background: #fdecec;
+  color: #a01c1c;
+}
+
+/* Platform console */
+.platform {
+  min-height: 100vh;
+  background: var(--bg);
+}
+.platform-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 24px;
+  background: #0b1f3a;
+  color: #fff;
+}
+.platform-bar .brand {
+  border: 0;
+  padding: 0;
+}
+.platform-user {
+  font-weight: 600;
+  font-size: 14px;
+}
+.platform .page {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.platform-bar .grow {
+  flex: 1;
+}
+.platform-bar .brand-text {
+  white-space: nowrap;
+}
+.platform-bar .side-btn {
+  width: auto;
+  color: #fff;
+}

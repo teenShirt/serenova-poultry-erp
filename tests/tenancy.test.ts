@@ -204,7 +204,8 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       'purchases.list', 'purchases.create', 'purchases.cancel', 'sales.stock', 'sales.list', 'sales.dispatch', 'sales.addPayment',
       'sales.cancel', 'admin.dbInfo'
     ]
-    const all = Object.keys(API_KIND) as ApiMethod[]
+    // The console's platform.* requests are only for platform administrators (tests/subscriptions.test.ts).
+    const all = (Object.keys(API_KIND) as ApiMethod[]).filter((m) => !m.startsWith('platform.'))
     expect(all.filter((m) => !noRecordIds.includes(m) && !covered.includes(m))).toEqual([])
   })
 })

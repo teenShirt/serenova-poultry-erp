@@ -1,3 +1,4 @@
+import type { OrgSummary, Plan, PlatformMetrics, PlatformStatus, PlatformUser, SubscriptionChange } from './platform'
 import type {
   AppStatus,
   AuditEntry,
@@ -306,6 +307,21 @@ export interface Api {
   'backup.create': { in: void; out: BackupInfo }
   /** Restores a backup uploaded to /api/backup/upload (which returns the token after checking the file). */
   'backup.restore': { in: { token: string }; out: void }
+
+  // ---- Super Admin console (platform accounts only; never shows farm records) ----
+  'platform.status': { in: void; out: PlatformStatus }
+  'platform.login': { in: { email: string; password: string }; out: PlatformUser }
+  'platform.logout': { in: void; out: void }
+  'platform.metrics': { in: void; out: PlatformMetrics }
+  'platform.organizations': { in: void; out: OrgSummary[] }
+  'platform.createOrganization': {
+    in: { name: string; location: string; timezone: string; language: Language; adminEmail: string; adminName: string; adminPassword: string; planId: number; trialDays: number }
+    out: { id: number; code: string; recoveryCode: string }
+  }
+  'platform.setOrganizationStatus': { in: { id: number; status: 'active' | 'suspended' | 'archived'; reason: string }; out: void }
+  'platform.plans': { in: void; out: Plan[] }
+  'platform.savePlan': { in: Omit<Plan, 'id'> & { id: number | null }; out: number }
+  'platform.setSubscription': { in: SubscriptionChange; out: void }
 }
 
 export type ApiMethod = keyof Api
@@ -424,5 +440,15 @@ export const API_KIND: Record<ApiMethod, 'read' | 'write'> = {
   'admin.activity': 'read',
   'backup.list': 'read',
   'backup.create': 'write',
-  'backup.restore': 'write'
+  'backup.restore': 'write',
+  'platform.status': 'read',
+  'platform.login': 'write',
+  'platform.logout': 'write',
+  'platform.metrics': 'read',
+  'platform.organizations': 'read',
+  'platform.createOrganization': 'write',
+  'platform.setOrganizationStatus': 'write',
+  'platform.plans': 'read',
+  'platform.savePlan': 'write',
+  'platform.setSubscription': 'write'
 }

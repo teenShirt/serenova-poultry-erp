@@ -41,7 +41,39 @@ signed-in user's organization, and MySQL itself rejects a record that points at 
 - Everyone signs in with an **email address**, unique on the whole platform.
 - Staff can sign themselves up with their organization's code (shown under *Settings*); an administrator approves them.
 - The day cycle, cages and hen counts belong to a **farm**; stock, suppliers, customers and the egg store belong to the organization.
-- Additional organizations are added by the platform owner (a Super Admin console comes in a later phase).
+- Additional organizations are added by the platform owner in the Super Admin console (below).
+
+## Plans, subscriptions and the Super Admin console
+
+Every organization has one subscription to a **plan**. The three plans created by the database upgrade are:
+
+| Plan | Users | Admins | Custom roles | Farms | Stores | Modules |
+|---|---|---|---|---|---|---|
+| Starter | 5 | 1 | 3 | 1 | 1 | the core farm work only |
+| Growth | 15 | 2 | 10 | 3 | 3 | purchasing, egg sales, advanced reports, several farms, Excel exports |
+| Enterprise | 50 | 5 | 30 | 10 | 10 | all |
+
+- Limits, modules and plans can be changed in the console, and any limit can be set per customer. Everything is
+  checked on the server (`src/server/services/subscriptions.ts`); the screens only hide what the plan does not include.
+- **Users** counts active accounts plus sign-ups waiting for approval; deactivated accounts free their seat.
+- The state follows the dates: *trial* → *active* → *grace period* (14 days by default) → *expired*. Expired, cancelled and
+  suspended subscriptions are **read-only**: records can be viewed and backed up but not changed, and nothing is deleted.
+  Lowering a limit below what is in use removes nothing; only adding more is refused.
+- Organizations that existed before subscriptions (and the first organization of a new installation) are on Enterprise
+  with no end date. New organizations made in the console start on the plan and trial length chosen there.
+
+The **console** is at `/#/platform`. Platform administrators are separate accounts, created on the server only:
+
+```sh
+npm run create-super-admin -- ops@serenova.lk "Serenova Operations"   # asks for a password (10+ characters)
+npm run create-super-admin -- --list
+npm run create-super-admin -- --disable ops@serenova.lk               # signs them out at once
+```
+
+It shows organizations, their plan, subscription state and usage, and lets you create organizations, change
+subscriptions and suspend or reactivate an organization (suspending signs its users out; records stay). It does
+**not** show any organization's farm records. Every console action, including sign-ins, is recorded in
+`platform_audit`, and changes require a written reason.
 
 ## Moving a farm from the desktop edition
 
@@ -96,12 +128,13 @@ npm run migrate                       # create/upgrade the databases and print t
 npm run import-sqlite -- <file> [--org <code>] [--email <username>=<address> ...]   # import a desktop farm
 npm run reset-password -- --list           # list users of all organizations
 npm run reset-password -- <email address>  # set a new password when the recovery code is lost too
+npm run create-super-admin -- <email> "<name>"   # a platform administrator for the console at /#/platform
 ```
 
 ## Tests
 
 ```sh
-npm test         # 84 tests; a temporary MySQL 8.4 server is downloaded once and started automatically
+npm test         # 110 tests; a temporary MySQL 8.4 server is downloaded once and started automatically
 npm run typecheck
 npm run lint     # includes checks that every database call is awaited
 ```
@@ -126,7 +159,7 @@ src/server/        Express server, API handlers, sessions, services (business ru
 src/server/db/     connection.ts (async MySQL session with nested transactions), migrations.ts
 src/client/        React app (the desktop screens)
 src/shared/        API contract, types, calculations, English/Sinhala translations
-scripts/           build, migrate, import-sqlite, reset-password
+scripts/           build, migrate, import-sqlite, reset-password, create-super-admin
 tests/             unit and workflow tests (run against MySQL)
 resources/manuals/ user manuals (served at /manuals/…)
 ```

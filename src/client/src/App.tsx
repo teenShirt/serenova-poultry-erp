@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import type { AppStatus, Language } from '@shared/types'
 import type { Permission } from '@shared/permissions'
+import type { Module } from '@shared/platform'
 import { translate } from '@shared/i18n'
 import { call } from './lib/api'
 import { AppProvider, useApp, useLoad } from './lib/app'
@@ -55,6 +56,7 @@ import { PurchasesPage } from './pages/Purchases'
 import { SalesPage } from './pages/Sales'
 import { FlowPage } from './pages/Flow'
 import { AdminPage } from './pages/Admin'
+import { PlatformConsole } from './pages/Platform'
 
 export function App() {
   const [status, setStatus] = useState<AppStatus | null>(null)
@@ -73,8 +75,20 @@ export function App() {
   )
 }
 
+function useHash() {
+  const [hash, setHash] = useState(() => window.location.hash)
+  useEffect(() => {
+    const h = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', h)
+    return () => window.removeEventListener('hashchange', h)
+  }, [])
+  return hash
+}
+
 function Gate() {
   const { status } = useApp()
+  // The Serenova platform console has its own accounts and sign-in.
+  if (useHash().startsWith('#/platform') && status.setupComplete && !status.isDemo) return <PlatformConsole />
   if (!status.setupComplete) return <SetupPage />
   if (!status.user) return <LoginPage />
   return (
@@ -92,6 +106,8 @@ interface NavItem {
   perm?: Permission
   /** Hidden unless the role allows at least one of these */
   anyOf?: Permission[]
+  /** Hidden unless the organization's plan includes this module */
+  module?: Module
 }
 
 /** The admin portal is shown to anyone who may manage users, the database or read the activity history. */
@@ -111,7 +127,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'navg.overview',
     items: [
       { to: '/', key: 'nav.dashboard', icon: LayoutDashboard },
-      { to: '/flow', key: 'nav.flow', icon: GitBranch }
+      { to: '/flow', key: 'nav.flow', icon: GitBranch, module: 'advanced_reports' }
     ]
   },
   {
@@ -128,9 +144,9 @@ const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'navg.stores',
     items: [
-      { to: '/purchases', key: 'nav.purchases', icon: PackagePlus, perm: 'purchases.record' },
+      { to: '/purchases', key: 'nav.purchases', icon: PackagePlus, perm: 'purchases.record', module: 'purchasing' },
       { to: '/inventory', key: 'nav.inventory', icon: Boxes, perm: 'inventory.record' },
-      { to: '/sales', key: 'nav.sales', icon: Truck, perm: 'sales.record' }
+      { to: '/sales', key: 'nav.sales', icon: Truck, perm: 'sales.record', module: 'sales' }
     ]
   },
   {
@@ -151,17 +167,18 @@ const NAV: { group: string; items: NavItem[] }[] = [
 ]
 
 /** Quick actions offered by the "New" menu and the search box (only those the user may do). */
-const QUICK: { to: string; key: string; icon: LucideIcon; perm?: Permission }[] = [
+const QUICK: { to: string; key: string; icon: LucideIcon; perm?: Permission; module?: Module }[] = [
   { to: '/eggs', key: 'quick.eggs', icon: Egg, perm: 'eggs.record' },
   { to: '/mortality?new=1', key: 'quick.death', icon: TrendingDown, perm: 'flock.record' },
   { to: '/feed', key: 'quick.feed', icon: Wheat, perm: 'feed.record' },
-  { to: '/purchases?new=1', key: 'quick.receipt', icon: PackagePlus, perm: 'purchases.record' },
-  { to: '/sales?new=1', key: 'quick.dispatch', icon: Truck, perm: 'sales.record' }
+  { to: '/purchases?new=1', key: 'quick.receipt', icon: PackagePlus, perm: 'purchases.record', module: 'purchasing' },
+  { to: '/sales?new=1', key: 'quick.dispatch', icon: Truck, perm: 'sales.record', module: 'sales' }
 ]
 
 function useVisibleNav() {
-  const { can: allowed } = useApp()
-  const can = (i: { perm?: Permission; anyOf?: Permission[] }) => (i.anyOf ? i.anyOf.some(allowed) : !i.perm || allowed(i.perm))
+  const { can: allowed, hasModule } = useApp()
+  const can = (i: { perm?: Permission; anyOf?: Permission[]; module?: Module }) =>
+    (!i.module || hasModule(i.module)) && (i.anyOf ? i.anyOf.some(allowed) : !i.perm || allowed(i.perm))
   return {
     groups: NAV.map((g) => ({ ...g, items: g.items.filter(can) })).filter((g) => g.items.length),
     quick: QUICK.filter(can)
@@ -317,6 +334,7 @@ function Shell() {
             </button>
           </div>
         )}
+        <SubscriptionBanner />
         <TopBar onSearch={() => setPalette(true)} onLogout={logout} onMenu={() => setCollapsed(!collapsed)} userName={user.displayName} role={user.roleName ?? t('auth.role.' + user.role)} />
         <Routes>
           <Route path="/" element={<DashboardPage />} />
@@ -354,6 +372,20 @@ function Shell() {
       )}
     </div>
   )
+}
+
+/** Trial, grace period and read-only notices for the organization's subscription. */
+function SubscriptionBanner() {
+  const { t, status } = useApp()
+  const s = status.subscription
+  if (!s) return null
+  let text: string | null = null
+  if (s.readOnly) text = t('sub.readOnly', { status: t('sub.status.' + s.effective) })
+  else if (s.effective === 'grace') text = t('sub.grace', { n: s.daysLeft ?? 0 })
+  else if (s.effective === 'past_due') text = t('sub.pastDue')
+  else if (s.effective === 'trial' && s.daysLeft !== null && s.daysLeft <= 14) text = t('sub.trialEnds', { plan: s.planName, n: s.daysLeft })
+  if (!text) return null
+  return <div className={`sub-banner ${s.readOnly ? 'bad' : s.effective === 'trial' ? 'info' : 'warn'}`}>{text}</div>
 }
 
 function TopBar({ onSearch, onLogout, onMenu, userName, role }: { onSearch: () => void; onLogout: () => void; onMenu: () => void; userName: string; role: string }) {

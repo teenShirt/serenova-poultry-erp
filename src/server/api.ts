@@ -4,6 +4,7 @@ import type { Api, ApiMethod, ApiResponse, ReportSpec } from '@shared/api'
 import { API_KIND } from '@shared/api'
 import { addDays, todayInTimezone } from '@shared/dates'
 import type { AppStatus, SessionUser } from '@shared/types'
+import { MODULE_FOR_METHOD } from '@shared/platform'
 import { requireUser, type AnonCtx, type Ctx } from './context'
 import type { ServerConfig } from './config'
 import type { Databases, Mode } from './databases'
@@ -34,6 +35,7 @@ import { cancelReceipt, createReceipt, listReceipts } from './services/purchases
 import * as sales from './services/sales'
 import { flowSummary, purchasesSeries } from './services/supply'
 import * as adminSvc from './services/admin'
+import { assertModule, assertWritable, getEntitlements, today } from './services/subscriptions'
 import type { RestoreTokens } from './uploads'
 
 export const APP_VERSION = '2.0.0'
@@ -68,8 +70,16 @@ const PUBLIC_METHODS = ['app.status', 'app.setLanguage', 'auth.signup', 'auth.re
 type PublicMethod = (typeof PUBLIC_METHODS)[number]
 const PUBLIC = new Set<ApiMethod>(PUBLIC_METHODS)
 
-type Handler<M extends ApiMethod> = (input: Api[M]['in'], ctx: M extends PublicMethod ? PublicCtx : RequestCtx) => Promise<Api[M]['out']> | Api[M]['out']
-type Handlers = { [M in ApiMethod]: Handler<M> }
+/** Organization requests; the Super Admin console's platform.* requests are handled in platform-api.ts. */
+export type OrgMethod = Exclude<ApiMethod, `platform.${string}`>
+type Handler<M extends OrgMethod> = (input: Api[M]['in'], ctx: M extends PublicMethod ? PublicCtx : RequestCtx) => Promise<Api[M]['out']> | Api[M]['out']
+type Handlers = { [M in OrgMethod]: Handler<M> }
+
+/**
+ * Requests that still work while the subscription is read-only (expired, cancelled, suspended):
+ * signing out, looking after one's own account, and taking a backup of the organization's records.
+ */
+const ALLOWED_WHILE_READ_ONLY = new Set<ApiMethod>(['auth.logout', 'auth.changePassword', 'auth.newRecoveryCode', 'app.setLanguage', 'backup.create'])
 
 function validatePeriod(from: string, to: string) {
   if (from > to || from < addDays(to, -400)) throw new AppError('invalid_date')
@@ -161,6 +171,7 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
       dataDir: dbs.location(ctx.mode),
       today: scoped ? await days.farmToday(scoped) : todayInTimezone(DEFAULT_SETTINGS.timezone, ctx.now()),
       backupWarning: lastAuto && lastAuto.status === 'failed' ? lastAuto.message : null,
+      subscription: scoped ? await getEntitlements(ctx.db, scoped.org, today(ctx)) : null,
       pendingSignups: scoped && hasPermission(scoped.user, 'users.manage') ? await auth.countPendingSignups(scoped) : 0
     }
   }
@@ -213,6 +224,7 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
       ctx.session.userId = signedIn.user.id
       ctx.session.orgId = signedIn.org
       ctx.session.farmId = signedIn.farm
+      ctx.session.platformUserId = null
       ctx.session.rotate = true
       return signedIn.user
     },
@@ -417,7 +429,7 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
  */
 export async function dispatch(handlers: Handlers, method: string, input: unknown, ctx: PublicCtx): Promise<ApiResponse<unknown>> {
   if (!Object.prototype.hasOwnProperty.call(handlers, method)) return { ok: false, code: 'unknown_method', params: {} }
-  const m = method as ApiMethod
+  const m = method as OrgMethod
   const parsed = schemas[m].safeParse(input)
   if (!parsed.success) {
     const field = parsed.error.issues[0]?.path.join('.') ?? ''
@@ -430,6 +442,10 @@ export async function dispatch(handlers: Handlers, method: string, input: unknow
       requireUser(ctx)
       if (ctx.org === null || ctx.farm === null) throw new AppError('not_logged_in')
       const scoped: RequestCtx = { ...ctx, org: ctx.org, farm: ctx.farm }
+      // The subscription: its plan's modules, and no changes while it is read-only.
+      const module = MODULE_FOR_METHOD[m]
+      if (module) await assertModule(scoped, module)
+      if (API_KIND[m] === 'write' && !ALLOWED_WHILE_READ_ONLY.has(m)) await assertWritable(scoped)
       await checkAccess(scoped, m, parsed.data)
       return (handlers[m] as (i: never, c: RequestCtx) => unknown)(parsed.data as never, scoped)
     }

@@ -9,7 +9,7 @@ import { useApp } from '../lib/app'
  * the browser's print dialog, where "Save as PDF" is one of the printers) and Download Excel.
  */
 export function ReportPreview({ spec, onClose }: { spec: ReportSpec; onClose: () => void }) {
-  const { t, toast, fail } = useApp()
+  const { t, toast, fail, can, hasModule } = useApp()
   const [doc, setDoc] = useState<{ title: string; html: string } | null>(null)
   const [busy, setBusy] = useState<'print' | null>(null)
 
@@ -68,9 +68,11 @@ export function ReportPreview({ spec, onClose }: { spec: ReportSpec; onClose: ()
           <button className="btn" onClick={() => print(true)} disabled={!doc || busy !== null}>
             <FileText size={18} /> PDF
           </button>
-          <button className="btn" onClick={() => download(excelReportUrl(spec))} disabled={!doc}>
-            <FileSpreadsheet size={18} /> Excel
-          </button>
+          {can('reports.export') && hasModule('exports') && (
+            <button className="btn" onClick={() => download(excelReportUrl(spec))} disabled={!doc}>
+              <FileSpreadsheet size={18} /> Excel
+            </button>
+          )}
           <button className="icon-btn" onClick={onClose} aria-label={t('common.close')} title={t('common.close')}>
             <X size={22} />
           </button>

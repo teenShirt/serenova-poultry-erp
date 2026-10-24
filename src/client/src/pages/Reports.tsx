@@ -46,7 +46,8 @@ function usePresets() {
 }
 
 function ReportsTab() {
-  const { t, workDate, status, toast, fail, dateTime } = useApp()
+  const { t, workDate, status, toast, fail, dateTime, can, hasModule } = useApp()
+  const canExcel = can('reports.export') && hasModule('exports')
   const [day, setDay] = useState(workDate)
   const presets = usePresets()
   const [from, setFrom] = useState(presets[0].from)
@@ -88,9 +89,11 @@ function ReportsTab() {
               <button className="btn" onClick={() => pdf({ kind: 'day_open', date: day })}>
                 <FileText size={18} /> PDF
               </button>
-              <button className="btn" onClick={() => excel({ kind: 'day_open', date: day })}>
-                <FileSpreadsheet size={18} /> Excel
-              </button>
+              {canExcel && (
+                <button className="btn" onClick={() => excel({ kind: 'day_open', date: day })}>
+                  <FileSpreadsheet size={18} /> Excel
+                </button>
+              )}
             </div>
             <div className="row">
               <span className="field-label" style={{ minWidth: 170 }}>
@@ -102,9 +105,11 @@ function ReportsTab() {
               <button className="btn" onClick={() => pdf({ kind: 'day_close', date: day })}>
                 <FileText size={18} /> PDF
               </button>
-              <button className="btn" onClick={() => excel({ kind: 'day_close', date: day })}>
-                <FileSpreadsheet size={18} /> Excel
-              </button>
+              {canExcel && (
+                <button className="btn" onClick={() => excel({ kind: 'day_close', date: day })}>
+                  <FileSpreadsheet size={18} /> Excel
+                </button>
+              )}
             </div>
           </div>
         </Card>
@@ -139,9 +144,11 @@ function ReportsTab() {
               <button className="btn" onClick={() => pdf({ kind: 'period', from, to })}>
                 <FileText size={18} /> {t('rep.pdf')}
               </button>
-              <button className="btn" onClick={() => excel({ kind: 'period', from, to })}>
-                <FileSpreadsheet size={18} /> {t('rep.excel')}
-              </button>
+              {canExcel && (
+                <button className="btn" onClick={() => excel({ kind: 'period', from, to })}>
+                  <FileSpreadsheet size={18} /> {t('rep.excel')}
+                </button>
+              )}
             </div>
           </div>
         </Card>
@@ -169,7 +176,7 @@ function ReportsTab() {
                     <td>{r.format.toUpperCase()}</td>
                     <td className="nowrap">{dateTime(r.generatedAt)}</td>
                     <td>
-                      <button className="btn sm" onClick={() => (r.format === 'pdf' ? pdf(specOf(r)) : excel(specOf(r)))}>
+                      <button className="btn sm" disabled={r.format !== 'pdf' && !canExcel} onClick={() => (r.format === 'pdf' ? pdf(specOf(r)) : excel(specOf(r)))}>
                         {r.format === 'pdf' ? <Printer size={14} /> : <FileSpreadsheet size={14} />} {t('common.open')}
                       </button>
                     </td>
