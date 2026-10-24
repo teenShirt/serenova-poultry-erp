@@ -28,11 +28,14 @@ export interface DayRow {
   amendment_open: number
 }
 
-export async function getDay(ctx: Pick<Ctx, 'db'>, date: string): Promise<DayRow | undefined> {
-  return (await ctx.db.prepare('SELECT * FROM farm_days WHERE business_date = ?').get(date)) as DayRow | undefined
+/** The context farm's day for a date. */
+export async function getDay(ctx: Pick<Ctx, 'db' | 'org' | 'farm'>, date: string): Promise<DayRow | undefined> {
+  return (await ctx.db
+    .prepare('SELECT * FROM farm_days WHERE organization_id = ? AND farm_id = ? AND business_date = ?')
+    .get(ctx.org, ctx.farm, date)) as DayRow | undefined
 }
 
-export async function farmToday(ctx: Pick<Ctx, 'db' | 'now'>): Promise<string> {
+export async function farmToday(ctx: Pick<Ctx, 'db' | 'org' | 'now'>): Promise<string> {
   return todayInTimezone((await getSettings(ctx)).timezone, ctx.now())
 }
 
@@ -53,30 +56,30 @@ export async function requireWritableDay(ctx: Ctx, date: string): Promise<DayRow
 }
 
 /** Closing hens of a cage-day: opening (carried + adjustment) plus/minus flock movements. */
-export async function cageDayClosing(ctx: Pick<Ctx, 'db'>, dayId: number, cageId: number): Promise<number | null> {
+export async function cageDayClosing(ctx: Pick<Ctx, 'db' | 'org'>, dayId: number, cageId: number): Promise<number | null> {
   const cd = (await ctx.db
-    .prepare('SELECT carried_hens + opening_adjustment AS opening FROM cage_days WHERE day_id = ? AND cage_id = ?')
-    .get(dayId, cageId)) as { opening: number } | undefined
+    .prepare('SELECT carried_hens + opening_adjustment AS opening FROM cage_days WHERE organization_id = ? AND day_id = ? AND cage_id = ?')
+    .get(ctx.org, dayId, cageId)) as { opening: number } | undefined
   if (!cd) return null
   const m = (await ctx.db
     .prepare(
       `SELECT COALESCE(SUM(CASE WHEN type IN ('addition','transfer_in') THEN quantity ELSE -quantity END), 0) AS delta
-       FROM flock_movements WHERE day_id = ? AND cage_id = ?`
+       FROM flock_movements WHERE organization_id = ? AND day_id = ? AND cage_id = ?`
     )
-    .get(dayId, cageId)) as { delta: number }
+    .get(ctx.org, dayId, cageId)) as { delta: number }
   return cd.opening + m.delta
 }
 
 /** Hens carried into `date`: the closing count of the cage's most recent earlier day, or its starting flock. */
-export async function carriedFor(ctx: Pick<Ctx, 'db'>, cageId: number, date: string): Promise<number> {
+export async function carriedFor(ctx: Pick<Ctx, 'db' | 'org' | 'farm'>, cageId: number, date: string): Promise<number> {
   const prev = (await ctx.db
     .prepare(
       `SELECT d.id FROM cage_days cd JOIN farm_days d ON d.id = cd.day_id
-       WHERE cd.cage_id = ? AND d.business_date < ? ORDER BY d.business_date DESC LIMIT 1`
+       WHERE cd.organization_id = ? AND d.farm_id = ? AND cd.cage_id = ? AND d.business_date < ? ORDER BY d.business_date DESC LIMIT 1`
     )
-    .get(cageId, date)) as { id: number } | undefined
+    .get(ctx.org, ctx.farm, cageId, date)) as { id: number } | undefined
   if (prev) return (await cageDayClosing(ctx, prev.id, cageId)) ?? 0
-  const cage = (await ctx.db.prepare('SELECT initial_hens FROM cages WHERE id = ?').get(cageId)) as { initial_hens: number }
+  const cage = (await ctx.db.prepare('SELECT initial_hens FROM cages WHERE organization_id = ? AND id = ?').get(ctx.org, cageId)) as { initial_hens: number }
   return cage.initial_hens
 }
 
@@ -84,7 +87,7 @@ export async function carriedFor(ctx: Pick<Ctx, 'db'>, cageId: number, date: str
 export async function assertCageDayValid(ctx: Ctx, dayId: number, cageId: number, date: string) {
   const closing = await cageDayClosing(ctx, dayId, cageId)
   if (closing !== null && closing < 0) {
-    const cage = (await ctx.db.prepare('SELECT name FROM cages WHERE id = ?').get(cageId)) as { name: string }
+    const cage = (await ctx.db.prepare('SELECT name FROM cages WHERE organization_id = ? AND id = ?').get(ctx.org, cageId)) as { name: string }
     throw new AppError('negative_hens', { cage: cage.name, date })
   }
 }
@@ -96,19 +99,19 @@ export async function assertCageDayValid(ctx: Ctx, dayId: number, cageId: number
  */
 export async function recalcFrom(ctx: Ctx, date: string): Promise<number> {
   const later = (await ctx.db
-    .prepare('SELECT id, business_date FROM farm_days WHERE business_date > ? ORDER BY business_date')
-    .all(date)) as { id: number; business_date: string }[]
+    .prepare('SELECT id, business_date FROM farm_days WHERE organization_id = ? AND farm_id = ? AND business_date > ? ORDER BY business_date')
+    .all(ctx.org, ctx.farm, date)) as { id: number; business_date: string }[]
   let changed = 0
   const update = ctx.db.prepare('UPDATE cage_days SET carried_hens = ? WHERE id = ?')
   for (const d of later) {
     const cds = (await ctx.db
-      .prepare('SELECT id, cage_id, carried_hens, opening_adjustment FROM cage_days WHERE day_id = ?')
-      .all(d.id)) as { id: number; cage_id: number; carried_hens: number; opening_adjustment: number }[]
+      .prepare('SELECT id, cage_id, carried_hens, opening_adjustment FROM cage_days WHERE organization_id = ? AND day_id = ?')
+      .all(ctx.org, d.id)) as { id: number; cage_id: number; carried_hens: number; opening_adjustment: number }[]
     for (const cd of cds) {
       const carried = await carriedFor(ctx, cd.cage_id, d.business_date)
       if (carried !== cd.carried_hens) {
         if (carried < 0 || carried + cd.opening_adjustment < 0) {
-          const cage = (await ctx.db.prepare('SELECT name FROM cages WHERE id = ?').get(cd.cage_id)) as { name: string }
+          const cage = (await ctx.db.prepare('SELECT name FROM cages WHERE organization_id = ? AND id = ?').get(ctx.org, cd.cage_id)) as { name: string }
           throw new AppError('negative_hens', { cage: cage.name, date: d.business_date })
         }
         await update.run(carried, cd.id)
@@ -127,33 +130,35 @@ export async function recalcFrom(ctx: Ctx, date: string): Promise<number> {
 export async function ensureCageDays(ctx: Ctx, day: DayRow) {
   const missing = (await ctx.db
     .prepare(
-      `SELECT id FROM cages WHERE active = 1 AND id NOT IN (SELECT cage_id FROM cage_days WHERE day_id = ?)`
+      `SELECT id FROM cages WHERE organization_id = ? AND farm_id = ? AND active = 1 AND id NOT IN (SELECT cage_id FROM cage_days WHERE day_id = ?)`
     )
-    .all(day.id)) as { id: number }[]
+    .all(ctx.org, ctx.farm, day.id)) as { id: number }[]
   for (const c of missing) {
     await ctx.db
-      .prepare('INSERT INTO cage_days (day_id, cage_id, carried_hens) VALUES (?, ?, ?)')
-      .run(day.id, c.id, await carriedFor(ctx, c.id, day.business_date))
+      .prepare('INSERT INTO cage_days (organization_id, day_id, cage_id, carried_hens) VALUES (?, ?, ?, ?)')
+      .run(ctx.org, day.id, c.id, await carriedFor(ctx, c.id, day.business_date))
   }
 }
 
 export async function requireCageDay(ctx: Ctx, day: DayRow, cageId: number) {
   await ensureCageDays(ctx, day)
-  const cd = await ctx.db.prepare('SELECT id FROM cage_days WHERE day_id = ? AND cage_id = ?').get(day.id, cageId)
+  const cd = await ctx.db.prepare('SELECT id FROM cage_days WHERE organization_id = ? AND day_id = ? AND cage_id = ?').get(ctx.org, day.id, cageId)
   assert(cd, 'cage_not_in_day')
 }
 
-async function previousDay(ctx: Pick<Ctx, 'db'>, date: string) {
+async function previousDay(ctx: Pick<Ctx, 'db' | 'org' | 'farm'>, date: string) {
   return (await ctx.db
-    .prepare('SELECT business_date, status FROM farm_days WHERE business_date < ? ORDER BY business_date DESC LIMIT 1')
-    .get(date)) as { business_date: string; status: 'in_progress' | 'closed' } | undefined
+    .prepare('SELECT business_date, status FROM farm_days WHERE organization_id = ? AND farm_id = ? AND business_date < ? ORDER BY business_date DESC LIMIT 1')
+    .get(ctx.org, ctx.farm, date)) as { business_date: string; status: 'in_progress' | 'closed' } | undefined
 }
 
 export async function previewStartDay(ctx: Ctx, date: string): Promise<StartDayPreview> {
   assert(isIsoDate(date), 'invalid_date')
   const exists = !!await getDay(ctx, date)
   const prev = await previousDay(ctx, date)
-  const later = await ctx.db.prepare('SELECT 1 FROM farm_days WHERE business_date > ? LIMIT 1').get(date)
+  const later = await ctx.db
+    .prepare('SELECT 1 AS x FROM farm_days WHERE organization_id = ? AND farm_id = ? AND business_date > ? LIMIT 1')
+    .get(ctx.org, ctx.farm, date)
   const today = await farmToday(ctx)
   const warnings: string[] = []
   if (date > today) warnings.push('future_date')
@@ -199,11 +204,11 @@ export async function startDay(ctx: Ctx, input: StartDayInput): Promise<DayOverv
     if (input.corrections.length > 0) requireAdmin(ctx)
 
     const info = await ctx.db
-      .prepare('INSERT INTO farm_days (business_date, status, opened_by, opened_at) VALUES (?, ?, ?, ?)')
-      .run(date, 'in_progress', user.id, ctx.now().toISOString())
+      .prepare('INSERT INTO farm_days (organization_id, farm_id, business_date, status, opened_by, opened_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(ctx.org, ctx.farm, date, 'in_progress', user.id, ctx.now().toISOString())
     const dayId = Number(info.lastInsertRowid)
     const ins = ctx.db.prepare(
-      'INSERT INTO cage_days (day_id, cage_id, carried_hens, opening_adjustment, opening_adjustment_reason) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO cage_days (organization_id, day_id, cage_id, carried_hens, opening_adjustment, opening_adjustment_reason) VALUES (?, ?, ?, ?, ?, ?)'
     )
     for (const c of p.cages) {
       const corr = input.corrections.find((x) => x.cageId === c.cageId)
@@ -215,7 +220,7 @@ export async function startDay(ctx: Ctx, input: StartDayInput): Promise<DayOverv
         adj = corr.opening - c.carried
         reason = corr.reason.trim()
       }
-      await ins.run(dayId, c.cageId, c.carried, adj, reason)
+      await ins.run(ctx.org, dayId, c.cageId, c.carried, adj, reason)
       if (reason) {
         await audit(ctx, {
           action: 'correct_opening',
@@ -249,12 +254,12 @@ export async function correctOpening(ctx: Ctx, date: string, cageId: number, ope
     const day = await requireWritableDay(ctx, date)
     await requireCageDay(ctx, day, cageId)
     const cd = (await ctx.db
-      .prepare('SELECT id, carried_hens, opening_adjustment FROM cage_days WHERE day_id = ? AND cage_id = ?')
-      .get(day.id, cageId)) as { id: number; carried_hens: number; opening_adjustment: number }
+      .prepare('SELECT id, carried_hens, opening_adjustment FROM cage_days WHERE organization_id = ? AND day_id = ? AND cage_id = ?')
+      .get(ctx.org, day.id, cageId)) as { id: number; carried_hens: number; opening_adjustment: number }
     const adj = opening - cd.carried_hens
     await ctx.db
-      .prepare('UPDATE cage_days SET opening_adjustment = ?, opening_adjustment_reason = ? WHERE id = ?')
-      .run(adj, adj === 0 ? null : reason.trim(), cd.id)
+      .prepare('UPDATE cage_days SET opening_adjustment = ?, opening_adjustment_reason = ? WHERE organization_id = ? AND id = ?')
+      .run(adj, adj === 0 ? null : reason.trim(), ctx.org, cd.id)
     await assertCageDayValid(ctx, day.id, cageId, date)
     await audit(ctx, {
       action: 'correct_opening',
@@ -276,9 +281,9 @@ export async function confirmMortality(ctx: Ctx, date: string, cageIds: number[]
       await requireCageDay(ctx, day, cageId)
       await ctx.db
         .prepare(
-          'UPDATE cage_days SET mortality_confirmed = 1, mortality_confirmed_by = ?, mortality_confirmed_at = ? WHERE day_id = ? AND cage_id = ?'
+          'UPDATE cage_days SET mortality_confirmed = 1, mortality_confirmed_by = ?, mortality_confirmed_at = ? WHERE organization_id = ? AND day_id = ? AND cage_id = ?'
         )
-        .run(user.id, ctx.now().toISOString(), day.id, cageId)
+        .run(user.id, ctx.now().toISOString(), ctx.org, day.id, cageId)
     }
     await audit(ctx, { action: 'confirm_mortality', entity: 'cage_day', dayId: day.id, details: { cageIds } })
   })()
@@ -293,12 +298,12 @@ export async function confirmIssue(ctx: Ctx, date: string, cageId: number | null
     assert(issue && issue.confirmable, 'issue_not_confirmable')
     await ctx.db
       .prepare(
-        `INSERT INTO day_confirmations (day_id, cage_id, check_code, reason, confirmed_by, confirmed_at)
-         VALUES (?, ?, ?, ?, ?, ?) AS new
+        `INSERT INTO day_confirmations (organization_id, day_id, cage_id, check_code, reason, confirmed_by, confirmed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?) AS new
          ON DUPLICATE KEY UPDATE reason = new.reason,
            confirmed_by = new.confirmed_by, confirmed_at = new.confirmed_at`
       )
-      .run(day.id, cageId ?? 0, key, reason.trim(), user.id, ctx.now().toISOString())
+      .run(ctx.org, day.id, cageId ?? 0, key, reason.trim(), user.id, ctx.now().toISOString())
     await audit(ctx, { action: 'confirm_issue', entity: 'farm_day', entityId: day.id, dayId: day.id, reason, details: { key, cageId } })
   })()
 }
@@ -308,8 +313,8 @@ export async function revokeConfirmation(ctx: Ctx, date: string, cageId: number 
   await ctx.db.transaction(async () => {
     const day = await requireWritableDay(ctx, date)
     await ctx.db
-      .prepare('DELETE FROM day_confirmations WHERE day_id = ? AND cage_id = ? AND check_code = ?')
-      .run(day.id, cageId ?? 0, key)
+      .prepare('DELETE FROM day_confirmations WHERE organization_id = ? AND day_id = ? AND cage_id = ? AND check_code = ?')
+      .run(ctx.org, day.id, cageId ?? 0, key)
     await audit(ctx, { action: 'revoke_confirmation', entity: 'farm_day', entityId: day.id, dayId: day.id, details: { key, cageId } })
   })()
 }
@@ -357,7 +362,7 @@ async function computeIssues(
 
   // Baselines from the preceding days (informational comparisons only).
   const baseFrom = addDays(day.business_date, -Math.max(1, settings.baselineDays))
-  const history = await loadCageDayStats(ctx.db, settings, baseFrom, addDays(day.business_date, -1))
+  const history = await loadCageDayStats(ctx, settings, baseFrom, addDays(day.business_date, -1))
 
   for (const c of cages) {
     const hasHens = c.opening > 0 || c.closing > 0
@@ -394,8 +399,8 @@ async function computeIssues(
 
   // Possible duplicate egg entries: two sessions with identical non-zero counts.
   const eggRows = (await ctx.db
-    .prepare('SELECT cage_id, session, good, damaged, rejected FROM egg_collections WHERE day_id = ?')
-    .all(day.id)) as { cage_id: number; session: string; good: number; damaged: number; rejected: number }[]
+    .prepare('SELECT cage_id, session, good, damaged, rejected FROM egg_collections WHERE organization_id = ? AND day_id = ?')
+    .all(ctx.org, day.id)) as { cage_id: number; session: string; good: number; damaged: number; rejected: number }[]
   const seen = new Map<string, string>()
   for (const e of eggRows) {
     if (e.good + e.damaged + e.rejected === 0) continue
@@ -409,9 +414,9 @@ async function computeIssues(
     .prepare(
       `SELECT COALESCE(SUM(CASE WHEN type='transfer_in' THEN quantity END), 0) AS tin,
               COALESCE(SUM(CASE WHEN type='transfer_out' THEN quantity END), 0) AS tout
-       FROM flock_movements WHERE day_id = ?`
+       FROM flock_movements WHERE organization_id = ? AND day_id = ?`
     )
-    .get(day.id)) as { tin: number; tout: number }
+    .get(ctx.org, day.id)) as { tin: number; tout: number }
   if (t.tin !== t.tout) add('transfer_mismatch', 'error', null, { in: t.tin, out: t.tout }, false)
 
   for (const b of await balances(ctx, undefined, day.business_date)) {
@@ -422,9 +427,9 @@ async function computeIssues(
     .prepare(
       `SELECT t.id, i.name, b.batch_no, b.expiry_date FROM medicine_treatments t
        JOIN inventory_items i ON i.id = t.item_id JOIN inventory_batches b ON b.id = t.batch_id
-       WHERE t.day_id = ? AND b.expiry_date IS NOT NULL AND b.expiry_date < ?`
+       WHERE t.organization_id = ? AND t.day_id = ? AND b.expiry_date IS NOT NULL AND b.expiry_date < ?`
     )
-    .all(day.id, day.business_date)) as { id: number; name: string; batch_no: string; expiry_date: string }[]
+    .all(ctx.org, day.id, day.business_date)) as { id: number; name: string; batch_no: string; expiry_date: string }[]
   for (const e of expiredUse) {
     add('expired_medicine_used', 'warning', null, { item: e.name, batch: e.batch_no, expiry: e.expiry_date }, true, String(e.id))
   }
@@ -462,13 +467,13 @@ export async function getOverview(ctx: Ctx, date: string): Promise<DayOverview> 
       previousDay: previous
     }
   }
-  const cages: CageDaySummary[] = await loadCageDayStats(ctx.db, settings, date, date)
+  const cages: CageDaySummary[] = await loadCageDayStats(ctx, settings, date, date)
   const confirmations = (await ctx.db
     .prepare(
       `SELECT dc.cage_id, dc.check_code, dc.reason, dc.confirmed_at, u.display_name AS by_name
-       FROM day_confirmations dc LEFT JOIN users u ON u.id = dc.confirmed_by WHERE dc.day_id = ?`
+       FROM day_confirmations dc LEFT JOIN users u ON u.id = dc.confirmed_by WHERE dc.organization_id = ? AND dc.day_id = ?`
     )
-    .all(day.id)) as { cage_id: number; check_code: string; reason: string; confirmed_at: string; by_name: string | null }[]
+    .all(ctx.org, day.id)) as { cage_id: number; check_code: string; reason: string; confirmed_at: string; by_name: string | null }[]
   const issues: DayIssue[] = (await computeIssues(ctx, day, cages, settings)).map((i) => {
     const c = confirmations.find((x) => x.check_code === i.key && x.cage_id === (i.cageId ?? 0))
     return {
@@ -478,9 +483,10 @@ export async function getOverview(ctx: Ctx, date: string): Promise<DayOverview> 
   })
   const names = (await ctx.db
     .prepare(
-      `SELECT (SELECT display_name FROM users WHERE id = ?) AS opened, (SELECT display_name FROM users WHERE id = ?) AS closed`
+      `SELECT (SELECT display_name FROM users WHERE organization_id = ? AND id = ?) AS opened,
+         (SELECT display_name FROM users WHERE organization_id = ? AND id = ?) AS closed`
     )
-    .get(day.opened_by, day.closed_by)) as { opened: string | null; closed: string | null }
+    .get(ctx.org, day.opened_by, ctx.org, day.closed_by)) as { opened: string | null; closed: string | null }
   let status: DayStatus = day.status === 'closed' ? 'closed' : 'in_progress'
   if (status === 'in_progress' && !issues.some(isBlocking)) status = 'ready_to_close'
   return {
@@ -502,16 +508,16 @@ export async function getOverview(ctx: Ctx, date: string): Promise<DayOverview> 
 
 async function writeSnapshot(ctx: Ctx, dayId: number, date: string, kind: 'open' | 'close', note: string | null) {
   const v = (await ctx.db
-    .prepare('SELECT COALESCE(MAX(version), 0) + 1 AS v FROM day_snapshots WHERE day_id = ? AND kind = ?')
-    .get(dayId, kind)) as { v: number }
+    .prepare('SELECT COALESCE(MAX(version), 0) + 1 AS v FROM day_snapshots WHERE organization_id = ? AND day_id = ? AND kind = ?')
+    .get(ctx.org, dayId, kind)) as { v: number }
   const data = {
     overview: kind === 'close' ? await getOverview(ctx, date) : null,
     openings: await ctx.db
       .prepare(
         `SELECT c.code, c.name, cd.carried_hens AS carried, cd.opening_adjustment AS adjustment
-         FROM cage_days cd JOIN cages c ON c.id = cd.cage_id WHERE cd.day_id = ? ORDER BY c.sort_order, c.code`
+         FROM cage_days cd JOIN cages c ON c.id = cd.cage_id WHERE cd.organization_id = ? AND cd.day_id = ? ORDER BY c.sort_order, c.code`
       )
-      .all(dayId),
+      .all(ctx.org, dayId),
     inventory: (await balances(ctx, undefined, kind === 'open' ? addDays(date, -1) : date)).map((b) => ({
       id: b.id,
       name: b.name,
@@ -521,9 +527,9 @@ async function writeSnapshot(ctx: Ctx, dayId: number, date: string, kind: 'open'
   }
   await ctx.db
     .prepare(
-      'INSERT INTO day_snapshots (day_id, kind, version, data, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO day_snapshots (organization_id, day_id, kind, version, data, note, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     )
-    .run(dayId, kind, v.v, JSON.stringify(data), note, ctx.user?.id ?? null, ctx.now().toISOString())
+    .run(ctx.org, dayId, kind, v.v, JSON.stringify(data), note, ctx.user?.id ?? null, ctx.now().toISOString())
   return v.v
 }
 
@@ -575,8 +581,8 @@ export async function startAmendment(ctx: Ctx, date: string, reason: string) {
     assert(!day.amendment_open, 'amendment_already_open')
     await ctx.db.prepare('UPDATE farm_days SET amendment_open = 1 WHERE id = ?').run(day.id)
     await ctx.db
-      .prepare('INSERT INTO day_amendments (day_id, reason, opened_by, opened_at) VALUES (?, ?, ?, ?)')
-      .run(day.id, reason.trim(), user.id, ctx.now().toISOString())
+      .prepare('INSERT INTO day_amendments (organization_id, day_id, reason, opened_by, opened_at) VALUES (?, ?, ?, ?, ?)')
+      .run(ctx.org, day.id, reason.trim(), user.id, ctx.now().toISOString())
     await audit(ctx, { action: 'start_amendment', entity: 'farm_day', entityId: day.id, dayId: day.id, reason: reason.trim() })
   })()
 }
@@ -595,8 +601,8 @@ export async function finishAmendment(ctx: Ctx, date: string, comment: string | 
     const blocking = ov.issues.filter(isBlocking)
     if (blocking.length > 0) throw new AppError('day_has_open_issues', { count: blocking.length })
     const amendment = (await ctx.db
-      .prepare('SELECT id, reason FROM day_amendments WHERE day_id = ? AND closed_at IS NULL ORDER BY id DESC LIMIT 1')
-      .get(day.id)) as { id: number; reason: string }
+      .prepare('SELECT id, reason FROM day_amendments WHERE organization_id = ? AND day_id = ? AND closed_at IS NULL ORDER BY id DESC LIMIT 1')
+      .get(ctx.org, day.id)) as { id: number; reason: string }
     await ctx.db
       .prepare('UPDATE day_amendments SET closed_by = ?, closed_at = ? WHERE id = ?')
       .run(user.id, ctx.now().toISOString(), amendment.id)
@@ -604,12 +610,12 @@ export async function finishAmendment(ctx: Ctx, date: string, comment: string | 
     await writeSnapshot(ctx, day.id, date, 'close', `amendment: ${amendment.reason}`)
     await recalcFrom(ctx, date)
     const later = (await ctx.db
-      .prepare("SELECT id, business_date FROM farm_days WHERE business_date > ? AND status = 'closed' ORDER BY business_date")
-      .all(date)) as { id: number; business_date: string }[]
+      .prepare("SELECT id, business_date FROM farm_days WHERE organization_id = ? AND farm_id = ? AND business_date > ? AND status = 'closed' ORDER BY business_date")
+      .all(ctx.org, ctx.farm, date)) as { id: number; business_date: string }[]
     for (const d of later) {
       const last = (await ctx.db
-        .prepare("SELECT data FROM day_snapshots WHERE day_id = ? AND kind = 'close' ORDER BY version DESC LIMIT 1")
-        .get(d.id)) as { data: string } | undefined
+        .prepare("SELECT data FROM day_snapshots WHERE organization_id = ? AND day_id = ? AND kind = 'close' ORDER BY version DESC LIMIT 1")
+        .get(ctx.org, d.id)) as { data: string } | undefined
       const now = await getOverview(ctx, d.business_date)
       const prevTotals = last ? (JSON.parse(last.data).overview?.totals as { opening: number; closing: number } | undefined) : undefined
       if (!prevTotals || prevTotals.opening !== now.totals.opening || prevTotals.closing !== now.totals.closing) {
@@ -626,15 +632,15 @@ export async function listDays(ctx: Ctx, from: string, to: string) {
     .prepare(
       `SELECT d.business_date AS date, d.status, d.amendment_open AS amendmentOpen, d.closed_at AS closedAt,
          (SELECT COUNT(*) FROM day_amendments a WHERE a.day_id = d.id) AS amendments
-       FROM farm_days d WHERE d.business_date BETWEEN ? AND ? ORDER BY d.business_date DESC`
+       FROM farm_days d WHERE d.organization_id = ? AND d.farm_id = ? AND d.business_date BETWEEN ? AND ? ORDER BY d.business_date DESC`
     )
-    .all(from, to)) as { date: string; status: 'in_progress' | 'closed'; amendmentOpen: number; closedAt: string | null; amendments: number }[]
+    .all(ctx.org, ctx.farm, from, to)) as { date: string; status: 'in_progress' | 'closed'; amendmentOpen: number; closedAt: string | null; amendments: number }[]
 }
 
-export async function latestDay(ctx: Pick<Ctx, 'db'>) {
+export async function latestDay(ctx: Pick<Ctx, 'db' | 'org' | 'farm'>) {
   return (await ctx.db
-    .prepare('SELECT business_date AS date, status FROM farm_days ORDER BY business_date DESC LIMIT 1')
-    .get()) as { date: string; status: 'in_progress' | 'closed' } | undefined
+    .prepare('SELECT business_date AS date, status FROM farm_days WHERE organization_id = ? AND farm_id = ? ORDER BY business_date DESC LIMIT 1')
+    .get(ctx.org, ctx.farm)) as { date: string; status: 'in_progress' | 'closed' } | undefined
 }
 
 export async function listAmendments(ctx: Ctx, date: string) {
@@ -644,8 +650,8 @@ export async function listAmendments(ctx: Ctx, date: string) {
          u2.display_name AS closedBy
        FROM day_amendments a JOIN farm_days d ON d.id = a.day_id
        LEFT JOIN users u1 ON u1.id = a.opened_by LEFT JOIN users u2 ON u2.id = a.closed_by
-       WHERE d.business_date = ? ORDER BY a.id`
+       WHERE d.organization_id = ? AND d.farm_id = ? AND d.business_date = ? ORDER BY a.id`
     )
-    .all(date)
+    .all(ctx.org, ctx.farm, date)
 }
 

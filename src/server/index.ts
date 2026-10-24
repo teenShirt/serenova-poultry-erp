@@ -5,17 +5,18 @@ import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import type { ApiResponse } from '@shared/api'
-import { createHandlers, dispatch, loadSessionUser, recordReport, buildReport, APP_VERSION, type RequestCtx } from './api'
+import { createHandlers, dispatch, loadSessionUser, recordReport, buildReport, sessionFarm, APP_VERSION, type PublicCtx, type RequestCtx } from './api'
 import { loadConfig, type ServerConfig } from './config'
 import { Databases } from './databases'
+import type { DB } from './db/connection'
 import { AppError } from './errors'
 import { reportSpecSchema } from './schemas'
 import { SESSION_COOKIE, Sessions, type Session } from './sessions'
 import { RestoreTokens } from './uploads'
-import { requireAdmin, requireUser } from './context'
+import { requireAdmin } from './context'
 import { checkAccess } from './services/duties'
 import { getSettings } from './services/settings'
-import { applyRetention, createBackup, inspectBackup, lastBackup } from './services/backup'
+import { applyRetention, createBackup, inspectBackup, isDesktopBackup, lastBackup } from './services/backup'
 import { renderXlsx } from './reports/render'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -44,37 +45,50 @@ export async function createServer(cfg: ServerConfig) {
   }
 
   /** Saves what the request changed about its browser session (sign-in, sign-out, demonstration mode). */
-  async function saveSession(req: Request, res: Response, current: Session | null, ctx: RequestCtx) {
+  async function saveSession(req: Request, res: Response, current: Session | null, ctx: PublicCtx) {
     const change = ctx.session
-    if (!('userId' in change) && !change.mode && !change.rotate) {
+    if (!('userId' in change) && !('orgId' in change) && !('farmId' in change) && !change.mode && !change.rotate) {
       if (current) await sessions.touch(current)
       return
     }
-    const userId = 'userId' in change ? (change.userId ?? null) : (current?.userId ?? null)
-    const mode = change.mode ?? current?.mode ?? 'farm'
+    const pick = <K extends 'userId' | 'orgId' | 'farmId'>(k: K) => (k in change ? (change[k] ?? null) : (current?.[k] ?? null))
+    const next = { userId: pick('userId'), orgId: pick('orgId'), farmId: pick('farmId'), mode: change.mode ?? current?.mode ?? 'farm' }
     if (current && !change.rotate) {
-      await sessions.update(current.id, userId, mode)
+      await sessions.update(current.id, next)
       return
     }
     if (current) await sessions.destroy(current.id)
-    if (userId === null && mode === 'farm') {
+    if (next.userId === null && next.mode === 'farm') {
       res.setHeader('Set-Cookie', cookie(req, null))
       return
     }
-    const token = await sessions.create(userId, mode, { userAgent: req.get('user-agent'), ip: req.ip })
+    const token = await sessions.create(next, { userAgent: req.get('user-agent'), ip: req.ip })
     res.setHeader('Set-Cookie', cookie(req, token))
   }
 
-  /** Runs `fn` with the request's database (farm or demonstration) and signed-in user. */
-  async function withRequest<T>(req: Request, res: Response, fn: (ctx: RequestCtx) => Promise<T>, keepSession?: (result: T) => boolean): Promise<T> {
+  /**
+   * Runs `fn` with the request's database (farm or demonstration), signed-in user, and the
+   * organization and farm from the session. The browser never chooses the organization.
+   */
+  async function withRequest<T>(req: Request, res: Response, fn: (ctx: PublicCtx) => Promise<T>, keepSession?: (result: T) => boolean): Promise<T> {
     const session = await sessions.find(readCookie(req, SESSION_COOKIE))
     const mode = session?.mode === 'demo' && dbs.demoAvailable ? 'demo' : 'farm'
     return dbs.with(mode, async (db) => {
-      const user = await loadSessionUser({ db }, session?.userId ?? null)
-      const ctx: RequestCtx = { db, user, now: () => new Date(), mode, session: {} }
+      const user = await loadSessionUser({ db }, session?.userId ?? null, session?.orgId ?? null)
+      const org = user ? session!.orgId : null
+      const farm = org !== null ? await sessionFarm({ db }, org, session?.farmId ?? null) : null
+      const ctx: PublicCtx = { db, user, org, farm, now: () => new Date(), mode, session: {} }
       const result = await fn(ctx)
       if (!keepSession || keepSession(result)) await saveSession(req, res, session, ctx)
       return result
+    })
+  }
+
+  /** Like withRequest, for a signed-in user only: the context is bound to their organization and farm. */
+  async function withSignedIn<T>(req: Request, res: Response, fn: (ctx: RequestCtx) => Promise<T>): Promise<T> {
+    return withRequest(req, res, async (ctx) => {
+      if (!ctx.user || ctx.org === null || ctx.farm === null) throw new AppError('not_logged_in')
+      return fn({ ...ctx, org: ctx.org, farm: ctx.farm })
     })
   }
 
@@ -120,8 +134,7 @@ export async function createServer(cfg: ServerConfig) {
     }
     const spec = reportSpecSchema.safeParse(raw)
     if (!spec.success) throw new AppError('invalid_input', { field: 'spec' })
-    const file = await withRequest(req, res, async (ctx) => {
-      requireUser(ctx)
+    const file = await withSignedIn(req, res, async (ctx) => {
       await checkAccess(ctx, 'reports.preview', spec.data)
       const model = await buildReport(ctx, spec.data)
       const data = await renderXlsx(model, (await getSettings(ctx)).language)
@@ -133,12 +146,15 @@ export async function createServer(cfg: ServerConfig) {
     res.send(file.data)
   })
 
-  // A backup contains every record (including password hashes), so only administrators may download one.
+  // A backup contains every record of the organization (including password hashes), so only its
+  // administrators may download it; whole-database backups never leave the server this way.
   app.get('/api/backup/download/:id', async (req, res) => {
-    const file = await withRequest(req, res, async (ctx) => {
+    const file = await withSignedIn(req, res, async (ctx) => {
       requireAdmin(ctx)
       if (ctx.mode === 'demo') throw new AppError('demo_mode_blocked')
-      const row = (await ctx.db.prepare("SELECT path FROM backup_runs WHERE id = ? AND status = 'ok'").get(Number(req.params['id']))) as
+      const row = (await ctx.db
+        .prepare("SELECT path FROM backup_runs WHERE id = ? AND organization_id = ? AND status = 'ok'")
+        .get(Number(req.params['id']), ctx.org)) as
         | { path: string }
         | undefined
       const p = row?.path ? path.resolve(row.path) : null
@@ -148,15 +164,18 @@ export async function createServer(cfg: ServerConfig) {
     res.download(file, path.basename(file))
   })
 
-  // Upload a backup (from this web app or from the desktop edition) to restore it.
+  // Upload one of the organization's own backups to restore it. (Desktop-edition backups are
+  // imported with `npm run import-sqlite`, which also gives each account an email address.)
   app.post('/api/backup/upload', sameOrigin, express.raw({ type: () => true, limit: `${cfg.maxUploadMb}mb` }), async (req, res) => {
     const name = String(req.query['name'] ?? 'backup').slice(0, 200)
-    const out = await withRequest(req, res, async (ctx) => {
+    const out = await withSignedIn(req, res, async (ctx) => {
       requireAdmin(ctx)
       if (ctx.mode === 'demo') throw new AppError('demo_mode_blocked')
       const tmp = path.join(os.tmpdir(), `pfm-upload-${randomUUID()}`)
       fs.writeFileSync(tmp, req.body as Buffer)
       const { data, ...check } = await inspectBackup(tmp, name)
+      if (check.ok && data && isDesktopBackup(data)) Object.assign(check, { ok: false, error: 'desktop_backup_use_import' })
+      else if (check.ok && data?.scope !== 'organization') Object.assign(check, { ok: false, error: 'not_an_organization_backup' })
       if (!check.ok) {
         fs.rmSync(tmp, { force: true })
         return { ...check, token: '' }
@@ -202,27 +221,43 @@ export async function createServer(cfg: ServerConfig) {
   }
 }
 
-/** Automatic backups of the farm database, and clean-up of expired sessions. */
+/** Whole-database backups for the platform (all organizations): one a day, the last 14 kept. */
+const PLATFORM_BACKUP_HOURS = 24
+const PLATFORM_BACKUP_KEEP = 14
+
+/**
+ * Automatic backups: each organization's records on its own schedule (Backup settings), plus a daily
+ * backup of the whole database for the platform owner. And clean-up of expired sessions.
+ */
 function startSchedulers(cfg: ServerConfig, dbs: Databases, sessions: Sessions) {
+  const due = async (db: DB, orgId: number | null, hours: number) => {
+    const last = (await db
+      .prepare("SELECT created_at FROM backup_runs WHERE organization_id <=> ? AND kind = 'auto' AND status = 'ok' ORDER BY id DESC LIMIT 1")
+      .get(orgId)) as { created_at: string } | undefined
+    if (last && Date.now() - Date.parse(last.created_at) < hours * 3600_000) return false
+    // After a failure, retry at most every 30 minutes.
+    const attempt = await lastBackup(db, orgId, 'auto')
+    return !(attempt?.status === 'failed' && Date.now() - Date.parse(attempt.createdAt) < 30 * 60_000)
+  }
   const backupTick = () =>
     dbs.with('farm', async (db) => {
-      const s = await getSettings({ db })
-      if (!s.backupEnabled || !s.setupComplete) return
-      const last = (await db
-        .prepare("SELECT created_at FROM backup_runs WHERE kind = 'auto' AND status = 'ok' ORDER BY id DESC LIMIT 1")
-        .get()) as { created_at: string } | undefined
-      const due = !last || Date.now() - Date.parse(last.created_at) >= s.backupIntervalHours * 3600_000
-      if (!due) return
-      const lastAttempt = await lastBackup(db, 'auto')
-      // After a failure, retry at most every 30 minutes.
-      if (lastAttempt?.status === 'failed' && Date.now() - Date.parse(lastAttempt.createdAt) < 30 * 60_000) return
-      // Only one server process makes the automatic backup.
+      // Only one server process makes the automatic backups.
       const [got] = (await db.query("SELECT GET_LOCK('pfm_auto_backup', 0) AS got")) as { got: number }[]
       if (got?.got !== 1) return
       try {
-        const info = await createBackup(db, cfg.backupDir, 'auto')
-        if (info.status === 'ok') applyRetention(cfg.backupDir, s.backupRetention)
-        else console.error('Automatic backup failed:', info.message)
+        const orgs = (await db.prepare("SELECT id, code FROM organizations WHERE status = 'active' ORDER BY id").all()) as { id: number; code: string }[]
+        for (const o of orgs) {
+          const s = await getSettings({ db, org: o.id })
+          if (!s.backupEnabled || !(await due(db, o.id, s.backupIntervalHours))) continue
+          const info = await createBackup(db, cfg.backupDir, 'auto', { orgId: o.id })
+          if (info.status === 'ok') applyRetention(cfg.backupDir, s.backupRetention, o.code)
+          else console.error(`Automatic backup of ${o.code} failed:`, info.message)
+        }
+        if (orgs.length && (await due(db, null, PLATFORM_BACKUP_HOURS))) {
+          const info = await createBackup(db, cfg.backupDir, 'auto', { orgId: null })
+          if (info.status === 'ok') applyRetention(cfg.backupDir, PLATFORM_BACKUP_KEEP, 'all')
+          else console.error('Automatic whole-database backup failed:', info.message)
+        }
       } finally {
         await db.query("SELECT RELEASE_LOCK('pfm_auto_backup')")
       }

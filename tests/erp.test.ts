@@ -78,7 +78,7 @@ describe('duties and cage responsibility', () => {
     expect(await code(() => checkAccess(w, 'days.overview', { date: D1 }))).toBe('no_error')
     expect(await code(() => checkAccess(f.admin, 'sales.dispatch', {}))).toBe('no_error')
     // The session reflects the assignment at sign-in, and the user list shows it
-    expect(await login({ ...f.worker, user: null }, 'worker', 'worker123')).toMatchObject({ duties: ['eggs', 'flock'], cages: [c1] })
+    expect((await login(f.anon, 'worker@test.farm', 'worker123')).user).toMatchObject({ duties: ['eggs', 'flock'], cages: [c1] })
     expect((await listUsers(f.admin)).find((u) => u.username === 'worker')).toMatchObject({ duties: ['eggs', 'flock'], cages: [c1] })
   })
 

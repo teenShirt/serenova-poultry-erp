@@ -95,7 +95,7 @@ export function BackupPage() {
           {isAdmin ? (
             <div className="stack">
               <Notice tone="warn">{t('bak.restoreIntro')}</Notice>
-              <div className="muted small">{t('bak.desktopNote')}</div>
+              <div className="muted small">{t('bak.desktopImport')}</div>
               <div className="row">
                 <label className={`btn ${busy ? 'disabled' : ''}`}>
                   <Upload size={18} /> {busy ? t('bak.checking') : t('bak.pickFile')}

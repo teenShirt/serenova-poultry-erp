@@ -80,7 +80,7 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
     language: lang,
     startDate: date,
     cages: z.array(z.object({ code: text(20), name: text(60), initialHens: count, hasWaterMeter: z.boolean() })).min(1).max(200),
-    admin: z.object({ username: text(32), displayName: text(80), password: text(200) }),
+    admin: z.object({ email: text(255), displayName: text(80), password: text(200) }),
     inventory: z
       .array(
         z.object({
@@ -100,15 +100,15 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
   'demo.exit': none,
   'demo.reset': none,
 
-  'auth.login': z.object({ username: text(64), password: text(200) }),
+  'auth.login': z.object({ email: text(255), password: text(200) }),
   'auth.logout': none,
   'auth.changePassword': z.object({ current: text(200), next: text(200) }),
-  'auth.signup': z.object({ username: text(32), displayName: text(80), password: text(200) }),
-  'auth.resetWithCode': z.object({ username: text(64), recoveryCode: text(40), newPassword: text(200) }),
+  'auth.signup': z.object({ organizationCode: text(40), email: text(255), displayName: text(80), password: text(200) }),
+  'auth.resetWithCode': z.object({ email: text(255), recoveryCode: text(40), newPassword: text(200) }),
   'auth.newRecoveryCode': z.object({ password: text(200) }),
   'users.list': none,
-  'users.create': z.object({ username: text(32), displayName: text(80), password: text(200), role }),
-  'users.update': z.object({ id, displayName: text(80), role, active: z.boolean() }),
+  'users.create': z.object({ email: text(255), displayName: text(80), password: text(200), role }),
+  'users.update': z.object({ id, email: text(255), displayName: text(80), role, active: z.boolean() }),
   'users.resetPassword': z.object({ id, password: text(200) }),
   'users.approve': z.object({ id, role }),
   'users.reject': z.object({ id }),

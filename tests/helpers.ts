@@ -4,8 +4,8 @@ import type { Pool } from 'mysql2/promise'
 import { afterAll, inject } from 'vitest'
 import { createPool, DB } from '../src/server/db/connection'
 import { migrate } from '../src/server/db/migrations'
-import type { Ctx } from '../src/server/context'
-import { completeSetup, type SetupInput } from '../src/server/services/setup'
+import type { AnonCtx, Ctx } from '../src/server/context'
+import { createOrganization, type SetupInput } from '../src/server/services/setup'
 import { createUser, login } from '../src/server/services/auth'
 
 /** Fixed clock: 2026-03-10 08:00 Asia/Colombo. Test data is created per test, never shipped. */
@@ -24,7 +24,7 @@ export function setupInput(overrides: Partial<SetupInput> = {}): SetupInput {
       initialHens: 1000,
       hasWaterMeter: true
     })),
-    admin: { username: 'admin', displayName: 'Admin', password: 'secret123' },
+    admin: { email: 'admin@test.farm', displayName: 'Admin', password: 'secret123' },
     inventory: [
       { category: 'feed', name: 'Layer Mash', unit: 'kg', lowStockThreshold: 500, openingBalance: 5000, batchNo: null, expiryDate: null },
       { category: 'medicine', name: 'Vitamin Mix', unit: 'ml', lowStockThreshold: 100, openingBalance: 1000, batchNo: 'VM-01', expiryDate: '2026-12-31' }
@@ -39,7 +39,38 @@ export function testServer() {
   return inject('mysql')
 }
 
-/** A new, empty database on the test server (not yet migrated unless `migrated`). */
+/**
+ * The final schema, captured once per test file: a template database is migrated step by step
+ * (as a real installation is), and its CREATE TABLE statements are replayed into each test
+ * database. Much faster than running every migration for every test.
+ */
+let schema: Promise<{ tables: string[]; versions: unknown[][] }> | null = null
+function finalSchema() {
+  schema ??= (async () => {
+    const server = testServer()
+    const name = `pfm_tpl_${randomBytes(6).toString('hex')}`
+    const admin = await mysql.createConnection({ ...server })
+    await admin.query(`CREATE DATABASE ${name} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_ci`)
+    const pool = createPool({ ...server, database: name, connectionLimit: 1 })
+    try {
+      const db = await DB.connect(pool, name)
+      await migrate(db)
+      const names = (await db.prepare("SELECT table_name AS t FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'").all()) as { t: string }[]
+      const tables: string[] = []
+      for (const { t } of names) tables.push(((await db.query(`SHOW CREATE TABLE \`${t}\``)) as Record<string, string>[])[0]['Create Table'])
+      const versions = ((await db.prepare('SELECT version, name, applied_at FROM schema_migrations').all()) as { version: number; name: string; applied_at: string }[]).map((r) => [r.version, r.name, r.applied_at])
+      db.release()
+      return { tables, versions }
+    } finally {
+      await pool.end()
+      await admin.query(`DROP DATABASE IF EXISTS ${name}`)
+      await admin.end()
+    }
+  })()
+  return schema
+}
+
+/** A new, empty database on the test server, with the current schema (or none, unless `migrated`). */
 export async function openTestDb(migrated = true): Promise<DB> {
   const server = testServer()
   const name = `pfm_test_${randomBytes(6).toString('hex')}`
@@ -49,7 +80,13 @@ export async function openTestDb(migrated = true): Promise<DB> {
   const pool = createPool({ ...server, database: name, connectionLimit: 4 })
   const db = await DB.connect(pool, name)
   created.push({ name, pool, dbs: [db] })
-  if (migrated) await migrate(db)
+  if (migrated) {
+    const { tables, versions } = await finalSchema()
+    await db.query('SET FOREIGN_KEY_CHECKS = 0')
+    for (const ddl of tables) await db.query(ddl)
+    await db.query('SET FOREIGN_KEY_CHECKS = 1')
+    await db.query('INSERT INTO schema_migrations (version, name, applied_at) VALUES ?', [versions])
+  }
   return db
 }
 
@@ -61,32 +98,39 @@ export async function anotherSession(db: DB): Promise<DB> {
   return other
 }
 
+// Connections are closed after each test file. The test databases themselves are removed with
+// the whole server at the end of the run (see global-setup.ts): dropping them one by one is slow.
 afterAll(async () => {
-  const server = testServer()
-  const admin = await mysql.createConnection({ ...server })
   for (const c of created.splice(0)) {
     for (const d of c.dbs) d.release()
     await c.pool.end()
-    await admin.query(`DROP DATABASE IF EXISTS ${c.name}`)
   }
-  await admin.end()
 })
 
-export async function makeFarm() {
-  const db = await openTestDb()
+/**
+ * A farm organization with an administrator (admin@<domain>) and a data-entry worker
+ * (worker@<domain>). Pass `db` to add another organization to the same database.
+ */
+export async function makeFarm(opts: { db?: DB; name?: string; domain?: string } = {}) {
+  const db = opts.db ?? (await openTestDb())
+  const domain = opts.domain ?? 'test.farm'
   let now = NOW
-  const base: Ctx = { db, user: null, now: () => now }
-  await completeSetup(base, setupInput())
-  const admin = await login(base, 'admin', 'secret123')
-  const adminCtx: Ctx = { db, user: admin, now: () => now }
-  await createUser(adminCtx, { username: 'worker', displayName: 'Worker', password: 'worker123', role: 'operator' })
-  const worker = await login(base, 'worker', 'worker123')
-  const workerCtx: Ctx = { db, user: worker, now: () => now }
-  const cageIds = ((await db.prepare('SELECT id FROM cages ORDER BY sort_order').all()) as { id: number }[]).map((r) => r.id)
-  const feedId = ((await db.prepare("SELECT id FROM inventory_items WHERE category='feed'").get()) as { id: number }).id
-  const medId = ((await db.prepare("SELECT id FROM inventory_items WHERE category='medicine'").get()) as { id: number }).id
+  const anon: AnonCtx = { db, now: () => now }
+  const org = await createOrganization(anon, setupInput({ farmName: opts.name ?? 'Test Farm', admin: { email: `admin@${domain}`, displayName: 'Admin', password: 'secret123' } }))
+  const scope = { db, org: org.organizationId, farm: org.farmId, now: () => now }
+  const adminCtx: Ctx = { ...scope, user: (await login(anon, `admin@${domain}`, 'secret123')).user }
+  await createUser(adminCtx, { email: `worker@${domain}`, displayName: 'Worker', password: 'worker123', role: 'operator' })
+  const workerCtx: Ctx = { ...scope, user: (await login(anon, `worker@${domain}`, 'worker123')).user }
+  const cageIds = ((await db.prepare('SELECT id FROM cages WHERE farm_id = ? ORDER BY sort_order').all(org.farmId)) as { id: number }[]).map((r) => r.id)
+  const feedId = ((await db.prepare("SELECT id FROM inventory_items WHERE organization_id = ? AND category='feed'").get(org.organizationId)) as { id: number }).id
+  const medId = ((await db.prepare("SELECT id FROM inventory_items WHERE organization_id = ? AND category='medicine'").get(org.organizationId)) as { id: number }).id
   return {
     db,
+    anon,
+    org: org.organizationId,
+    farm: org.farmId,
+    orgCode: org.organizationCode,
+    domain,
     admin: adminCtx,
     worker: workerCtx,
     cageIds,

@@ -9,6 +9,7 @@ export default defineConfig({
     globalSetup: ['tests/global-setup.ts'],
     testTimeout: 120000,
     hookTimeout: 600000,
+    teardownTimeout: 1800000,
     // All test files share one MySQL server; each test uses its own database.
     fileParallelism: false
   }

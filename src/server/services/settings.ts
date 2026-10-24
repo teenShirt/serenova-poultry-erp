@@ -25,8 +25,9 @@ export const DEFAULT_SETTINGS: FarmSettings = {
   setupComplete: false
 }
 
-export async function getSettings(ctx: Pick<Ctx, 'db'>): Promise<FarmSettings> {
-  const rows = (await ctx.db.prepare('SELECT `key`, value FROM app_settings').all()) as { key: string; value: string }[]
+/** The organization's settings (defaults for anything not saved yet). */
+export async function getSettings(ctx: Pick<Ctx, 'db' | 'org'>): Promise<FarmSettings> {
+  const rows = (await ctx.db.prepare('SELECT `key`, value FROM app_settings WHERE organization_id = ?').all(ctx.org)) as { key: string; value: string }[]
   const s: Record<string, unknown> = { ...DEFAULT_SETTINGS }
   for (const r of rows) {
     if (r.key in DEFAULT_SETTINGS) {
@@ -45,7 +46,7 @@ export async function saveSettings(ctx: Ctx, patch: Partial<FarmSettings>) {
   const current = (await getSettings(ctx)) as unknown as Record<string, unknown>
   const changed: Record<string, { from: unknown; to: unknown }> = {}
   const stmt = ctx.db.prepare(
-    `INSERT INTO app_settings (\`key\`, value, updated_at) VALUES (?, ?, ?) AS new
+    `INSERT INTO app_settings (organization_id, \`key\`, value, updated_at) VALUES (?, ?, ?, ?) AS new
      ON DUPLICATE KEY UPDATE value = new.value, updated_at = new.updated_at`
   )
   const at = ctx.now().toISOString()
@@ -53,7 +54,7 @@ export async function saveSettings(ctx: Ctx, patch: Partial<FarmSettings>) {
     if (!(k in DEFAULT_SETTINGS) || v === undefined) continue
     const before = current[k]
     if (JSON.stringify(before) === JSON.stringify(v)) continue
-    await stmt.run(k, JSON.stringify(v), at)
+    await stmt.run(ctx.org, k, JSON.stringify(v), at)
     changed[k] = { from: before, to: v }
   }
   return changed

@@ -25,8 +25,8 @@ export async function listEggs(ctx: Ctx, date: string, cageId?: number): Promise
   const day = await getDay(ctx, date)
   if (!day) return []
   return (await ctx.db
-    .prepare(`${select} WHERE e.day_id = ? ${cageId ? 'AND e.cage_id = ?' : ''} ORDER BY c.sort_order, c.code, e.session`)
-    .all(...(cageId ? [day.id, cageId] : [day.id]))) as EggCollection[]
+    .prepare(`${select} WHERE e.organization_id = ? AND e.day_id = ? ${cageId ? 'AND e.cage_id = ?' : ''} ORDER BY c.sort_order, c.code, e.session`)
+    .all(...(cageId ? [ctx.org, day.id, cageId] : [ctx.org, day.id]))) as EggCollection[]
 }
 
 /**
@@ -43,8 +43,8 @@ export async function saveEggs(ctx: Ctx, input: EggInput, expectedId: number | n
     const day = await requireWritableDay(ctx, input.date)
     await requireCageDay(ctx, day, input.cageId)
     const existing = (await ctx.db
-      .prepare('SELECT * FROM egg_collections WHERE day_id = ? AND cage_id = ? AND session = ?')
-      .get(day.id, input.cageId, input.session)) as Record<string, unknown> | undefined
+      .prepare('SELECT * FROM egg_collections WHERE organization_id = ? AND day_id = ? AND cage_id = ? AND session = ?')
+      .get(ctx.org, day.id, input.cageId, input.session)) as Record<string, unknown> | undefined
     const now = ctx.now().toISOString()
     if (existing) {
       assert(expectedId === existing.id, 'egg_session_exists', { session: input.session })
@@ -66,10 +66,10 @@ export async function saveEggs(ctx: Ctx, input: EggInput, expectedId: number | n
     assert(expectedId === null, 'record_changed')
     const info = await ctx.db
       .prepare(
-        `INSERT INTO egg_collections (day_id, cage_id, session, collected_at, good, damaged, rejected, notes, recorded_by,
-           created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO egg_collections (organization_id, day_id, cage_id, session, collected_at, good, damaged, rejected, notes, recorded_by,
+           created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(day.id, input.cageId, input.session, input.collectedAt, input.good, input.damaged, input.rejected, input.notes, user.id, now, now)
+      .run(ctx.org, day.id, input.cageId, input.session, input.collectedAt, input.good, input.damaged, input.rejected, input.notes, user.id, now, now)
     const id = Number(info.lastInsertRowid)
     await audit(ctx, { action: 'create', entity: 'egg_collection', entityId: id, dayId: day.id, details: input })
     return id
@@ -81,8 +81,8 @@ export async function deleteEggs(ctx: Ctx, id: number, reason: string) {
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const row = (await ctx.db
-      .prepare('SELECT e.*, d.business_date FROM egg_collections e JOIN farm_days d ON d.id = e.day_id WHERE e.id = ?')
-      .get(id)) as (Record<string, unknown> & { business_date: string; day_id: number }) | undefined
+      .prepare('SELECT e.*, d.business_date FROM egg_collections e JOIN farm_days d ON d.id = e.day_id WHERE e.id = ? AND e.organization_id = ? AND d.farm_id = ?')
+      .get(id, ctx.org, ctx.farm)) as (Record<string, unknown> & { business_date: string; day_id: number }) | undefined
     assert(row, 'not_found')
     await requireWritableDay(ctx, row.business_date)
     await ctx.db.prepare('DELETE FROM egg_collections WHERE id = ?').run(id)

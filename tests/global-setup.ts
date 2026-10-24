@@ -20,13 +20,21 @@ declare module 'vitest' {
  */
 export default async function setup(project: TestProject) {
   if (process.env['TEST_DB_HOST']) {
-    project.provide('mysql', {
+    const server = {
       host: process.env['TEST_DB_HOST'],
       port: Number(process.env['TEST_DB_PORT'] ?? 3306),
       user: process.env['TEST_DB_USER'] ?? 'root',
       password: process.env['TEST_DB_PASSWORD'] ?? ''
-    })
-    return
+    }
+    project.provide('mysql', server)
+    // An existing server keeps its databases: remove the ones the tests created.
+    return async () => {
+      const mysql = await import('mysql2/promise')
+      const c = await mysql.createConnection(server)
+      const [rows] = await c.query(String.raw`SELECT schema_name AS s FROM information_schema.schemata WHERE schema_name LIKE 'pfm\_test\_%' OR schema_name LIKE 'pfm\_tpl\_%'`)
+      for (const r of rows as { s: string }[]) await c.query(`DROP DATABASE IF EXISTS \`${r.s}\``)
+      await c.end()
+    }
   }
   const { createDB } = await import('mysql-memory-server')
   const db = await createDB({ version: '8.4.x', logLevel: 'ERROR' })

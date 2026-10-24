@@ -25,7 +25,7 @@ export function SetupPage() {
   const [inventory, setInventory] = useState<Inv[]>([
     { category: 'feed', name: 'Layer Mash', unit: 'kg', lowStockThreshold: 1000, openingBalance: 0, batchNo: null, expiryDate: null }
   ])
-  const [admin, setAdmin] = useState({ username: 'admin', displayName: '', password: '', confirm: '' })
+  const [admin, setAdmin] = useState({ email: '', displayName: '', password: '', confirm: '' })
   const [setupKey, setSetupKey] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -38,7 +38,7 @@ export function SetupPage() {
     farmName.trim().length > 0 && !!startDate,
     cages.length > 0 && cages.every((c) => c.name.trim() && c.code.trim() && c.initialHens !== null) && new Set(cages.map((c) => c.code.trim())).size === cages.length,
     inventory.every((i) => i.name.trim() && i.unit.trim() && (i.category !== 'medicine' || i.openingBalance === 0 || (i.batchNo ?? '').trim())),
-    admin.username.trim().length >= 3 && admin.password.length >= 6 && admin.password === admin.confirm && (!status.setupKeyRequired || setupKey.trim().length > 0)
+    admin.email.includes('@') && admin.password.length >= 6 && admin.password === admin.confirm && (!status.setupKeyRequired || setupKey.trim().length > 0)
   ]
 
   const setCageCount = (n: number) => {
@@ -60,7 +60,7 @@ export function SetupPage() {
         language: lang,
         startDate,
         cages: cages.map((c) => ({ code: c.code.trim(), name: c.name.trim(), initialHens: c.initialHens ?? 0, hasWaterMeter: c.hasWaterMeter })),
-        admin: { username: admin.username.trim(), displayName: admin.displayName.trim() || admin.username.trim(), password: admin.password },
+        admin: { email: admin.email.trim(), displayName: admin.displayName.trim() || admin.email.trim(), password: admin.password },
         inventory: inventory.map((i) => ({ ...i, name: i.name.trim(), batchNo: i.batchNo?.trim() || null })),
         ...(status.setupKeyRequired ? { setupKey: setupKey.trim() } : {})
       })
@@ -244,8 +244,8 @@ export function SetupPage() {
               <Field label={t('setup.displayName')}>
                 <input className="input" value={admin.displayName} onChange={(e) => setAdmin({ ...admin, displayName: e.target.value })} />
               </Field>
-              <Field label={t('auth.username')} required hint={t('err.invalid_username')}>
-                <input className="input" value={admin.username} onChange={(e) => setAdmin({ ...admin, username: e.target.value })} />
+              <Field label={t('auth.email')} required>
+                <input className="input" type="email" inputMode="email" autoComplete="username" value={admin.email} onChange={(e) => setAdmin({ ...admin, email: e.target.value })} />
               </Field>
               <Field label={t('auth.password')} required hint={t('err.password_too_short')}>
                 <input className="input" type="password" value={admin.password} onChange={(e) => setAdmin({ ...admin, password: e.target.value })} />

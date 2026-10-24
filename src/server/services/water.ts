@@ -16,7 +16,7 @@ const toRecord = (r: Record<string, unknown>) => ({ ...(r as unknown as WaterRec
 export async function listWater(ctx: Ctx, date: string): Promise<WaterRecord[]> {
   const day = await getDay(ctx, date)
   if (!day) return []
-  return ((await ctx.db.prepare(`${select} WHERE w.day_id = ? ORDER BY c.sort_order, c.code`).all(day.id)) as Record<string, unknown>[]).map(
+  return ((await ctx.db.prepare(`${select} WHERE w.organization_id = ? AND w.day_id = ? ORDER BY c.sort_order, c.code`).all(ctx.org, day.id)) as Record<string, unknown>[]).map(
     toRecord
   )
 }
@@ -26,10 +26,10 @@ export async function suggestedOpeningReading(ctx: Ctx, date: string, cageId: nu
   const r = (await ctx.db
     .prepare(
       `SELECT w.closing_reading FROM water_records w JOIN farm_days d ON d.id = w.day_id
-       WHERE w.cage_id = ? AND d.business_date < ? AND w.closing_reading IS NOT NULL
+       WHERE w.organization_id = ? AND d.farm_id = ? AND w.cage_id = ? AND d.business_date < ? AND w.closing_reading IS NOT NULL
        ORDER BY d.business_date DESC LIMIT 1`
     )
-    .get(cageId, date)) as { closing_reading: number } | undefined
+    .get(ctx.org, ctx.farm, cageId, date)) as { closing_reading: number } | undefined
   return r?.closing_reading ?? null
 }
 
@@ -63,8 +63,8 @@ export async function saveWater(ctx: Ctx, w: WaterInput, expectedId: number | nu
     const day = await requireWritableDay(ctx, w.date)
     await requireCageDay(ctx, day, w.cageId)
     const existing = (await ctx.db
-      .prepare('SELECT * FROM water_records WHERE day_id = ? AND cage_id = ?')
-      .get(day.id, w.cageId)) as Record<string, unknown> | undefined
+      .prepare('SELECT * FROM water_records WHERE organization_id = ? AND day_id = ? AND cage_id = ?')
+      .get(ctx.org, day.id, w.cageId)) as Record<string, unknown> | undefined
     const now = ctx.now().toISOString()
     const vals = [
       w.method,
@@ -92,9 +92,9 @@ export async function saveWater(ctx: Ctx, w: WaterInput, expectedId: number | nu
         (await ctx.db
           .prepare(
             `INSERT INTO water_records (method, opening_reading, closing_reading, litres, meter_reset, correction_reason,
-               notes, recorded_by, day_id, cage_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+               notes, recorded_by, organization_id, day_id, cage_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
           )
-          .run(...vals, day.id, w.cageId, now, now)).lastInsertRowid
+          .run(...vals, ctx.org, day.id, w.cageId, now, now)).lastInsertRowid
       )
     }
     await audit(ctx, {
@@ -114,8 +114,8 @@ export async function deleteWater(ctx: Ctx, id: number, reason: string) {
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const row = (await ctx.db
-      .prepare('SELECT w.*, d.business_date FROM water_records w JOIN farm_days d ON d.id = w.day_id WHERE w.id = ?')
-      .get(id)) as (Record<string, unknown> & { business_date: string; day_id: number }) | undefined
+      .prepare('SELECT w.*, d.business_date FROM water_records w JOIN farm_days d ON d.id = w.day_id WHERE w.id = ? AND w.organization_id = ? AND d.farm_id = ?')
+      .get(id, ctx.org, ctx.farm)) as (Record<string, unknown> & { business_date: string; day_id: number }) | undefined
     assert(row, 'not_found')
     await requireWritableDay(ctx, row.business_date)
     await ctx.db.prepare('DELETE FROM water_records WHERE id = ?').run(id)

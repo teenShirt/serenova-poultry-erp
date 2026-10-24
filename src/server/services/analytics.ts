@@ -10,7 +10,7 @@ import { groupByDay, loadCageDayStats, sumCages } from './stats'
 /** One point per calendar date in the range; dates without a farm day carry nulls (gaps, not zeros). */
 export async function dailySeries(ctx: Ctx, from: string, to: string, cageId?: number | null): Promise<DailySeriesPoint[]> {
   const settings = await getSettings(ctx)
-  const byDay = groupByDay(await loadCageDayStats(ctx.db, settings, from, to, cageId))
+  const byDay = groupByDay(await loadCageDayStats(ctx, settings, from, to, cageId))
   let cumulative = 0
   return dateRange(from, to).map((date) => {
     const rows = byDay.get(date)
@@ -57,7 +57,7 @@ export async function dailySeries(ctx: Ctx, from: string, to: string, cageId?: n
 
 export async function cageComparison(ctx: Ctx, from: string, to: string): Promise<CageComparisonRow[]> {
   const settings = await getSettings(ctx)
-  const rows = await loadCageDayStats(ctx.db, settings, from, to)
+  const rows = await loadCageDayStats(ctx, settings, from, to)
   const map = new Map<number, CageComparisonRow & { prodSum: number; prodN: number; firstOpening: number | null }>()
   for (const r of rows) {
     const m = map.get(r.cageId) ?? {

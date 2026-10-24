@@ -12,7 +12,10 @@ export type Duty = (typeof DUTIES)[number]
 
 export interface SessionUser {
   id: number
+  /** Short name within the organization, shown in the audit history */
   username: string
+  /** Sign-in name, unique across the platform */
+  email: string
   displayName: string
   role: Role
   /** What this user may do (all duties for administrators) */
@@ -21,7 +24,9 @@ export interface SessionUser {
   cages?: number[] | null
 }
 
-export interface UserRow extends SessionUser {
+export interface UserRow extends Omit<SessionUser, 'email'> {
+  /** null for an account from before email sign-in: it cannot sign in until an administrator sets one */
+  email: string | null
   duties: Duty[]
   cages: number[] | null
   active: boolean
@@ -385,7 +390,7 @@ export interface DashboardData {
 
 export interface BackupInfo {
   id: number
-  kind: 'manual' | 'auto' | 'pre_restore'
+  kind: 'manual' | 'auto' | 'pre_restore' | 'pre_migration'
   path: string | null
   sizeBytes: number | null
   status: 'ok' | 'failed'
@@ -404,7 +409,11 @@ export interface BackupFileCheck {
 }
 
 export interface AppStatus {
+  /** The platform has at least one organization (otherwise the first-run setup is shown) */
   setupComplete: boolean
+  /** The signed-in user's organization and the farm they are working on */
+  organization: { code: string; name: string } | null
+  farm: { id: number; name: string } | null
   /** The first-run setup asks for the installation's setup key (SETUP_KEY on the server). */
   setupKeyRequired: boolean
   isDemo: boolean

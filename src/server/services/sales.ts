@@ -12,25 +12,26 @@ import { nextNumber } from './purchases'
  * Egg store stock is never typed in. It is always:
  *   good eggs collected − good eggs dispatched + adjustments (and the same for cracked eggs)
  * Collections count from the moment they are recorded; rejected eggs never enter the store.
+ * The store belongs to the organization: it receives the eggs of all its farms.
  */
-export async function eggStock(ctx: Pick<Ctx, 'db'>, asOf?: string): Promise<EggStock> {
+export async function eggStock(ctx: Pick<Ctx, 'db' | 'org'>, asOf?: string): Promise<EggStock> {
   const date = asOf ?? '9999-12-31'
   const c = (await ctx.db
     .prepare(
       `SELECT COALESCE(SUM(e.good), 0) AS good, COALESCE(SUM(e.damaged), 0) AS cracked
-       FROM egg_collections e JOIN farm_days d ON d.id = e.day_id WHERE d.business_date <= ?`
+       FROM egg_collections e JOIN farm_days d ON d.id = e.day_id WHERE e.organization_id = ? AND d.business_date <= ?`
     )
-    .get(date)) as EggStock
+    .get(ctx.org, date)) as EggStock
   const s = (await ctx.db
-    .prepare('SELECT COALESCE(SUM(good_qty), 0) AS good, COALESCE(SUM(cracked_qty), 0) AS cracked FROM egg_dispatches WHERE dispatch_date <= ?')
-    .get(date)) as EggStock
+    .prepare('SELECT COALESCE(SUM(good_qty), 0) AS good, COALESCE(SUM(cracked_qty), 0) AS cracked FROM egg_dispatches WHERE organization_id = ? AND dispatch_date <= ?')
+    .get(ctx.org, date)) as EggStock
   const a = (await ctx.db
     .prepare(
       `SELECT COALESCE(SUM(CASE WHEN grade = 'good' THEN quantity END), 0) AS good,
               COALESCE(SUM(CASE WHEN grade = 'cracked' THEN quantity END), 0) AS cracked
-       FROM egg_store_adjustments WHERE adj_date <= ?`
+       FROM egg_store_adjustments WHERE organization_id = ? AND adj_date <= ?`
     )
-    .get(date)) as EggStock
+    .get(ctx.org, date)) as EggStock
   return { good: c.good - s.good + a.good, cracked: c.cracked - s.cracked + a.cracked }
 }
 
@@ -69,16 +70,16 @@ export async function createDispatch(ctx: Ctx, d: DispatchInput): Promise<{ id: 
   assert(d.amountPaid >= 0 && d.amountPaid <= amount + 0.005, 'payment_exceeds_balance')
   return ctx.db.transaction(async () => {
     await assertDateWritable(ctx, d.date)
-    assert(await ctx.db.prepare('SELECT 1 FROM customers WHERE id = ?').get(d.customerId), 'not_found')
+    assert(await ctx.db.prepare('SELECT 1 AS x FROM customers WHERE id = ? AND organization_id = ?').get(d.customerId, ctx.org), 'not_found')
     const dispatchNo = await nextNumber(ctx, 'DSP', 'egg_dispatches', 'dispatch_no', d.date)
     const now = ctx.now().toISOString()
     const id = Number(
       (await ctx.db
         .prepare(
-          `INSERT INTO egg_dispatches (dispatch_no, dispatch_date, customer_id, good_qty, good_price, cracked_qty, cracked_price, amount,
-             amount_paid, invoice_no, vehicle, driver, notes, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO egg_dispatches (organization_id, dispatch_no, dispatch_date, customer_id, good_qty, good_price, cracked_qty, cracked_price, amount,
+             amount_paid, invoice_no, vehicle, driver, notes, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(dispatchNo, d.date, d.customerId, d.goodQty, d.goodPrice, d.crackedQty, d.crackedPrice, amount, 0, d.invoiceNo?.trim() || null, d.vehicle?.trim() || null, d.driver?.trim() || null, d.notes?.trim() || null, user.id, now))
+        .run(ctx.org, dispatchNo, d.date, d.customerId, d.goodQty, d.goodPrice, d.crackedQty, d.crackedPrice, amount, 0, d.invoiceNo?.trim() || null, d.vehicle?.trim() || null, d.driver?.trim() || null, d.notes?.trim() || null, user.id, now))
         .lastInsertRowid
     )
     await assertEggStock(ctx, d.date)
@@ -90,8 +91,8 @@ export async function createDispatch(ctx: Ctx, d: DispatchInput): Promise<{ id: 
 
 async function insertPayment(ctx: Ctx, dispatchId: number, date: string, amount: number, method: string, reference: string | null) {
   await ctx.db
-    .prepare('INSERT INTO customer_payments (dispatch_id, payment_date, amount, method, reference, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(dispatchId, date, round(amount, 2), method, reference, ctx.user?.id ?? null, ctx.now().toISOString())
+    .prepare('INSERT INTO customer_payments (organization_id, dispatch_id, payment_date, amount, method, reference, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(ctx.org, dispatchId, date, round(amount, 2), method, reference, ctx.user?.id ?? null, ctx.now().toISOString())
   await ctx.db.prepare('UPDATE egg_dispatches SET amount_paid = (SELECT COALESCE(SUM(amount), 0) FROM customer_payments WHERE dispatch_id = ?) WHERE id = ?').run(dispatchId, dispatchId)
 }
 
@@ -100,7 +101,7 @@ export async function addPayment(ctx: Ctx, p: { dispatchId: number; date: string
   assert(isIsoDate(p.date) && p.date <= await farmToday(ctx), 'invalid_date')
   assert(p.amount > 0, 'quantity_positive')
   await ctx.db.transaction(async () => {
-    const d = (await ctx.db.prepare('SELECT amount, amount_paid, dispatch_no FROM egg_dispatches WHERE id = ?').get(p.dispatchId)) as
+    const d = (await ctx.db.prepare('SELECT amount, amount_paid, dispatch_no FROM egg_dispatches WHERE id = ? AND organization_id = ?').get(p.dispatchId, ctx.org)) as
       | { amount: number; amount_paid: number; dispatch_no: string }
       | undefined
     assert(d, 'not_found')
@@ -115,7 +116,7 @@ export async function cancelDispatch(ctx: Ctx, id: number, reason: string) {
   requireAdmin(ctx)
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
-    const d = (await ctx.db.prepare('SELECT * FROM egg_dispatches WHERE id = ?').get(id)) as { dispatch_date: string } | undefined
+    const d = (await ctx.db.prepare('SELECT * FROM egg_dispatches WHERE id = ? AND organization_id = ?').get(id, ctx.org)) as { dispatch_date: string } | undefined
     assert(d, 'not_found')
     await assertDateWritable(ctx, d.dispatch_date)
     await ctx.db.prepare('DELETE FROM egg_dispatches WHERE id = ?').run(id)
@@ -133,8 +134,8 @@ export async function adjustEggStore(ctx: Ctx, a: { date: string; grade: 'good' 
     await assertDateWritable(ctx, a.date)
     const id = Number(
       (await ctx.db
-        .prepare('INSERT INTO egg_store_adjustments (adj_date, grade, quantity, reason, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(a.date, a.grade, a.quantity, a.reason.trim(), ctx.user!.id, ctx.now().toISOString())).lastInsertRowid
+        .prepare('INSERT INTO egg_store_adjustments (organization_id, adj_date, grade, quantity, reason, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(ctx.org, a.date, a.grade, a.quantity, a.reason.trim(), ctx.user!.id, ctx.now().toISOString())).lastInsertRowid
     )
     await assertEggStock(ctx, a.date)
     await audit(ctx, { action: 'egg_store_adjustment', entity: 'egg_store', entityId: id, reason: a.reason, details: a })
@@ -151,41 +152,42 @@ function toDispatch(r: Omit<EggDispatch, 'balance' | 'paymentStatus'>): EggDispa
   return { ...r, balance, paymentStatus: balance <= 0.004 ? 'paid' : r.amountPaid > 0 ? 'partial' : 'unpaid' }
 }
 
-export async function listDispatches(ctx: Pick<Ctx, 'db'>, f: { from: string; to: string; customerId?: number | null; unpaidOnly?: boolean }): Promise<EggDispatch[]> {
+export async function listDispatches(ctx: Pick<Ctx, 'db' | 'org'>, f: { from: string; to: string; customerId?: number | null; unpaidOnly?: boolean }): Promise<EggDispatch[]> {
   const rows = (await ctx.db
     .prepare(
       `SELECT ${dispatchCols} FROM egg_dispatches d JOIN customers c ON c.id = d.customer_id LEFT JOIN users u ON u.id = d.recorded_by
-       WHERE d.dispatch_date BETWEEN ? AND ? ${f.customerId ? 'AND d.customer_id = ?' : ''} ${f.unpaidOnly ? 'AND d.amount_paid < d.amount - 0.004' : ''}
+       WHERE d.organization_id = ? AND d.dispatch_date BETWEEN ? AND ? ${f.customerId ? 'AND d.customer_id = ?' : ''} ${f.unpaidOnly ? 'AND d.amount_paid < d.amount - 0.004' : ''}
        ORDER BY d.dispatch_date DESC, d.id DESC`
     )
-    .all(...(f.customerId ? [f.from, f.to, f.customerId] : [f.from, f.to]))) as Omit<EggDispatch, 'balance' | 'paymentStatus'>[]
+    .all(...(f.customerId ? [ctx.org, f.from, f.to, f.customerId] : [ctx.org, f.from, f.to]))) as Omit<EggDispatch, 'balance' | 'paymentStatus'>[]
   return rows.map(toDispatch)
 }
 
-export async function listEggAdjustments(ctx: Pick<Ctx, 'db'>, from: string, to: string): Promise<EggStoreAdjustment[]> {
+export async function listEggAdjustments(ctx: Pick<Ctx, 'db' | 'org'>, from: string, to: string): Promise<EggStoreAdjustment[]> {
   return (await ctx.db
     .prepare(
       `SELECT a.id, a.adj_date AS date, a.grade, a.quantity, a.reason, u.display_name AS recordedBy
-       FROM egg_store_adjustments a LEFT JOIN users u ON u.id = a.recorded_by WHERE a.adj_date BETWEEN ? AND ? ORDER BY a.adj_date DESC, a.id DESC`
+       FROM egg_store_adjustments a LEFT JOIN users u ON u.id = a.recorded_by
+       WHERE a.organization_id = ? AND a.adj_date BETWEEN ? AND ? ORDER BY a.adj_date DESC, a.id DESC`
     )
-    .all(from, to)) as EggStoreAdjustment[]
+    .all(ctx.org, from, to)) as EggStoreAdjustment[]
 }
 
-export async function outstandingTotal(ctx: Pick<Ctx, 'db'>): Promise<number> {
-  const r = (await ctx.db.prepare('SELECT COALESCE(SUM(amount - amount_paid), 0) AS o FROM egg_dispatches').get()) as { o: number }
+export async function outstandingTotal(ctx: Pick<Ctx, 'db' | 'org'>): Promise<number> {
+  const r = (await ctx.db.prepare('SELECT COALESCE(SUM(amount - amount_paid), 0) AS o FROM egg_dispatches WHERE organization_id = ?').get(ctx.org)) as { o: number }
   return round(r.o, 2)
 }
 
 /** Day-by-day egg store movement: collected in, dispatched out, money and closing stock. */
-export async function salesSeries(ctx: Pick<Ctx, 'db'>, from: string, to: string): Promise<SalesDay[]> {
+export async function salesSeries(ctx: Pick<Ctx, 'db' | 'org'>, from: string, to: string): Promise<SalesDay[]> {
   const coll = new Map(
     (
       (await ctx.db
         .prepare(
           `SELECT d.business_date AS date, SUM(e.good) AS good, SUM(e.damaged) AS cracked FROM egg_collections e
-           JOIN farm_days d ON d.id = e.day_id WHERE d.business_date BETWEEN ? AND ? GROUP BY d.business_date`
+           JOIN farm_days d ON d.id = e.day_id WHERE e.organization_id = ? AND d.business_date BETWEEN ? AND ? GROUP BY d.business_date`
         )
-        .all(from, to)) as { date: string; good: number; cracked: number }[]
+        .all(ctx.org, from, to)) as { date: string; good: number; cracked: number }[]
     ).map((r) => [r.date, r])
   )
   const disp = new Map(
@@ -193,16 +195,18 @@ export async function salesSeries(ctx: Pick<Ctx, 'db'>, from: string, to: string
       (await ctx.db
         .prepare(
           `SELECT dispatch_date AS date, SUM(good_qty) AS good, SUM(cracked_qty) AS cracked, SUM(amount) AS revenue
-           FROM egg_dispatches WHERE dispatch_date BETWEEN ? AND ? GROUP BY dispatch_date`
+           FROM egg_dispatches WHERE organization_id = ? AND dispatch_date BETWEEN ? AND ? GROUP BY dispatch_date`
         )
-        .all(from, to)) as { date: string; good: number; cracked: number; revenue: number }[]
+        .all(ctx.org, from, to)) as { date: string; good: number; cracked: number; revenue: number }[]
     ).map((r) => [r.date, r])
   )
   const paid = new Map(
     (
       (await ctx.db
-        .prepare('SELECT payment_date AS date, SUM(amount) AS amount FROM customer_payments WHERE payment_date BETWEEN ? AND ? GROUP BY payment_date')
-        .all(from, to)) as { date: string; amount: number }[]
+        .prepare(
+          'SELECT payment_date AS date, SUM(amount) AS amount FROM customer_payments WHERE organization_id = ? AND payment_date BETWEEN ? AND ? GROUP BY payment_date'
+        )
+        .all(ctx.org, from, to)) as { date: string; amount: number }[]
     ).map((r) => [r.date, r.amount])
   )
   const adj = new Map(
@@ -211,9 +215,9 @@ export async function salesSeries(ctx: Pick<Ctx, 'db'>, from: string, to: string
         .prepare(
           `SELECT adj_date AS date, SUM(CASE WHEN grade='good' THEN quantity ELSE 0 END) AS good,
              SUM(CASE WHEN grade='cracked' THEN quantity ELSE 0 END) AS cracked FROM egg_store_adjustments
-           WHERE adj_date BETWEEN ? AND ? GROUP BY adj_date`
+           WHERE organization_id = ? AND adj_date BETWEEN ? AND ? GROUP BY adj_date`
         )
-        .all(from, to)) as { date: string; good: number; cracked: number }[]
+        .all(ctx.org, from, to)) as { date: string; good: number; cracked: number }[]
     ).map((r) => [r.date, r])
   )
   const stock = await eggStock(ctx, addDays(from, -1))

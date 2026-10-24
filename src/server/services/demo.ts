@@ -1,5 +1,5 @@
 import { addDays, todayInTimezone } from '@shared/dates'
-import type { Ctx } from '../context'
+import type { AnonCtx, Ctx } from '../context'
 import type { DB } from '../db/connection'
 import { createUserRaw, login } from './auth'
 import { closeDay, confirmIssue, confirmMortality, getOverview, isBlocking, startDay } from './days'
@@ -12,14 +12,18 @@ import { saveParty } from './parties'
 import { createReceipt } from './purchases'
 import { addPayment, createDispatch, eggStock } from './sales'
 import { addHealthEvent, addTreatment } from './medicine'
-import { completeSetup } from './setup'
+import { createOrganization } from './setup'
 import { saveWater } from './water'
 
 /**
- * Demonstration data lives in a separate database file (demo.db), never in the farm
- * database, so resetting or deleting it cannot touch genuine records.
+ * Demonstration data lives in a separate database, never in the farm database, so resetting
+ * or deleting it cannot touch genuine records. (example.com is reserved for examples.)
  */
-export const DEMO_USERS = { admin: { username: 'demo', password: 'demo123' }, operator: { username: 'worker', password: 'worker123' } }
+export const DEMO_USERS = {
+  admin: { email: 'demo@example.com', password: 'demo123' },
+  operator: { email: 'worker@example.com', password: 'worker123' },
+  sales: { email: 'nimal@example.com', password: 'nimal123' }
+}
 
 function rng(seed: number) {
   return () => {
@@ -40,8 +44,8 @@ async function seedDemoData(db: DB, now: Date, days: number) {
   const tz = 'Asia/Colombo'
   const today = todayInTimezone(tz, now)
   const start = addDays(today, -days)
-  const base: Ctx = { db, user: null, now: () => now }
-  await completeSetup(base, {
+  const anon: AnonCtx = { db, now: () => now }
+  const created = await createOrganization(anon, {
     farmName: 'DEMO – Sample Poultry Farm',
     farmLocation: 'Demonstration only',
     timezone: tz,
@@ -53,7 +57,7 @@ async function seedDemoData(db: DB, now: Date, days: number) {
       initialHens: 1000,
       hasWaterMeter: true
     })),
-    admin: { username: DEMO_USERS.admin.username, displayName: 'Demo Manager', password: DEMO_USERS.admin.password },
+    admin: { email: DEMO_USERS.admin.email, displayName: 'Demo Manager', password: DEMO_USERS.admin.password },
     inventory: [
       { category: 'feed', name: 'Layer Mash', unit: 'kg', lowStockThreshold: 2000, openingBalance: 12000, batchNo: null, expiryDate: null },
       { category: 'feed', name: 'Grit / Shell', unit: 'kg', lowStockThreshold: 50, openingBalance: 300, batchNo: null, expiryDate: null },
@@ -62,13 +66,14 @@ async function seedDemoData(db: DB, now: Date, days: number) {
       { category: 'supply', name: 'Egg trays', unit: 'pcs', lowStockThreshold: 500, openingBalance: 3000, batchNo: null, expiryDate: null }
     ]
   })
-  const admin: Ctx = { db, user: await login(base, DEMO_USERS.admin.username, DEMO_USERS.admin.password), now: () => now }
-  await createUserRaw(admin, { username: DEMO_USERS.operator.username, displayName: 'Demo Worker', password: DEMO_USERS.operator.password, role: 'operator' })
-  const worker: Ctx = { db, user: await login(base, DEMO_USERS.operator.username, DEMO_USERS.operator.password), now: () => now }
+  const scope = { db, org: created.organizationId, farm: created.farmId, now: () => now }
+  const admin: Ctx = { ...scope, user: (await login(anon, DEMO_USERS.admin.email, DEMO_USERS.admin.password)).user }
+  await createUserRaw(admin, { email: DEMO_USERS.operator.email, displayName: 'Demo Worker', password: DEMO_USERS.operator.password, role: 'operator' })
+  const worker: Ctx = { ...scope, user: (await login(anon, DEMO_USERS.operator.email, DEMO_USERS.operator.password)).user }
 
   const rand = rng(20240601)
-  const cages = ((await db.prepare('SELECT id FROM cages ORDER BY sort_order').all()) as { id: number }[]).map((r) => r.id)
-  const items = (await db.prepare('SELECT id, name FROM inventory_items').all()) as { id: number; name: string }[]
+  const cages = ((await db.prepare('SELECT id FROM cages WHERE farm_id = ? ORDER BY sort_order').all(scope.farm)) as { id: number }[]).map((r) => r.id)
+  const items = (await db.prepare('SELECT id, name FROM inventory_items WHERE organization_id = ?').all(scope.org)) as { id: number; name: string }[]
   const mash = items.find((i) => i.name === 'Layer Mash')!.id
   const vit = items.find((i) => i.name === 'Multivitamin')!.id
   const elec = items.find((i) => i.name === 'Electrolyte')!.id
@@ -78,7 +83,7 @@ async function seedDemoData(db: DB, now: Date, days: number) {
 
   // Two data-entry workers sharing the cages, with different duties (see Admin portal → Users & duties).
   await setUserDuties(admin, worker.user!.id, ['start_day', 'eggs', 'feed', 'water', 'flock', 'medicine', 'reports'], cages.slice(0, 5))
-  const { id: salesId } = await createUserRaw(admin, { username: 'nimal', displayName: 'Nimal (stores & sales)', password: 'nimal123', role: 'operator' })
+  const { id: salesId } = await createUserRaw(admin, { email: DEMO_USERS.sales.email, displayName: 'Nimal (stores & sales)', password: DEMO_USERS.sales.password, role: 'operator' })
   await setUserDuties(admin, salesId, ['eggs', 'feed', 'water', 'flock', 'purchases', 'inventory', 'sales', 'backup'], cages.slice(5))
   const mill = await saveParty(admin, 'supplier', { id: null, name: 'Prima Feed Mill', phone: '037 222 3344', address: 'Kurunegala', notes: 'Layer mash, weekly', active: true })
   const vet = await saveParty(admin, 'supplier', { id: null, name: 'Lanka Vet Supplies', phone: '011 255 7788', address: 'Colombo', notes: null, active: true })

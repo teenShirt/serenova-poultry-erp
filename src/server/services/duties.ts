@@ -67,15 +67,15 @@ export function accessFromRow(row: { role: Role; duties: string | null; assigned
   return { role: row.role, duties, cages: parseList<number>(row.assigned_cages) }
 }
 
-export async function getAccess(ctx: Pick<Ctx, 'db'>, userId: number): Promise<Access | null> {
-  const row = (await ctx.db.prepare('SELECT role, duties, assigned_cages FROM users WHERE id = ?').get(userId)) as
+export async function getAccess(ctx: Pick<Ctx, 'db' | 'org'>, userId: number): Promise<Access | null> {
+  const row = (await ctx.db.prepare('SELECT role, duties, assigned_cages FROM users WHERE id = ? AND organization_id = ?').get(userId, ctx.org)) as
     | { role: Role; duties: string | null; assigned_cages: string | null }
     | undefined
   return row ? accessFromRow(row) : null
 }
 
 async function cageName(ctx: Ctx, id: number) {
-  return ((await ctx.db.prepare('SELECT name FROM cages WHERE id = ?').get(id)) as { name: string } | undefined)?.name ?? String(id)
+  return ((await ctx.db.prepare('SELECT name FROM cages WHERE id = ? AND organization_id = ?').get(id, ctx.org)) as { name: string } | undefined)?.name ?? String(id)
 }
 
 async function assertCage(ctx: Ctx, access: Access, cageId: unknown) {
@@ -101,7 +101,7 @@ export async function checkAccess(ctx: Ctx, method: ApiMethod, input: unknown) {
   if (method === 'medicine.addTreatment' && (i.cageId === null || i.cageId === undefined)) throw new AppError('cage_not_assigned', { cage: '—' })
   const table = DELETE_TABLES[method]
   if (table && typeof i.id === 'number') {
-    const row = (await ctx.db.prepare(`SELECT cage_id FROM ${table} WHERE id = ?`).get(i.id)) as { cage_id: number | null } | undefined
+    const row = (await ctx.db.prepare(`SELECT cage_id FROM ${table} WHERE id = ? AND organization_id = ?`).get(i.id, ctx.org)) as { cage_id: number | null } | undefined
     if (row) await assertCage(ctx, access, row.cage_id)
   }
 }
@@ -109,13 +109,13 @@ export async function checkAccess(ctx: Ctx, method: ApiMethod, input: unknown) {
 export async function setUserDuties(ctx: Ctx, id: number, duties: Duty[], cages: number[] | null) {
   requireAdmin(ctx)
   await ctx.db.transaction(async () => {
-    const row = (await ctx.db.prepare('SELECT username, role, duties, assigned_cages FROM users WHERE id = ?').get(id)) as
+    const row = (await ctx.db.prepare('SELECT username, role, duties, assigned_cages FROM users WHERE id = ? AND organization_id = ?').get(id, ctx.org)) as
       | { username: string; role: Role; duties: string | null; assigned_cages: string | null }
       | undefined
     assert(row, 'not_found')
     const clean = [...new Set(duties)].filter((d) => (DUTIES as readonly string[]).includes(d))
     if (cages !== null) {
-      for (const c of cages) assert(await ctx.db.prepare('SELECT 1 FROM cages WHERE id = ?').get(c), 'cage_not_found')
+      for (const c of cages) assert(await ctx.db.prepare('SELECT 1 AS x FROM cages WHERE id = ? AND organization_id = ?').get(c, ctx.org), 'cage_not_found')
     }
     const before = accessFromRow(row)
     await ctx.db

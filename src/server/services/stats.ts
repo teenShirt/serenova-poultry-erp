@@ -8,7 +8,7 @@ import {
   round
 } from '@shared/calc'
 import type { CageDaySummary, DayStatus, EggSession, FarmSettings, MovementTotals } from '@shared/types'
-import type { DB } from '../db/connection'
+import type { Ctx } from '../context'
 
 /**
  * One row per (day, cage) computed from the stored records. This is the single source
@@ -29,14 +29,15 @@ const movementKey: Record<string, keyof MovementTotals> = {
 }
 
 export async function loadCageDayStats(
-  db: DB,
+  ctx: Pick<Ctx, 'db' | 'org' | 'farm'>,
   settings: Pick<FarmSettings, 'productionDenominator' | 'mortalityDenominator'>,
   from: string,
   to: string,
   cageId?: number | null
 ): Promise<CageDayStat[]> {
   const cageFilter = cageId ? 'AND cd.cage_id = ?' : ''
-  const params = cageId ? [from, to, cageId] : [from, to]
+  const db = ctx.db
+  const params = cageId ? [ctx.org, ctx.farm, from, to, cageId] : [ctx.org, ctx.farm, from, to]
 
   const base = (await db
     .prepare(
@@ -46,7 +47,7 @@ export async function loadCageDayStats(
        FROM farm_days d
        JOIN cage_days cd ON cd.day_id = d.id
        JOIN cages c ON c.id = cd.cage_id
-       WHERE d.business_date BETWEEN ? AND ? ${cageFilter}
+       WHERE d.organization_id = ? AND d.farm_id = ? AND d.business_date BETWEEN ? AND ? ${cageFilter}
        ORDER BY d.business_date, c.sort_order, c.code`
     )
     .all(...params)) as {
@@ -64,7 +65,7 @@ export async function loadCageDayStats(
   if (base.length === 0) return []
 
   const key = (dayId: number, cageId: number) => `${dayId}:${cageId}`
-  const rangeJoin = `JOIN farm_days d ON d.id = x.day_id WHERE d.business_date BETWEEN ? AND ? ${
+  const rangeJoin = `JOIN farm_days d ON d.id = x.day_id WHERE d.organization_id = ? AND d.farm_id = ? AND d.business_date BETWEEN ? AND ? ${
     cageId ? 'AND x.cage_id = ?' : ''
   }`
 

@@ -2,9 +2,9 @@ import fs from 'node:fs'
 import { timingSafeEqual } from 'node:crypto'
 import type { Api, ApiMethod, ApiResponse, ReportSpec } from '@shared/api'
 import { API_KIND } from '@shared/api'
-import { addDays } from '@shared/dates'
+import { addDays, todayInTimezone } from '@shared/dates'
 import type { AppStatus, SessionUser } from '@shared/types'
-import { requireAdmin, requireUser, type Ctx } from './context'
+import { requireAdmin, requireUser, type AnonCtx, type Ctx } from './context'
 import type { ServerConfig } from './config'
 import type { Databases, Mode } from './databases'
 import { AppError } from './errors'
@@ -21,10 +21,10 @@ import * as water from './services/water'
 import * as medicine from './services/medicine'
 import * as inventory from './services/inventory'
 import * as analytics from './services/analytics'
-import { getSettings, saveSettings } from './services/settings'
-import { completeSetup } from './services/setup'
+import { DEFAULT_SETTINGS, getSettings, saveSettings } from './services/settings'
+import { completeSetup, platformHasOrganizations } from './services/setup'
 import { DEMO_USERS } from './services/demo'
-import { createBackup, lastBackup, listBackupRuns, restoreData } from './services/backup'
+import { createBackup, lastBackup, listBackupRuns, restoreOrganization } from './services/backup'
 import { dayReport, periodReport, type ReportModel } from './reports/model'
 import { renderHtml } from './reports/render'
 import { accessFromRow, checkAccess, dutyTasks, setUserDuties } from './services/duties'
@@ -37,11 +37,23 @@ import type { RestoreTokens } from './uploads'
 
 export const APP_VERSION = '2.0.0'
 
-/** Everything a handler may need besides its input: the request's database session and its browser session. */
+/**
+ * What a signed-in request runs with: its organization and farm (from the session, never from the
+ * input), its database session, and the browser session it may change.
+ */
 export interface RequestCtx extends Ctx {
   mode: Mode
   /** Changes to the browser session, applied by the HTTP layer once the request has succeeded. */
   session: SessionChange
+}
+
+/** What a request runs with before anyone has signed in: no organization yet. */
+export interface PublicCtx extends AnonCtx {
+  mode: Mode
+  session: SessionChange
+  user: SessionUser | null
+  org: number | null
+  farm: number | null
 }
 
 export interface ApiDeps {
@@ -50,11 +62,13 @@ export interface ApiDeps {
   restoreTokens: RestoreTokens
 }
 
-type Handler<M extends ApiMethod> = (input: Api[M]['in'], ctx: RequestCtx) => Promise<Api[M]['out']> | Api[M]['out']
-type Handlers = { [M in ApiMethod]: Handler<M> }
+/** Methods callable before signing in. Everything else requires a signed-in user of an organization. */
+const PUBLIC_METHODS = ['app.status', 'app.setLanguage', 'auth.signup', 'auth.resetWithCode', 'setup.complete', 'demo.enter', 'demo.exit', 'demo.reset', 'auth.login'] as const
+type PublicMethod = (typeof PUBLIC_METHODS)[number]
+const PUBLIC = new Set<ApiMethod>(PUBLIC_METHODS)
 
-/** Methods callable before signing in. Everything else requires a signed-in user. */
-const PUBLIC = new Set<ApiMethod>(['app.status', 'app.setLanguage', 'auth.signup', 'auth.resetWithCode', 'setup.complete', 'demo.enter', 'demo.exit', 'demo.reset', 'auth.login'])
+type Handler<M extends ApiMethod> = (input: Api[M]['in'], ctx: M extends PublicMethod ? PublicCtx : RequestCtx) => Promise<Api[M]['out']> | Api[M]['out']
+type Handlers = { [M in ApiMethod]: Handler<M> }
 
 function validatePeriod(from: string, to: string) {
   if (from > to || from < addDays(to, -400)) throw new AppError('invalid_date')
@@ -75,8 +89,8 @@ export async function recordReport(ctx: Ctx, spec: ReportSpec, format: 'pdf' | '
   const from = spec.kind === 'period' ? spec.from : spec.date
   const to = spec.kind === 'period' ? spec.to : spec.date
   await ctx.db
-    .prepare('INSERT INTO report_runs (kind, period_start, period_end, format, file_path, generated_by, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(spec.kind, from, to, format, fileName, ctx.user?.id ?? null, ctx.now().toISOString())
+    .prepare('INSERT INTO report_runs (organization_id, kind, period_start, period_end, format, file_path, generated_by, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(ctx.org, spec.kind, from, to, format, fileName, ctx.user?.id ?? null, ctx.now().toISOString())
 }
 
 function sameSecret(a: string, b: string) {
@@ -85,26 +99,57 @@ function sameSecret(a: string, b: string) {
   return x.length === y.length && timingSafeEqual(x, y)
 }
 
-/** Loads the signed-in user afresh on every request, so a disabled account or changed role takes effect at once. */
-export async function loadSessionUser(ctx: Pick<Ctx, 'db'>, userId: number | null): Promise<SessionUser | null> {
-  if (!userId) return null
+/**
+ * Loads the signed-in user afresh on every request, so a disabled account, a changed role or a
+ * suspended organization takes effect at once. The user must belong to the session's organization.
+ */
+export async function loadSessionUser(ctx: Pick<Ctx, 'db'>, userId: number | null, orgId: number | null): Promise<SessionUser | null> {
+  if (!userId || !orgId) return null
   const row = (await ctx.db
-    .prepare('SELECT id, username, display_name, role, active, pending, duties, assigned_cages FROM users WHERE id = ?')
-    .get(userId)) as
-    | { id: number; username: string; display_name: string; role: 'admin' | 'operator'; active: number; pending: number; duties: string | null; assigned_cages: string | null }
+    .prepare(
+      `SELECT u.id, u.username, u.email, u.display_name, u.role, u.active, u.pending, u.duties, u.assigned_cages, o.status AS org_status
+       FROM users u JOIN organizations o ON o.id = u.organization_id WHERE u.id = ? AND u.organization_id = ?`
+    )
+    .get(userId, orgId)) as
+    | {
+        id: number
+        username: string
+        email: string | null
+        display_name: string
+        role: 'admin' | 'operator'
+        active: number
+        pending: number
+        duties: string | null
+        assigned_cages: string | null
+        org_status: string
+      }
     | undefined
-  if (!row || !row.active || row.pending) return null
+  if (!row || !row.active || row.pending || !row.email || row.org_status !== 'active') return null
   const access = accessFromRow(row)
-  return { id: row.id, username: row.username, displayName: row.display_name, role: row.role, duties: access.duties, cages: access.cages }
+  return { id: row.id, username: row.username, email: row.email, displayName: row.display_name, role: row.role, duties: access.duties, cages: access.cages }
+}
+
+/** The farm a session works on: the one it chose, if it is still an active farm of the organization, else the first one. */
+export async function sessionFarm(ctx: Pick<Ctx, 'db'>, orgId: number, farmId: number | null): Promise<number> {
+  if (farmId) {
+    const ok = await ctx.db.prepare("SELECT 1 AS x FROM farms WHERE id = ? AND organization_id = ? AND status = 'active'").get(farmId, orgId)
+    if (ok) return farmId
+  }
+  return auth.defaultFarm(ctx, orgId)
 }
 
 export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
-  const status = async (ctx: RequestCtx): Promise<AppStatus> => {
-    const settings = await getSettings(ctx)
-    const lastAuto = ctx.mode === 'farm' ? await lastBackup(ctx.db, 'auto') : undefined
-    const demoExists = dbs.demoAvailable ? await dbs.with('demo', async (db) => (await auth.countUsers({ db })) > 0) : false
+  const status = async (ctx: PublicCtx | RequestCtx): Promise<AppStatus> => {
+    const scoped = ctx.org !== null && ctx.farm !== null && ctx.user ? (ctx as RequestCtx) : null
+    const settings = scoped ? await getSettings(scoped) : { ...DEFAULT_SETTINGS }
+    const lastAuto = scoped && ctx.mode === 'farm' ? await lastBackup(ctx.db, scoped.org, 'auto') : undefined
+    const demoExists = dbs.demoAvailable ? await dbs.with('demo', (db) => platformHasOrganizations({ db })) : false
+    const org = scoped ? ((await ctx.db.prepare('SELECT code, name FROM organizations WHERE id = ?').get(scoped.org)) as { code: string; name: string }) : null
+    const farm = scoped ? ((await ctx.db.prepare('SELECT id, name FROM farms WHERE id = ?').get(scoped.farm)) as { id: number; name: string }) : null
     return {
-      setupComplete: (await auth.countUsers(ctx)) > 0,
+      setupComplete: await platformHasOrganizations(ctx),
+      organization: org,
+      farm,
       setupKeyRequired: !!cfg.setupKey,
       isDemo: ctx.mode === 'demo',
       demoAvailable: dbs.demoAvailable,
@@ -113,18 +158,22 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
       settings,
       version: APP_VERSION,
       dataDir: dbs.location(ctx.mode),
-      today: await days.farmToday(ctx),
+      today: scoped ? await days.farmToday(scoped) : todayInTimezone(DEFAULT_SETTINGS.timezone, ctx.now()),
       backupWarning: lastAuto && lastAuto.status === 'failed' ? lastAuto.message : null,
-      pendingSignups: ctx.user?.role === 'admin' ? await auth.countPendingSignups(ctx) : 0
+      pendingSignups: scoped && scoped.user?.role === 'admin' ? await auth.countPendingSignups(scoped) : 0
     }
   }
 
   return {
     'app.status': (_, ctx) => status(ctx),
     'app.setLanguage': async ({ language }, ctx) => {
-      // The language is a farm-wide setting: only a signed-in user may change it (or anyone during first-run setup).
-      if (!ctx.user && (await auth.countUsers(ctx)) > 0) throw new AppError('not_logged_in')
-      await saveSettings(ctx, { language })
+      // The language is an organization setting: only its signed-in users may change it. Before
+      // signing in (and during first-run setup) the browser remembers the choice itself.
+      if (!ctx.user || ctx.org === null || ctx.farm === null) {
+        if (await platformHasOrganizations(ctx)) throw new AppError('not_logged_in')
+        return
+      }
+      await saveSettings({ ...ctx, org: ctx.org, farm: ctx.farm }, { language })
     },
     'setup.complete': async ({ setupKey, ...input }, ctx) => {
       if (ctx.mode === 'demo') throw new AppError('not_in_demo')
@@ -134,15 +183,19 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     'demo.enter': async (_, ctx) => {
       if (ctx.user) throw new AppError('demo_only_in_setup')
       if (!dbs.demoAvailable) throw new AppError('demo_unavailable')
-      const empty = await dbs.with('demo', async (db) => (await auth.countUsers({ db })) === 0)
+      const empty = !(await dbs.with('demo', (db) => platformHasOrganizations({ db })))
       if (empty) await dbs.resetDemo()
       ctx.session.mode = 'demo'
       ctx.session.userId = null
-      return { username: DEMO_USERS.admin.username, password: DEMO_USERS.admin.password }
+      ctx.session.orgId = null
+      ctx.session.farmId = null
+      return { email: DEMO_USERS.admin.email, password: DEMO_USERS.admin.password }
     },
     'demo.exit': (_, ctx) => {
       ctx.session.mode = 'farm'
       ctx.session.userId = null
+      ctx.session.orgId = null
+      ctx.session.farmId = null
       ctx.session.rotate = true
     },
     'demo.reset': async (_, ctx) => {
@@ -150,22 +203,28 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
       if (ctx.mode !== 'demo') throw new AppError('not_in_demo')
       await dbs.resetDemo()
       ctx.session.userId = null
+      ctx.session.orgId = null
+      ctx.session.farmId = null
     },
 
-    'auth.login': async ({ username, password }, ctx) => {
-      const user = await auth.login(ctx, username, password)
-      ctx.session.userId = user.id
+    'auth.login': async ({ email, password }, ctx) => {
+      const signedIn = await auth.login(ctx, email, password)
+      ctx.session.userId = signedIn.user.id
+      ctx.session.orgId = signedIn.org
+      ctx.session.farmId = signedIn.farm
       ctx.session.rotate = true
-      return user
+      return signedIn.user
     },
     'auth.logout': async (_, ctx) => {
       await audit(ctx, { action: 'logout', entity: 'user', entityId: ctx.user?.id })
       ctx.session.userId = null
+      ctx.session.orgId = null
+      ctx.session.farmId = null
       ctx.session.rotate = true
     },
     'auth.changePassword': ({ current, next }, ctx) => auth.changeOwnPassword(ctx, current, next),
     'auth.signup': (u, ctx) => auth.signup(ctx, u),
-    'auth.resetWithCode': ({ username, recoveryCode, newPassword }, ctx) => auth.resetWithRecoveryCode(ctx, username, recoveryCode, newPassword),
+    'auth.resetWithCode': ({ email, recoveryCode, newPassword }, ctx) => auth.resetWithRecoveryCode(ctx, email, recoveryCode, newPassword),
     'auth.newRecoveryCode': ({ password }, ctx) => auth.newOwnRecoveryCode(ctx, password),
     'users.list': (_, ctx) => auth.listUsers(ctx),
     'users.create': (u, ctx) => auth.createUser(ctx, u),
@@ -306,11 +365,11 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     },
     'admin.activity': ({ from, to }, ctx) => adminSvc.activitySummary(ctx, from, to),
 
-    'backup.list': (_, ctx) => listBackupRuns(ctx.db),
+    'backup.list': (_, ctx) => listBackupRuns(ctx.db, ctx.org),
     'backup.create': async (_, ctx) => {
       if (ctx.mode === 'demo') throw new AppError('demo_mode_blocked')
       requireUser(ctx)
-      const info = await createBackup(ctx.db, cfg.backupDir, 'manual')
+      const info = await createBackup(ctx.db, cfg.backupDir, 'manual', { orgId: ctx.org })
       await audit(ctx, { action: 'backup', entity: 'backup', details: { path: info.path, status: info.status, message: info.message } })
       if (info.status === 'failed') throw new AppError('backup_failed', { message: info.message ?? '' })
       return info
@@ -321,18 +380,25 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
       const upload = restoreTokens.take(token, ctx.user!.id)
       if (!upload?.data) throw new AppError('file_not_allowed')
       try {
+        // Only this organization's own backups, and only over this organization's data.
+        const org = (await ctx.db.prepare('SELECT code FROM organizations WHERE id = ?').get(ctx.org)) as { code: string }
+        const src = upload.data.tables['organizations']
+        const code = src ? src.rows[0]?.[src.columns.indexOf('code')] : undefined
+        if (upload.data.scope !== 'organization' || code !== org.code) throw new AppError('not_this_organization_backup')
         // Safety copy of the current data first.
-        const safety = await createBackup(ctx.db, cfg.backupDir, 'pre_restore')
+        const safety = await createBackup(ctx.db, cfg.backupDir, 'pre_restore', { orgId: ctx.org })
         if (safety.status !== 'ok') throw new AppError('backup_failed', { message: safety.message ?? '' })
         await audit(ctx, { action: 'restore', entity: 'backup', details: { from: upload.name, safetyBackup: safety.path } })
         try {
-          await restoreData(ctx.db, upload.data)
+          await restoreOrganization(ctx.db, ctx.org, upload.data)
         } catch (e) {
           throw new AppError('restore_failed', { message: (e as Error).message })
         }
         // The restored data has its own users, so whoever restored it is signed out (as is everyone else).
         await audit({ ...ctx, user: null }, { action: 'restored_from_backup', entity: 'backup', details: { from: upload.name, safetyBackup: safety.path } })
         ctx.session.userId = null
+        ctx.session.orgId = null
+        ctx.session.farmId = null
         ctx.session.rotate = true
       } finally {
         fs.rmSync(upload.file, { force: true })
@@ -345,7 +411,7 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
  * Runs one API request: validates the input against its schema, checks sign-in and duties,
  * and runs the handler. Data-changing requests run one at a time per database.
  */
-export async function dispatch(handlers: Handlers, method: string, input: unknown, ctx: RequestCtx): Promise<ApiResponse<unknown>> {
+export async function dispatch(handlers: Handlers, method: string, input: unknown, ctx: PublicCtx): Promise<ApiResponse<unknown>> {
   if (!Object.prototype.hasOwnProperty.call(handlers, method)) return { ok: false, code: 'unknown_method', params: {} }
   const m = method as ApiMethod
   const parsed = schemas[m].safeParse(input)
@@ -355,11 +421,13 @@ export async function dispatch(handlers: Handlers, method: string, input: unknow
   }
   try {
     const run = async () => {
-      if (!PUBLIC.has(m)) {
-        requireUser(ctx)
-        await checkAccess(ctx, m, parsed.data)
-      }
-      return (handlers[m] as Handler<ApiMethod>)(parsed.data as never, ctx)
+      if (PUBLIC.has(m)) return (handlers[m] as (i: never, c: PublicCtx) => unknown)(parsed.data as never, ctx)
+      // Everything else runs inside the signed-in user's organization and farm.
+      requireUser(ctx)
+      if (ctx.org === null || ctx.farm === null) throw new AppError('not_logged_in')
+      const scoped: RequestCtx = { ...ctx, org: ctx.org, farm: ctx.farm }
+      await checkAccess(scoped, m, parsed.data)
+      return (handlers[m] as (i: never, c: RequestCtx) => unknown)(parsed.data as never, scoped)
     }
     const data = API_KIND[m] === 'write' ? await ctx.db.withWriteLock(run) : await run()
     return { ok: true, data }

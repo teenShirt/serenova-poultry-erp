@@ -104,6 +104,14 @@ function FarmTab() {
         <dl className="kv">
           <dt>{t('app.name')}</dt>
           <dd>{t('app.version', { version: status.version })}</dd>
+          {status.organization && (
+            <>
+              <dt>{t('set.orgCode')}</dt>
+              <dd>
+                <strong>{status.organization.code}</strong> <span className="muted small">{t('set.orgCodeHint')}</span>
+              </dd>
+            </>
+          )}
           <dt>{t('set.dataFolder')}</dt>
           <dd className="small">{status.dataDir}</dd>
         </dl>
@@ -228,7 +236,7 @@ export function UsersTab() {
                 {pending.map((u) => (
                   <tr key={u.id}>
                     <td>
-                      <strong>{u.displayName}</strong> <span className="muted">({u.username})</span>
+                      <strong>{u.displayName}</strong> <span className="muted">({u.email ?? u.username})</span>
                     </td>
                     <td className="nowrap">{dateTime(u.createdAt)}</td>
                     <td className="nowrap">
@@ -267,7 +275,7 @@ export function UsersTab() {
             <thead>
               <tr>
                 <th>{t('setup.displayName')}</th>
-                <th>{t('auth.username')}</th>
+                <th>{t('auth.email')}</th>
                 <th>{t('common.type')}</th>
                 <th>{t('common.status')}</th>
                 <th>{t('duty.title')}</th>
@@ -281,7 +289,7 @@ export function UsersTab() {
                   <td>
                     <strong>{u.displayName}</strong>
                   </td>
-                  <td>{u.username}</td>
+                  <td>{u.email ?? <span className="badge bad">{t('set.noEmail')}</span>}</td>
                   <td>{t('auth.role.' + u.role)}</td>
                   <td>{u.active ? <span className="badge good">{t('common.active')}</span> : <span className="badge">{t('common.inactive')}</span>}</td>
                   <td className="small">{dutySummary(u)}</td>
@@ -344,14 +352,14 @@ export function UsersTab() {
 function UserForm({ user, onClose, onCode }: { user: UserRow | null; onClose: () => void; onCode: (code: string, name: string) => void }) {
   const { t, toast, fail } = useApp()
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
-  const [username, setUsername] = useState(user?.username ?? '')
+  const [email, setEmail] = useState(user?.email ?? '')
   const [role, setRole] = useState<Role>(user?.role ?? 'operator')
   const [active, setActive] = useState(user?.active ?? true)
   const [password, setPassword] = useState('')
-  const ok = user ? displayName.trim().length > 0 : username.trim().length >= 3 && password.length >= 6
+  const ok = email.includes('@') && (user ? displayName.trim().length > 0 : password.length >= 6)
   return (
     <Modal
-      title={user ? `${t('common.edit')} — ${user.username}` : t('set.addUser')}
+      title={user ? `${t('common.edit')} — ${user.displayName}` : t('set.addUser')}
       onClose={onClose}
       footer={
         <>
@@ -363,11 +371,11 @@ function UserForm({ user, onClose, onCode }: { user: UserRow | null; onClose: ()
             disabled={!ok}
             onClick={async () => {
               try {
-                if (user) await call('users.update', { id: user.id, displayName, role, active })
+                if (user) await call('users.update', { id: user.id, email: email.trim(), displayName, role, active })
                 else {
-                  const r = await call('users.create', { username: username.trim(), displayName: displayName.trim(), password, role })
+                  const r = await call('users.create', { email: email.trim(), displayName: displayName.trim(), password, role })
                   // The new user's recovery code is shown once so the administrator can hand it over.
-                  onCode(r.recoveryCode, displayName.trim() || username.trim())
+                  onCode(r.recoveryCode, displayName.trim() || email.trim())
                 }
                 toast('success', t('common.saved'))
                 onClose()
@@ -385,8 +393,8 @@ function UserForm({ user, onClose, onCode }: { user: UserRow | null; onClose: ()
         <Field label={t('setup.displayName')}>
           <input className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
         </Field>
-        <Field label={t('auth.username')} hint={user ? undefined : t('err.invalid_username')}>
-          <input className="input" value={username} disabled={!!user} onChange={(e) => setUsername(e.target.value)} />
+        <Field label={t('auth.email')}>
+          <input className="input" type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field label={t('common.type')}>
           <select className="select" value={role} onChange={(e) => setRole(e.target.value as Role)}>
@@ -415,7 +423,7 @@ function ResetPassword({ user, onClose }: { user: UserRow; onClose: () => void }
   const [pw, setPw] = useState('')
   return (
     <Modal
-      title={`${t('set.resetPassword')} — ${user.username}`}
+      title={`${t('set.resetPassword')} — ${user.email ?? user.displayName}`}
       onClose={onClose}
       footer={
         <>

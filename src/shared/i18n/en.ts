@@ -535,6 +535,7 @@ export const en = {
   'bak.kind.manual': 'Manual',
   'bak.kind.auto': 'Automatic',
   'bak.kind.pre_restore': 'Before restore',
+  'bak.kind.pre_migration': 'Before an upgrade',
   'bak.adminOnly': 'Only administrators can restore backups.',
   'bak.size': 'Size',
 
@@ -867,7 +868,7 @@ export const en = {
   'rep.pdfHint': 'To save a PDF file, choose “Save as PDF” as the printer in the print window.',
   'bak.download': 'Download',
   'bak.checking': 'Checking the backup file…',
-  'bak.desktopNote': 'Backups made by the desktop edition of Poultry Farm Manager (.pfmbackup) can be restored here too.',
+  'bak.desktopNote': 'Backups made by the desktop edition of Poultry Farm Manager are moved in with the import command; see the README.',
   'setup.setupKey': 'Setup key',
   'setup.setupKeyHint': 'Given to you by the person who installed the server (SETUP_KEY).',
   'table.app_settings': 'Farm settings',
@@ -878,6 +879,21 @@ export const en = {
   'err.server_unreachable': 'Cannot reach the server. Check the network connection and try again.',
   'err.file_too_large': 'The file is too large (limit {mb} MB).',
   'err.forbidden': 'This request was refused.',
+  'err.not_this_organization_backup': 'This backup belongs to another organization and cannot be restored here.',
+  'err.no_farm': 'This organization has no active farm.',
+  'err.organization_suspended': "This organization's account is suspended. Please contact Serenova Tech.",
+  'err.invalid_email': 'Enter a valid email address.',
+  'err.email_taken': 'That email address is already used by another account.',
+  'err.organization_not_found': 'No organization has that code. Check it with your administrator.',
+  'table.organizations': 'Organizations',
+  'table.farms': 'Farms and locations',
+  'auth.email': 'Email address',
+  'auth.orgCode': 'Organization code',
+  'auth.orgCodeHint': 'Ask your farm administrator for this code.',
+  'set.orgCode': 'Organization code',
+  'set.orgCodeHint': 'Staff enter this code when they sign themselves up.',
+  'set.noEmail': 'No email address: cannot sign in',
+  'bak.desktopImport': 'Backups from the desktop edition are moved in with the import command (npm run import-sqlite), which also gives each account an email address.',
 } as const
 
 export type TranslationKey = keyof typeof en

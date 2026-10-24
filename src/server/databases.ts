@@ -2,6 +2,7 @@ import mysql from 'mysql2/promise'
 import type { Pool } from 'mysql2/promise'
 import type { ServerConfig } from './config'
 import { createPool, DB, withDb } from './db/connection'
+import { createBackup } from './services/backup'
 import { migrate } from './db/migrations'
 import { seedDemo } from './services/demo'
 
@@ -33,7 +34,13 @@ export class Databases {
     const farmPool = createPool(cfg.db)
     const demoPool = demoOk && cfg.demoDatabase ? createPool({ ...cfg.db, database: cfg.demoDatabase, connectionLimit: 3 }) : null
     const dbs = new Databases(cfg, farmPool, demoPool)
-    await dbs.with('farm', (db) => migrate(db))
+    // Before an existing database is changed, a full backup of it is written to the backup folder.
+    const safetyBackup = (db: DB) => async (from: number) => {
+      const b = await createBackup(db, cfg.backupDir, 'pre_migration', { orgId: null, log: false })
+      if (b.status !== 'ok') throw new Error(`Could not back up the database before upgrading it (schema v${from}): ${b.message}`)
+      console.log(`Backed up ${db.name} (schema v${from}) before upgrading it: ${b.path}`)
+    }
+    await dbs.with('farm', (db) => migrate(db, { beforeChanges: safetyBackup(db) }))
     if (demoPool) await dbs.with('demo', (db) => migrate(db))
     return dbs
   }

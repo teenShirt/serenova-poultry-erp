@@ -15,16 +15,16 @@ export async function listMovements(ctx: Ctx, date: string, cageId?: number): Pr
   const day = await getDay(ctx, date)
   if (!day) return []
   return (await ctx.db
-    .prepare(`${select} WHERE m.day_id = ? ${cageId ? 'AND m.cage_id = ?' : ''} ORDER BY m.id`)
-    .all(...(cageId ? [day.id, cageId] : [day.id]))) as FlockMovement[]
+    .prepare(`${select} WHERE m.organization_id = ? AND m.day_id = ? ${cageId ? 'AND m.cage_id = ?' : ''} ORDER BY m.id`)
+    .all(...(cageId ? [ctx.org, day.id, cageId] : [ctx.org, day.id]))) as FlockMovement[]
 }
 
 export async function listMovementsRange(ctx: Ctx, from: string, to: string, cageId?: number | null): Promise<FlockMovement[]> {
   return (await ctx.db
     .prepare(
-      `${select} WHERE d.business_date BETWEEN ? AND ? ${cageId ? 'AND m.cage_id = ?' : ''} ORDER BY d.business_date DESC, m.id DESC`
+      `${select} WHERE m.organization_id = ? AND d.farm_id = ? AND d.business_date BETWEEN ? AND ? ${cageId ? 'AND m.cage_id = ?' : ''} ORDER BY d.business_date DESC, m.id DESC`
     )
-    .all(...(cageId ? [from, to, cageId] : [from, to]))) as FlockMovement[]
+    .all(...(cageId ? [ctx.org, ctx.farm, from, to, cageId] : [ctx.org, ctx.farm, from, to]))) as FlockMovement[]
 }
 
 export interface MovementInput {
@@ -48,10 +48,10 @@ export async function addMovement(ctx: Ctx, m: MovementInput): Promise<number> {
     await requireCageDay(ctx, day, m.cageId)
     const info = await ctx.db
       .prepare(
-        `INSERT INTO flock_movements (day_id, cage_id, type, quantity, reason, notes, recorded_by, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO flock_movements (organization_id, day_id, cage_id, type, quantity, reason, notes, recorded_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(day.id, m.cageId, m.type, m.quantity, m.reason?.trim() || null, m.notes, user.id, ctx.now().toISOString())
+      .run(ctx.org, day.id, m.cageId, m.type, m.quantity, m.reason?.trim() || null, m.notes, user.id, ctx.now().toISOString())
     await assertCageDayValid(ctx, day.id, m.cageId, m.date)
     await recalcFrom(ctx, m.date)
     const id = Number(info.lastInsertRowid)
@@ -77,12 +77,12 @@ export async function transferHens(
     await requireCageDay(ctx, day, t.toCageId)
     const ref = randomUUID()
     const ins = ctx.db.prepare(
-      `INSERT INTO flock_movements (day_id, cage_id, type, quantity, reason, notes, transfer_ref, counterpart_cage_id,
-         recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO flock_movements (organization_id, day_id, cage_id, type, quantity, reason, notes, transfer_ref, counterpart_cage_id,
+         recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     const now = ctx.now().toISOString()
-    await ins.run(day.id, t.fromCageId, 'transfer_out', t.quantity, t.reason, t.notes, ref, t.toCageId, user.id, now)
-    await ins.run(day.id, t.toCageId, 'transfer_in', t.quantity, t.reason, t.notes, ref, t.fromCageId, user.id, now)
+    await ins.run(ctx.org, day.id, t.fromCageId, 'transfer_out', t.quantity, t.reason, t.notes, ref, t.toCageId, user.id, now)
+    await ins.run(ctx.org, day.id, t.toCageId, 'transfer_in', t.quantity, t.reason, t.notes, ref, t.fromCageId, user.id, now)
     await assertCageDayValid(ctx, day.id, t.fromCageId, t.date)
     await recalcFrom(ctx, t.date)
     await audit(ctx, { action: 'transfer', entity: 'flock_movement', dayId: day.id, reason: t.reason, details: { ...t, ref } })
@@ -96,14 +96,14 @@ export async function deleteMovement(ctx: Ctx, id: number, reason: string) {
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const row = (await ctx.db
-      .prepare('SELECT m.*, d.business_date FROM flock_movements m JOIN farm_days d ON d.id = m.day_id WHERE m.id = ?')
-      .get(id)) as
+      .prepare('SELECT m.*, d.business_date FROM flock_movements m JOIN farm_days d ON d.id = m.day_id WHERE m.id = ? AND m.organization_id = ? AND d.farm_id = ?')
+      .get(id, ctx.org, ctx.farm)) as
       | { id: number; day_id: number; cage_id: number; transfer_ref: string | null; business_date: string }
       | undefined
     assert(row, 'not_found')
     await requireWritableDay(ctx, row.business_date)
     const rows = row.transfer_ref
-      ? ((await ctx.db.prepare('SELECT * FROM flock_movements WHERE transfer_ref = ?').all(row.transfer_ref)) as typeof row[])
+      ? ((await ctx.db.prepare('SELECT * FROM flock_movements WHERE organization_id = ? AND transfer_ref = ?').all(ctx.org, row.transfer_ref)) as typeof row[])
       : [row]
     for (const r of rows) await ctx.db.prepare('DELETE FROM flock_movements WHERE id = ?').run(r.id)
     for (const r of rows) await assertCageDayValid(ctx, r.day_id, r.cage_id, row.business_date)

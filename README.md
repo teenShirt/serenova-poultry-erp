@@ -27,33 +27,49 @@ English and Sinhala languages, daily workflow, calculations and checks are the s
    npm run build
    npm start
    ```
-5. Open http://localhost:3000 and complete the first-run setup, as in the desktop edition.
+5. Open http://localhost:3000 and complete the first-run setup. It creates the first **organization** (your farm business), its first farm and its administrator, who signs in with an email address.
 
 For development, run `npm run dev`. It starts the API server (with reload) and the Vite dev server on http://localhost:5173.
 
-## Moving data from the desktop edition
+## Organizations, farms and sign-in
 
-Either of these replaces all records in the MySQL farm database. A safety backup of the current data is made first.
+The platform hosts many customer **organizations**. Each has its own farms, users, settings and records, and can never
+see or change another organization's data: every record carries its organization, every query is limited to the
+signed-in user's organization, and MySQL itself rejects a record that points at another organization's data
+(composite foreign keys). `tests/tenancy.test.ts` attacks every API method across organizations.
 
-- **In the browser:** sign in as an administrator, go to **Backup & restore → Upload backup file…**, and choose a
-  `.pfmbackup` file made by the desktop edition.
-- **From the command line**, with the desktop program closed:
-  ```sh
-  npm run import-sqlite -- "C:\Users\<you>\AppData\Roaming\Poultry Farm Manager\data\farm.db"
-  ```
+- Everyone signs in with an **email address**, unique on the whole platform.
+- Staff can sign themselves up with their organization's code (shown under *Settings*); an administrator approves them.
+- The day cycle, cages and hen counts belong to a **farm**; stock, suppliers, customers and the egg store belong to the organization.
+- Additional organizations are added by the platform owner (a Super Admin console comes in a later phase).
 
-Users, passwords, recovery codes and the full history move over unchanged. The MySQL schema keeps the same tables and
-columns as the desktop schema (migrations 1–3), so desktop backups map onto it column for column.
+## Moving a farm from the desktop edition
+
+With the desktop program closed, import its database (or one of its `.pfmbackup` files) as an organization:
+
+```sh
+npm run import-sqlite -- "C:\Users\<you>\AppData\Roaming\Poultry Farm Manager\data\farm.db" --email admin=owner@farm.lk --email worker=staff@farm.lk
+```
+
+- Without `--org`, a new organization is created for the farm. With `--org <code>`, that organization's records are
+  replaced (after a safety backup).
+- Desktop accounts signed in with a username; give each one an email address with `--email username=address`
+  (or type them when asked). Passwords, recovery codes and the full history move over unchanged.
+- The import is one transaction: if anything fails, nothing is changed.
+
+**Cut-over checklist (Madawala Farm):** stop entering data in the desktop program → copy its `farm.db` → import it into a
+*staging* database first and compare day count, hen counts, stock balances and egg totals with the desktop screens →
+import into production → staff sign in with their email addresses. Keep the desktop data file untouched as a fallback.
 
 ## What changed from the desktop edition
 
 | Desktop | Web |
 |---|---|
-| One user signed in on one PC | Many users at once, each with their own session (an HttpOnly, SameSite cookie). Sessions are stored hashed in MySQL and expire after `SESSION_IDLE_HOURS` without activity. A disabled account or a changed role takes effect on the next request. |
+| One farm, one user signed in on one PC | Many organizations and users at once, each with their own session (an HttpOnly, SameSite cookie). Sessions are stored hashed in MySQL and expire after `SESSION_IDLE_HOURS` without activity. A disabled account or a changed role takes effect on the next request. |
 | SQLite file, one writer at a time | MySQL. Data-changing requests are serialized with a MySQL named lock, so checks such as "stock never goes negative" and "hens never go negative" cannot race. |
 | Print and Save PDF through Windows | **Print** and **PDF** use the browser's print dialog (choose "Save as PDF"). **Excel** downloads directly. Reports are listed under *Recently generated* and can be produced again from there. |
 | End-of-day PDF saved automatically | The day still closes with its snapshot; print the end-of-day report from *Reports* when needed. |
-| Backups with SQLite's backup API to a local folder | The server writes verified, compressed snapshots to `BACKUP_DIR`, automatically on the configured schedule and on demand. Administrators can download them, and restore by uploading a file from this web edition or from the desktop edition. |
+| Backups with SQLite's backup API to a local folder | Each organization's records are backed up to `BACKUP_DIR` (verified, compressed), automatically on its schedule and on demand. Its administrators can download them and restore one of their own backups, which replaces only their organization's records. A whole-database backup is also made daily for the platform owner. Before an existing database is upgraded, the server backs it up. |
 | In-app updater | Removed: update the server with `git pull && npm install && npm run build` and restart. Database changes are applied automatically. |
 | Demonstration data in `demo.db` | A separate MySQL database, `<DB_NAME>_demo`, per browser session, so one visitor exploring the demo does not affect anyone else. |
 | Language switch saved for the PC | Before sign-in the language is remembered per browser. After sign-in it is the farm setting, as before. |
@@ -73,9 +89,9 @@ columns as the desktop schema (migrations 1–3), so desktop backups map onto it
 
 ```sh
 npm run migrate                       # create/upgrade the databases and print the schema version
-npm run import-sqlite -- <file>       # import a desktop farm.db or .pfmbackup
-npm run reset-password -- --list      # list users
-npm run reset-password -- <username>  # set a new password when the recovery code is lost too
+npm run import-sqlite -- <file> [--org <code>] [--email <username>=<address> ...]   # import a desktop farm
+npm run reset-password -- --list           # list users of all organizations
+npm run reset-password -- <email address>  # set a new password when the recovery code is lost too
 ```
 
 ## Tests

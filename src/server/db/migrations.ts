@@ -1,9 +1,11 @@
 import type { DB } from './connection'
+import { addTenancy } from './tenancy-migration'
 
 export interface Migration {
   version: number
   name: string
-  up: string
+  /** SQL statements, or a function for changes that depend on what is already in the database. */
+  up: string | ((db: DB) => Promise<void>)
 }
 
 /** Every table is InnoDB (transactions, foreign keys) in utf8mb4 so Sinhala text is stored intact. */
@@ -475,11 +477,18 @@ CREATE TABLE sessions (
   KEY ix_sessions_expires (expires_at)
 ) ${T};
 `
+  },
+  {
+    version: 5,
+    name: 'organizations and farms (multi-tenant), email sign-in',
+    up: (db) => addTenancy(db)
   }
 ]
 
 /** Tables holding farm data, parents before children (the order used by backup and restore). */
 export const DATA_TABLES = [
+  'organizations',
+  'farms',
   'app_settings',
   'users',
   'cages',
@@ -527,7 +536,10 @@ export function latestSchemaVersion(): number {
  * A named lock stops two server processes from migrating the same database at once.
  * (MySQL commits table changes immediately, so each migration is recorded right after it runs.)
  */
-export async function migrate(db: DB): Promise<{ from: number; to: number }> {
+export async function migrate(
+  db: DB,
+  opts: { beforeChanges?: (from: number) => Promise<void>; /** tests only: stop at this version */ to?: number } = {}
+): Promise<{ from: number; to: number }> {
   const lock = `pfm_migrate:${db.name}`
   const [got] = (await db.query('SELECT GET_LOCK(?, 60) AS got', [lock])) as { got: number }[]
   if (got?.got !== 1) throw new Error('Could not lock the database for migration')
@@ -540,14 +552,18 @@ export async function migrate(db: DB): Promise<{ from: number; to: number }> {
         `DATABASE_TOO_NEW: database schema v${from} is newer than this application (v${latestSchemaVersion()}). Please install the latest version.`
       )
     }
+    // E.g. a safety backup, when the database already holds records and is about to be changed.
+    const target = opts.to ?? latestSchemaVersion()
+    if (from > 0 && from < target) await opts.beforeChanges?.(from)
     for (const m of migrations) {
-      if (m.version <= from) continue
-      await db.exec(m.up)
+      if (m.version <= from || m.version > target) continue
+      if (typeof m.up === 'string') await db.exec(m.up)
+      else await m.up(db)
       await db
         .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
         .run(m.version, m.name, new Date().toISOString())
     }
-    return { from, to: latestSchemaVersion() }
+    return { from, to: Math.max(from, target) }
   } finally {
     await db.query('SELECT RELEASE_LOCK(?)', [lock])
   }

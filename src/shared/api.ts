@@ -72,7 +72,7 @@ export interface SetupDto {
   language: Language
   startDate: string
   cages: { code: string; name: string; initialHens: number; hasWaterMeter: boolean }[]
-  admin: { username: string; displayName: string; password: string }
+  admin: { email: string; displayName: string; password: string }
   inventory: {
     category: InventoryCategory
     name: string
@@ -130,22 +130,22 @@ export interface Api {
   'app.status': { in: void; out: AppStatus }
   'app.setLanguage': { in: { language: Language }; out: void }
   'setup.complete': { in: SetupDto & { setupKey?: string }; out: { recoveryCode: string } }
-  'demo.enter': { in: void; out: { username: string; password: string } }
+  'demo.enter': { in: void; out: { email: string; password: string } }
   'demo.exit': { in: void; out: void }
   'demo.reset': { in: void; out: void }
 
-  'auth.login': { in: { username: string; password: string }; out: SessionUser }
+  'auth.login': { in: { email: string; password: string }; out: SessionUser }
   'auth.logout': { in: void; out: void }
   'auth.changePassword': { in: { current: string; next: string }; out: void }
-  'auth.signup': { in: { username: string; displayName: string; password: string }; out: { recoveryCode: string } }
-  'auth.resetWithCode': { in: { username: string; recoveryCode: string; newPassword: string }; out: { recoveryCode: string } }
+  'auth.signup': { in: { organizationCode: string; email: string; displayName: string; password: string }; out: { recoveryCode: string } }
+  'auth.resetWithCode': { in: { email: string; recoveryCode: string; newPassword: string }; out: { recoveryCode: string } }
   'auth.newRecoveryCode': { in: { password: string }; out: { recoveryCode: string } }
   'users.list': { in: void; out: UserRow[] }
-  'users.create': { in: { username: string; displayName: string; password: string; role: Role }; out: { id: number; recoveryCode: string } }
+  'users.create': { in: { email: string; displayName: string; password: string; role: Role }; out: { id: number; recoveryCode: string } }
   'users.approve': { in: { id: number; role: Role }; out: void }
   'users.reject': { in: { id: number }; out: void }
   'users.newRecoveryCode': { in: { id: number }; out: { recoveryCode: string } }
-  'users.update': { in: { id: number; displayName: string; role: Role; active: boolean }; out: void }
+  'users.update': { in: { id: number; email: string; displayName: string; role: Role; active: boolean }; out: void }
   'users.resetPassword': { in: { id: number; password: string }; out: void }
 
   'settings.get': { in: void; out: FarmSettings }

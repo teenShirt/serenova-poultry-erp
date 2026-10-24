@@ -4,8 +4,11 @@ import path from 'node:path'
 import Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { AppError } from '../src/server/errors'
+import type { Ctx } from '../src/server/context'
+import type { DB } from '../src/server/db/connection'
 import { currentSchemaVersion, DATA_TABLES, latestSchemaVersion, migrate } from '../src/server/db/migrations'
-import { applyRetention, createBackup, dumpDatabase, inspectBackup, restoreData } from '../src/server/services/backup'
+import { applyRetention, createBackup, dumpDatabase, inspectBackup, restoreDatabase, restoreOrganization } from '../src/server/services/backup'
+import { login } from '../src/server/services/auth'
 import { getOverview, startDay } from '../src/server/services/days'
 import { addMovement } from '../src/server/services/flock'
 import { itemBalance, recordTxn } from '../src/server/services/inventory'
@@ -19,6 +22,21 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true })
 })
+
+/** A signed-in context for an organization after its records were restored (ids change on restore). */
+async function signedIn(db: DB, email: string, password: string): Promise<Ctx> {
+  const s = await login({ db, now: () => NOW }, email, password)
+  return { db, now: () => NOW, org: s.org, farm: s.farm, user: s.user }
+}
+
+const counts = async (db: DB, orgId: number) => {
+  const out: Record<string, number> = {}
+  for (const t of DATA_TABLES) {
+    if (t === 'organizations') continue
+    out[t] = ((await db.prepare(`SELECT COUNT(*) AS n FROM ${t} WHERE organization_id = ?`).get(orgId)) as { n: number }).n
+  }
+  return out
+}
 
 describe('migrations', () => {
   it('creates the schema once and is idempotent', async () => {
@@ -42,61 +60,98 @@ describe('migrations', () => {
   })
 })
 
-describe('backup and restore', () => {
-  it('backs up a consistent copy, verifies it, and restores it', async () => {
+describe('organization backup and restore', () => {
+  it('backs up one organization, verifies it, and restores it', async () => {
     const f = await makeFarm()
     await startDay(f.worker, { date: '2026-03-09', corrections: [], acknowledgeWarnings: false })
     await addMovement(f.worker, { date: '2026-03-09', cageId: f.cageIds[0], type: 'death', quantity: 7, reason: null, notes: null })
-    const b = await createBackup(f.db, path.join(dir, 'backups'), 'manual')
+    const b = await createBackup(f.db, dir, 'manual', { orgId: f.org })
     expect(b.status).toBe('ok')
+    expect(path.basename(b.path!)).toMatch(/^PoultryFarm-test-farm-\d{8}-\d{6}-manual\.pfmbackup$/)
     const check = await inspectBackup(b.path!)
     expect(check).toMatchObject({ ok: true, farmName: 'Test Farm', lastDate: '2026-03-09', dayCount: 1 })
+    expect(check.data!.scope).toBe('organization')
 
-    // Change live data after the backup, then restore.
+    // Change the data after the backup, then restore.
     await addMovement(f.worker, { date: '2026-03-09', cageId: f.cageIds[0], type: 'death', quantity: 100, reason: null, notes: null })
-    await f.db.prepare("INSERT INTO sessions (id, user_id, mode, created_at, last_seen_at, expires_at) VALUES (REPEAT('a', 64), 1, 'farm', 'x', 'x', 'x')").run()
-    await restoreData(f.db, check.data!)
-    expect((await getOverview(f.admin, '2026-03-09')).cages[0].closing).toBe(993)
-    // Everyone is signed out: the restored data has its own users.
-    expect(((await f.db.prepare('SELECT COUNT(*) n FROM sessions').get()) as { n: number }).n).toBe(0)
-    // New records continue after the restored ones.
-    await addMovement(f.worker, { date: '2026-03-09', cageId: f.cageIds[1], type: 'death', quantity: 1, reason: null, notes: null })
+    await f.db.prepare("INSERT INTO sessions (id, user_id, organization_id, mode, created_at, last_seen_at, expires_at) VALUES (REPEAT('a', 64), 1, ?, 'farm', 'x', 'x', 'x')").run(f.org)
+    await restoreOrganization(f.db, f.org, check.data!)
+    const admin = await signedIn(f.db, 'admin@test.farm', 'secret123')
+    expect((await getOverview(admin, '2026-03-09')).cages[0].closing).toBe(993)
+    // Everyone in the organization signs in again: the restored data has its own accounts.
+    expect(((await f.db.prepare('SELECT COUNT(*) n FROM sessions WHERE organization_id = ?').get(f.org)) as { n: number }).n).toBe(0)
+    // New records continue normally after the restored ones.
+    const worker = await signedIn(f.db, 'worker@test.farm', 'worker123')
+    const cage = (await getOverview(worker, '2026-03-09')).cages[1].cageId
+    await addMovement(worker, { date: '2026-03-09', cageId: cage, type: 'death', quantity: 1, reason: null, notes: null })
   })
 
-  it('restores into an empty database with every table and value intact', async () => {
+  it("restoring one organization never changes another organization's records", async () => {
+    const a = await makeFarm()
+    const b = await makeFarm({ db: a.db, name: 'Other Farm', domain: 'other.farm' })
+    await startDay(a.worker, { date: '2026-03-09', corrections: [], acknowledgeWarnings: false })
+    await startDay(b.worker, { date: '2026-03-09', corrections: [], acknowledgeWarnings: false })
+    await addMovement(b.worker, { date: '2026-03-09', cageId: b.cageIds[0], type: 'death', quantity: 3, reason: null, notes: null })
+    const backupOfA = await dumpDatabase(a.db, { orgId: a.org })
+    const before = { b: await counts(a.db, b.org), dump: await dumpDatabase(a.db, { orgId: b.org }) }
+
+    await addMovement(a.worker, { date: '2026-03-09', cageId: a.cageIds[0], type: 'death', quantity: 50, reason: null, notes: null })
+    await restoreOrganization(a.db, a.org, backupOfA)
+
+    expect(await counts(a.db, b.org)).toEqual(before.b)
+    expect((await dumpDatabase(a.db, { orgId: b.org })).tables).toEqual(before.dump.tables)
+    expect((await getOverview(b.worker, '2026-03-09')).cages[0].closing).toBe(997)
+    // Every record of A now points only at A's records (new ids, references moved with them).
+    const restored = await signedIn(a.db, 'admin@test.farm', 'secret123')
+    expect((await getOverview(restored, '2026-03-09')).cages[0].closing).toBe(1000)
+  })
+
+  it('whole-database backups restore every table and value intact (platform use)', async () => {
     const f = await makeFarm()
+    await makeFarm({ db: f.db, name: 'Other Farm', domain: 'other.farm' })
     await startDay(f.worker, { date: '2026-03-09', corrections: [], acknowledgeWarnings: false })
     const before = await dumpDatabase(f.db)
+    expect(before.scope).toBe('database')
     const fresh = await openTestDb()
-    await restoreData(fresh, before)
+    await restoreDatabase(fresh, before)
     const after = await dumpDatabase(fresh)
     for (const t of DATA_TABLES) expect(after.tables[t], t).toEqual(before.tables[t])
+    // An organization backup cannot be used as a whole-database backup, or the other way round.
+    await expect(restoreDatabase(fresh, await dumpDatabase(f.db, { orgId: f.org }))).rejects.toThrow('not_a_database_backup')
+    await expect(restoreOrganization(fresh, f.org, before)).rejects.toThrow('not_an_organization_backup')
   })
 
-  it('imports a backup made by the desktop (SQLite) edition', async () => {
-    // A desktop backup is an SQLite file with the same tables and columns, marked with application_id 'PFM1'.
-    const f = await makeFarm()
-    await startDay(f.worker, { date: '2026-03-09', corrections: [], acknowledgeWarnings: false })
-    await addMovement(f.worker, { date: '2026-03-09', cageId: f.cageIds[0], type: 'death', quantity: 7, reason: null, notes: null })
-    const data = await dumpDatabase(f.db)
+  it('imports a backup made by the desktop (SQLite) edition into an organization, with email addresses', async () => {
+    // A desktop backup is an SQLite file with the same tables and columns as before organizations
+    // existed (no organization or farm columns, no email), marked with application_id 'PFM1'.
+    const src = await makeFarm({ name: 'Madawala Test' })
+    await startDay(src.worker, { date: '2026-03-09', corrections: [], acknowledgeWarnings: false })
+    await addMovement(src.worker, { date: '2026-03-09', cageId: src.cageIds[0], type: 'death', quantity: 7, reason: null, notes: null })
+    const data = await dumpDatabase(src.db, { orgId: src.org })
     const file = path.join(dir, 'PoultryFarm-20260310-080000-manual.pfmbackup')
     const s = new Database(file)
     s.pragma('application_id = 0x50464d31')
     s.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT, applied_at TEXT)')
     s.prepare("INSERT INTO schema_migrations VALUES (3, 'desktop', 'x')").run()
     for (const t of DATA_TABLES) {
+      if (t === 'organizations' || t === 'farms') continue
       const { columns, rows } = data.tables[t]
-      s.exec(`CREATE TABLE ${t} (${columns.map((c) => `"${c}"`).join(', ')})`)
-      const ins = s.prepare(`INSERT INTO ${t} VALUES (${columns.map(() => '?').join(', ')})`)
-      for (const r of rows) ins.run(...r)
+      const keep = columns.map((c, i) => [c, i] as const).filter(([c]) => !['organization_id', 'farm_id', 'email'].includes(c))
+      s.exec(`CREATE TABLE ${t} (${keep.map(([c]) => `"${c}"`).join(', ')})`)
+      const ins = s.prepare(`INSERT INTO ${t} VALUES (${keep.map(() => '?').join(', ')})`)
+      for (const r of rows) ins.run(...keep.map(([, i]) => r[i]))
     }
     s.close()
 
     const check = await inspectBackup(file)
-    expect(check).toMatchObject({ ok: true, schemaVersion: 3, farmName: 'Test Farm', lastDate: '2026-03-09', dayCount: 1 })
-    const fresh = await openTestDb()
-    await restoreData(fresh, check.data!)
-    expect((await getOverview({ db: fresh, user: null, now: () => NOW }, '2026-03-09')).cages[0].closing).toBe(993)
+    expect(check).toMatchObject({ ok: true, schemaVersion: 3, farmName: 'Madawala Test', lastDate: '2026-03-09', dayCount: 1 })
+    const target = await makeFarm({ name: 'Imported', domain: 'imported.farm' })
+    await restoreOrganization(target.db, target.org, check.data!, { emails: { admin: 'owner@madawala.lk', worker: 'staff@madawala.lk' } })
+    // The desktop accounts sign in with their old passwords and their new email addresses.
+    const owner = await signedIn(target.db, 'owner@madawala.lk', 'secret123')
+    expect(owner.org).toBe(target.org)
+    expect((await getOverview(owner, '2026-03-09')).cages[0].closing).toBe(993)
+    expect((await signedIn(target.db, 'staff@madawala.lk', 'worker123')).user!.username).toBe('worker')
   })
 
   it('rejects files that are not intact farm backups', async () => {
@@ -110,16 +165,17 @@ describe('backup and restore', () => {
     expect(await inspectBackup(other)).toMatchObject({ ok: false, error: 'not_a_farm_backup' })
   })
 
-  it('retention removes only the oldest automatic backups', () => {
+  it("retention removes only the oldest automatic backups, per organization", () => {
     const names = [
-      'PoultryFarm-20260101-010000-auto.pfmbackup',
-      'PoultryFarm-20260102-010000-auto.pfmbackup',
-      'PoultryFarm-20260103-010000-auto.pfmbackup',
-      'PoultryFarm-20260101-090000-manual.pfmbackup',
+      'PoultryFarm-hill-20260101-010000-auto.pfmbackup',
+      'PoultryFarm-hill-20260102-010000-auto.pfmbackup',
+      'PoultryFarm-hill-20260103-010000-auto.pfmbackup',
+      'PoultryFarm-hill-20260101-090000-manual.pfmbackup',
+      'PoultryFarm-vale-20260101-010000-auto.pfmbackup',
       'my-notes.txt'
     ]
     for (const n of names) fs.writeFileSync(path.join(dir, n), 'x')
-    expect(applyRetention(dir, 2)).toEqual(['PoultryFarm-20260101-010000-auto.pfmbackup'])
+    expect(applyRetention(dir, 2, 'hill')).toEqual(['PoultryFarm-hill-20260101-010000-auto.pfmbackup'])
     expect(fs.readdirSync(dir).sort()).toEqual(names.slice(1).sort())
   })
 })
@@ -142,7 +198,7 @@ describe('simultaneous requests', () => {
 })
 
 describe('demo data', () => {
-  it('generates a consistent sample database', async () => {
+  it('generates a consistent sample organization', async () => {
     const db = await openTestDb()
     await seedDemo(db, new Date('2026-03-10T05:00:00Z'), 20)
     const days = (await db.prepare('SELECT status, COUNT(*) n FROM farm_days GROUP BY status ORDER BY status').all()) as { status: string; n: number }[]
@@ -152,7 +208,8 @@ describe('demo data', () => {
     ])
     const neg = await db.prepare('SELECT item_id, SUM(quantity) b FROM inventory_transactions GROUP BY item_id HAVING b < 0').all()
     expect(neg).toEqual([])
-    const ov = await getOverview({ db, user: null, now: () => new Date('2026-03-10T05:00:00Z') }, '2026-03-09')
+    const demo = await login({ db, now: () => new Date('2026-03-10T05:00:00Z') }, 'demo@example.com', 'demo123')
+    const ov = await getOverview({ db, now: () => new Date('2026-03-10T05:00:00Z'), org: demo.org, farm: demo.farm, user: demo.user }, '2026-03-09')
     expect(ov.status).toBe('closed')
     expect(ov.totals.productionPct).toBeGreaterThan(70)
   })
