@@ -3,6 +3,7 @@ import { ChartColumn, FileSpreadsheet, FileText, History, Printer } from 'lucide
 import type { ReportKind, ReportSpec } from '@shared/api'
 import { addDays, monthBounds, startOfWeek } from '@shared/dates'
 import { call, download, excelReportUrl, printHtml } from '../lib/api'
+import { CsvButton } from '../components/Export'
 import { useApp, useLoad } from '../lib/app'
 import { Card, Empty, Field, PageHeader, Tabs } from '../components/ui'
 import { CageBars, SERIES, TimeChart } from '../components/charts'
@@ -149,6 +150,7 @@ function ReportsTab() {
                   <FileSpreadsheet size={18} /> {t('rep.excel')}
                 </button>
               )}
+              <CsvButton kind="production" from={from} to={to} />
             </div>
           </div>
         </Card>

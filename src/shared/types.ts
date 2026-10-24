@@ -387,6 +387,8 @@ export interface DailySeriesPoint {
   feedKg: number | null
   waterLitres: number | null
   deaths: number
+  /** Birds removed (sold or culled) */
+  removals: number
   cumulativeDeaths: number
   mortalityPct: number | null
   feedPerHenG: number | null

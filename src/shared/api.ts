@@ -1,4 +1,5 @@
 import type { PurchaseOrder, PurchaseOrderInput, ReceiptLineInput, StockCountInput, StockCountRow, StoreBalance, TaskEvent, TaskInput, TaskReportRow, TaskRow, TransferInput, Warehouse } from './stores'
+import type { MovementPage, OrganizationOverview } from './overview'
 import type { FarmRow, FlockDetail, FlockInput, FlockSummary, HouseRow, ReminderDue, ReminderRow } from './flocks'
 import type { OrgSummary, Plan, PlatformMetrics, PlatformStatus, PlatformUser, SubscriptionChange } from './platform'
 import type {
@@ -332,6 +333,10 @@ export interface Api {
   'stores.transfer': { in: TransferInput; out: string }
   'stores.count': { in: StockCountInput; out: number }
   'stores.counts': { in: { from: string; to: string }; out: StockCountRow[] }
+  /** Stock movements in the farm's stores, newest first, one page at a time */
+  'stores.movements': { in: { from: string; to: string; warehouseId?: number | null; itemId?: number | null; type?: string | null; page: number; pageSize?: number }; out: MovementPage }
+  /** Every active farm of the organization side by side, with totals (closed days only) */
+  'overview.organization': { in: { from: string; to: string }; out: OrganizationOverview }
 
   // ---- Tasks ----
   'tasks.list': { in: { from: string; to: string; mineOnly?: boolean }; out: TaskRow[] }
@@ -506,6 +511,8 @@ export const API_KIND: Record<ApiMethod, 'read' | 'write'> = {
   'stores.transfer': 'write',
   'stores.count': 'write',
   'stores.counts': 'read',
+  'stores.movements': 'read',
+  'overview.organization': 'read',
   'tasks.list': 'read',
   'tasks.get': 'read',
   'tasks.save': 'write',

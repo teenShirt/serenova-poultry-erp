@@ -123,6 +123,7 @@ export const PERMISSION_FOR_METHOD: Partial<Record<ApiMethod, Permission>> = {
   'stores.count': 'inventory.adjust',
   'tasks.save': 'tasks.manage',
   'tasks.report': 'tasks.manage',
+  'overview.organization': 'reports.view',
   'tasks.assignees': 'tasks.manage',
   'parties.saveCustomer': 'sales.record',
   'sales.dispatch': 'sales.record',

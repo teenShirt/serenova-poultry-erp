@@ -3,6 +3,7 @@ import { HashRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate 
 import {
   Bell,
   Bird,
+  Building,
   ListChecks,
   BookOpen,
   Boxes,
@@ -61,6 +62,7 @@ import { PlatformConsole } from './pages/Platform'
 import { FlocksPage } from './pages/Flocks'
 import { StoresPage } from './pages/Stores'
 import { TasksPage } from './pages/Tasks'
+import { OverviewPage } from './pages/Overview'
 import { FarmSwitcher } from './components/Farms'
 
 export function App() {
@@ -132,7 +134,8 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'navg.overview',
     items: [
       { to: '/', key: 'nav.dashboard', icon: LayoutDashboard },
-      { to: '/flow', key: 'nav.flow', icon: GitBranch, module: 'advanced_reports' }
+      { to: '/flow', key: 'nav.flow', icon: GitBranch, module: 'advanced_reports' },
+      { to: '/overview', key: 'nav.overview', icon: Building, perm: 'reports.view' }
     ]
   },
   {
@@ -357,6 +360,7 @@ function Shell() {
           <Route path="/sales" element={<SalesPage />} />
           <Route path="/flocks" element={<FlocksPage />} />
           <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/overview" element={<OverviewPage />} />
           <Route path="/stores" element={<StoresPage />} />
           <Route path="/cages" element={<CagesPage />} />
           <Route path="/reports" element={<ReportsPage />} />

@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { round } from '@shared/calc'
 import type { Language } from '@shared/types'
 import { MODULES, SUBSCRIPTION_STATUSES, type OrgSummary, type Plan, type PlatformMetrics, type PlatformUser, type SubscriptionChange, type SubscriptionStatus } from '@shared/platform'
 import { isIsoDate, isValidTimezone } from '@shared/dates'
@@ -7,6 +10,8 @@ import { AppError, assert } from '../errors'
 import { hashPassword, LOCK_MINUTES, MAX_ATTEMPTS, normalizeEmail, validatePassword, verifyPassword } from './auth'
 import { createOrganization } from './setup'
 import { getEntitlements, toPlan } from './subscriptions'
+import { currentSchemaVersion } from '../db/migrations'
+import { recentJobFailures } from '../jobs'
 
 /**
  * The Serenova platform console. Platform administrators manage organizations, plans and
@@ -202,7 +207,7 @@ export async function setSubscription(db: DB, actor: PlatformUser, c: Subscripti
   })()
 }
 
-export async function platformMetrics(db: DB, today: string): Promise<PlatformMetrics> {
+export async function platformMetrics(db: DB, today: string, env: { version: string; backupDir: string | null } = { version: '', backupDir: null }): Promise<PlatformMetrics> {
   const orgs = await listOrganizations(db, today)
   const subscriptions = Object.fromEntries(SUBSCRIPTION_STATUSES.map((s) => [s, 0])) as Record<SubscriptionStatus, number>
   for (const o of orgs) subscriptions[o.entitlements.effective]++
@@ -230,6 +235,34 @@ export async function platformMetrics(db: DB, today: string): Promise<PlatformMe
       signedInLast7Days: await n('SELECT COUNT(*) AS n FROM users WHERE last_login_at >= ?', weekAgo)
     },
     backups: { lastWholeDatabase: lastWhole ?? null, failedLast7Days: await n("SELECT COUNT(*) AS n FROM backup_runs WHERE status = 'failed' AND created_at >= ?", weekAgo) },
-    recentEvents: events
+    recentEvents: events,
+    health: {
+      version: env.version,
+      schemaVersion: await currentSchemaVersion(db),
+      uptimeSeconds: Math.round(process.uptime()),
+      databaseMb: round(
+        Number(((await db.prepare('SELECT COALESCE(SUM(data_length + index_length), 0) AS b FROM information_schema.tables WHERE table_schema = DATABASE()').get()) as { b: number }).b) / 1048576,
+        1
+      ),
+      ...folderSize(env.backupDir),
+      jobFailures: recentJobFailures()
+    }
+  }
+}
+
+/** Size and number of files in the backup folder (null when it cannot be read). */
+function folderSize(dir: string | null): { backupFolderMb: number | null; backupFiles: number | null } {
+  if (!dir) return { backupFolderMb: null, backupFiles: null }
+  try {
+    let bytes = 0
+    let files = 0
+    for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!f.isFile()) continue
+      files++
+      bytes += fs.statSync(path.join(dir, f.name)).size
+    }
+    return { backupFolderMb: round(bytes / 1048576, 1), backupFiles: files }
+  } catch {
+    return { backupFolderMb: null, backupFiles: null }
   }
 }

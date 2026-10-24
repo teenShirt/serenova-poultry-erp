@@ -78,6 +78,21 @@ signed-in user's organization, and MySQL itself rejects a record that points at 
   them. Every step is in the task's history; overdue tasks show on the dashboard; *Tasks → Completion report* shows
   on-time and late completion by week or month. Attachments are not supported yet.
 
+## Dashboards, reports and exports
+
+- **Farm dashboard** (*Dashboard*): the farm being worked on. **Organization overview** (*Overview*): every farm side
+  by side for 7, 30 or 90 days with totals, egg trend per farm, laying % by farm, stock alerts and expiring batches,
+  flock reminders due, recent deliveries and stock movements. Production figures count **closed days only**, and the
+  page shows how each figure is calculated (see also `src/shared/overview.ts`): laying % = eggs ÷ bird-days, mortality
+  = deaths ÷ hens at the start of the period, feed per bird = feed ÷ bird-days. Totals are worked out again from the
+  summed parts, never averaged.
+- **Stock movements** (*Stores → Stock movements*): every movement with date, store, item and type filters, 50 per page.
+- **CSV downloads** (UTF-8, open in Excel) of the farm comparison, daily production, stock movements, goods received
+  and tasks, for users allowed to export, on plans with the export module. Text that a spreadsheet would treat as a
+  formula is neutralised.
+- The **platform console** shows platform health: version and schema, uptime, database size, backup folder size,
+  failed backups, and background job failures since the server started. It never shows customers' farm records.
+
 ## Plans, subscriptions and the Super Admin console
 
 Every organization has one subscription to a **plan**. The three plans created by the database upgrade are:
@@ -169,7 +184,7 @@ npm run create-super-admin -- <email> "<name>"   # a platform administrator for 
 ## Tests
 
 ```sh
-npm test         # 126 tests; a temporary MySQL 8.4 server is downloaded once and started automatically
+npm test         # 131 tests; a temporary MySQL 8.4 server is downloaded once and started automatically
 npm run typecheck
 npm run lint     # includes checks that every database call is awaited
 ```

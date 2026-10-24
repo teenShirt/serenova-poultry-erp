@@ -206,7 +206,10 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       ['purchases.orders', {}],
       ['tasks.list', range],
       ['tasks.assignees', undefined],
-      ['inventory.txns', {}]
+      ['inventory.txns', {}],
+      ['stores.movements', { ...range, page: 1 }],
+      ['stores.movements', { ...range, page: 1, warehouseId: ids.aMain, itemId: a.feedId }],
+      ['overview.organization', range]
     ] as [ApiMethod, unknown][]) {
       const text = await json(method, input)
       for (const secret of ['a.farm', 'A Mill', 'A Buyer', 'Farm A', 'A-Flock', 'A House', 'A reminder', 'A Cold Room', 'A task', 'A count']) expect(text, `${method} shows ${secret}`).not.toContain(secret)
@@ -274,7 +277,7 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       'flocks.save', 'flocks.place', 'flocks.endPlacement', 'flocks.close', 'flocks.series', 'flocks.reminders', 'flocks.saveReminder', 'flocks.dueReminders',
       'flocks.markReminder', 'stores.list', 'stores.save', 'stores.balances', 'stores.transfer', 'stores.count', 'stores.counts', 'purchases.orders',
       'purchases.createOrder', 'purchases.closeOrder', 'purchases.approve', 'purchases.reject', 'tasks.list', 'tasks.get', 'tasks.save', 'tasks.action',
-      'tasks.assignees'
+      'tasks.assignees', 'stores.movements', 'overview.organization'
     ]
     // The console's platform.* requests are only for platform administrators (tests/subscriptions.test.ts).
     const all = (Object.keys(API_KIND) as ApiMethod[]).filter((m) => !m.startsWith('platform.'))

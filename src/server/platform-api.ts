@@ -25,7 +25,7 @@ export type PlatformHandlers = { [M in PlatformMethod]: Handler<M> }
 
 const PUBLIC = new Set<PlatformMethod>(['platform.status', 'platform.login'])
 
-export function createPlatformHandlers(version: string): PlatformHandlers {
+export function createPlatformHandlers(version: string, backupDir: string | null = null): PlatformHandlers {
   return {
     'platform.status': (_, ctx) => ({ user: ctx.platformUser, version, schemaVersion: latestSchemaVersion() }),
     'platform.login': async ({ email, password }, ctx) => {
@@ -43,7 +43,7 @@ export function createPlatformHandlers(version: string): PlatformHandlers {
       ctx.session.platformUserId = null
       ctx.session.rotate = true
     },
-    'platform.metrics': (_, ctx) => platform.platformMetrics(ctx.db, today(ctx)),
+    'platform.metrics': (_, ctx) => platform.platformMetrics(ctx.db, today(ctx), { version, backupDir }),
     'platform.organizations': (_, ctx) => platform.listOrganizations(ctx.db, today(ctx)),
     'platform.createOrganization': (i, ctx) => platform.platformCreateOrganization(ctx, ctx.platformUser, i),
     'platform.setOrganizationStatus': ({ id, status, reason }, ctx) => platform.setOrganizationStatus(ctx.db, ctx.platformUser, id, status, reason, ctx.now()),

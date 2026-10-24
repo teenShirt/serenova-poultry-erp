@@ -664,3 +664,11 @@ table.mini td:first-child {
   width: auto;
   color: #fff;
 }
+
+/* Definitions of the figures on a report */
+.defs {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  line-height: 1.6;
+}

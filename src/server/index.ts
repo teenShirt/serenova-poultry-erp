@@ -21,6 +21,10 @@ import { checkAccess } from './services/duties'
 import { getSettings } from './services/settings'
 import { applyRetention, createBackup, inspectBackup, isDesktopBackup, lastBackup } from './services/backup'
 import { renderXlsx } from './reports/render'
+import { buildCsv } from './reports/csv'
+import { recordJobFailure } from './jobs'
+import { CSV_KINDS, type CsvKind } from '@shared/overview'
+import { addDays, isIsoDate } from '@shared/dates'
 import { requirePermission } from './services/roles'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -40,7 +44,7 @@ export async function createServer(cfg: ServerConfig) {
   const sessions = new Sessions(dbs, cfg.sessionIdleHours)
   const restoreTokens = new RestoreTokens()
   const handlers = createHandlers({ cfg, dbs, restoreTokens })
-  const platformHandlers = createPlatformHandlers(APP_VERSION)
+  const platformHandlers = createPlatformHandlers(APP_VERSION, cfg.backupDir)
 
   const cookie = (req: Request, value: string | null) => {
     const secure = cfg.secureCookies || req.secure ? '; Secure' : ''
@@ -169,6 +173,27 @@ export async function createServer(cfg: ServerConfig) {
     res.send(file.data)
   })
 
+  // CSV downloads: reports, stock movements, receipts and tasks (who may export, and the plan's Excel/CSV module).
+  app.get('/api/export/:kind', async (req, res) => {
+    const kind = String(req.params['kind'])
+    const q = (k: string) => String(req.query[k] ?? '')
+    if (!(CSV_KINDS as readonly string[]).includes(kind) || !isIsoDate(q('from')) || !isIsoDate(q('to')) || q('from') > q('to') || q('from') < addDays(q('to'), -400)) {
+      throw new AppError('invalid_input', { field: 'kind' })
+    }
+    const out = await withSignedIn(req, res, async (ctx) => {
+      requirePermission(ctx, 'reports.export')
+      await assertModule(ctx, 'exports')
+      if (kind === 'tasks') requirePermission(ctx, 'tasks.manage')
+      if (kind === 'organization') requirePermission(ctx, 'reports.view')
+      const warehouseId = Number(q('warehouseId')) || null
+      return buildCsv(ctx, kind as CsvKind, q('from'), q('to'), { warehouseId })
+    })
+    res.attachment(`${out.name}.csv`)
+    res.type('text/csv; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-store')
+    res.send(out.csv)
+  })
+
   // A backup contains every record of the organization (including password hashes), so only its
   // administrators may download it; whole-database backups never leave the server this way.
   app.get('/api/backup/download/:id', async (req, res) => {
@@ -274,19 +299,19 @@ function startSchedulers(cfg: ServerConfig, dbs: Databases, sessions: Sessions) 
           if (!s.backupEnabled || !(await due(db, o.id, s.backupIntervalHours))) continue
           const info = await createBackup(db, cfg.backupDir, 'auto', { orgId: o.id })
           if (info.status === 'ok') applyRetention(cfg.backupDir, s.backupRetention, o.code)
-          else console.error(`Automatic backup of ${o.code} failed:`, info.message)
+          else recordJobFailure(`Automatic backup of ${o.code}`, new Error(info.message ?? 'failed'))
         }
         if (orgs.length && (await due(db, null, PLATFORM_BACKUP_HOURS))) {
           const info = await createBackup(db, cfg.backupDir, 'auto', { orgId: null })
           if (info.status === 'ok') applyRetention(cfg.backupDir, PLATFORM_BACKUP_KEEP, 'all')
-          else console.error('Automatic whole-database backup failed:', info.message)
+          else recordJobFailure('Automatic whole-database backup', new Error(info.message ?? 'failed'))
         }
       } finally {
         await db.query("SELECT RELEASE_LOCK('pfm_auto_backup')")
       }
     })
   const safely = (name: string, fn: () => Promise<unknown>) => () => {
-    fn().catch((e: unknown) => console.error(`${name} failed:`, e))
+    fn().catch((e: unknown) => recordJobFailure(name, e))
   }
   setTimeout(safely('Automatic backup', backupTick), 60_000).unref()
   return [

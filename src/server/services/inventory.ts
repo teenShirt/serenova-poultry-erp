@@ -180,9 +180,9 @@ export async function balances(ctx: OrgCtx, category?: InventoryCategory, asOf?:
   })
 }
 
-export async function listBatches(ctx: OrgCtx, opts: { itemId?: number; onlyInStock?: boolean; warehouseId?: number | null } = {}): Promise<InventoryBatch[]> {
+export async function listBatches(ctx: OrgCtx, opts: { itemId?: number; onlyInStock?: boolean; warehouseId?: number | null; farmId?: number | null } = {}): Promise<InventoryBatch[]> {
   const today = todayInTimezone((await getSettings(ctx)).timezone)
-  const s = scopeSql({ warehouseId: opts.warehouseId })
+  const s = scopeSql({ warehouseId: opts.warehouseId, farmId: opts.farmId })
   const rows = (await ctx.db
     .prepare(
       `SELECT b.id, b.item_id AS itemId, i.name AS itemName, i.unit, b.batch_no AS batchNo, b.expiry_date AS expiryDate,

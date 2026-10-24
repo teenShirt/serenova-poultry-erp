@@ -38,6 +38,7 @@ import * as adminSvc from './services/admin'
 import * as flocks from './services/flocks'
 import * as stores from './services/stores'
 import * as tasks from './services/tasks'
+import { movementsPage, organizationOverview } from './services/overview'
 import { approveReceipt, closeOrder, createOrder, listOrders, rejectReceipt } from './services/purchases'
 import { assertModule, assertWritable, getEntitlements, today } from './services/subscriptions'
 import type { RestoreTokens } from './uploads'
@@ -408,6 +409,14 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     'stores.counts': ({ from, to }, ctx) => {
       validatePeriod(from, to)
       return stores.listCounts(ctx, from, to)
+    },
+    'stores.movements': (f, ctx) => {
+      validatePeriod(f.from, f.to)
+      return movementsPage(ctx, f)
+    },
+    'overview.organization': ({ from, to }, ctx) => {
+      validatePeriod(from, to)
+      return organizationOverview(ctx, from, to)
     },
     'tasks.list': ({ from, to, mineOnly }, ctx) => {
       validatePeriod(from, to)

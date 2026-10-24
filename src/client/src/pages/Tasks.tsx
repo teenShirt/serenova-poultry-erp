@@ -5,6 +5,7 @@ import { TASK_CATEGORIES, TASK_PRIORITIES, type TaskInput, type TaskRow } from '
 import { call } from '../lib/api'
 import { useApp, useLoad } from '../lib/app'
 import { Card, Empty, Field, Modal, Notice, PageHeader, ReasonDialog, Tabs, nz } from '../components/ui'
+import { CsvButton } from '../components/Export'
 
 type Tab = 'mine' | 'all' | 'report'
 
@@ -429,10 +430,13 @@ function Report() {
     <Card
       title={t('task.report')}
       actions={
-        <select className="select" value={by} onChange={(e) => setBy(e.target.value as 'week' | 'month')} style={{ maxWidth: 180 }}>
-          <option value="week">{t('task.byWeek')}</option>
-          <option value="month">{t('task.byMonth')}</option>
-        </select>
+        <div className="row" style={{ gap: 8 }}>
+          <select className="select" value={by} onChange={(e) => setBy(e.target.value as 'week' | 'month')} style={{ maxWidth: 180 }}>
+            <option value="week">{t('task.byWeek')}</option>
+            <option value="month">{t('task.byMonth')}</option>
+          </select>
+          <CsvButton kind="tasks" from={from} to={status.today} />
+        </div>
       }
     >
       {!data || data.length === 0 ? (

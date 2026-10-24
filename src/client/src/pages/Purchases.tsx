@@ -11,6 +11,7 @@ import { Card, Empty, Field, Modal, Notice, NumInput, PageHeader, ReasonDialog, 
 import { RangePicker, SERIES, TimeChart } from '../components/charts'
 import { Kpi } from '../components/Kpi'
 import { PartyDialog, PartyList } from './Sales'
+import { CsvButton } from '../components/Export'
 
 export function PurchasesPage() {
   const { t, num, status, can, date } = useApp()
@@ -65,7 +66,7 @@ export function PurchasesPage() {
           />
           <TimeChart title={t('pur.storeTrend')} data={series ?? []} unit="kg" series={[{ key: 'feedStockKg', label: t('dash.feedStock'), color: SERIES.blue }]} />
         </div>
-        <Card title={t('pur.list')}>
+        <Card title={t('pur.list')} actions={<CsvButton kind="receipts" from={from} to={to} />}>
           {!receipts || receipts.length === 0 ? (
             <Empty text={t('common.noData')}>
               <button className="btn primary" onClick={() => setCreating(true)}>

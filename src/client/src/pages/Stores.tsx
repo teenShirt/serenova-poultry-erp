@@ -5,11 +5,13 @@ import type { StoreBalance, Warehouse } from '@shared/stores'
 import { call } from '../lib/api'
 import { useApp, useLoad } from '../lib/app'
 import { Card, Empty, Field, Modal, Notice, NumInput, PageHeader, Tabs, nz } from '../components/ui'
+import { CsvButton } from '../components/Export'
+import { TXN_TYPES, type TxnType } from '@shared/types'
 
 /** Stores (warehouses) of the farm being worked on: stock per store, transfers and stock counts. */
 export function StoresPage() {
   const { t, can } = useApp()
-  const [tab, setTab] = useState<'stock' | 'counts' | 'stores'>('stock')
+  const [tab, setTab] = useState<'stock' | 'movements' | 'counts' | 'stores'>('stock')
   const [transfer, setTransfer] = useState(false)
   const [count, setCount] = useState(false)
   return (
@@ -31,11 +33,13 @@ export function StoresPage() {
         onChange={setTab}
         tabs={[
           { value: 'stock', label: t('stores.stock') },
+          { value: 'movements', label: t('ov.movements') },
           { value: 'counts', label: t('stores.counts') },
           { value: 'stores', label: t('stores.stores') }
         ]}
       />
       {tab === 'stock' && <StockTab />}
+      {tab === 'movements' && <MovementsTab />}
       {tab === 'counts' && <CountsTab />}
       {tab === 'stores' && <StoresTab />}
       {transfer && <TransferDialog onClose={() => setTransfer(false)} />}
@@ -479,5 +483,124 @@ function CountDialog({ onClose }: { onClose: () => void }) {
         </Field>
       </div>
     </Modal>
+  )
+}
+
+/** Every stock movement in this farm's stores, with filters, a page at a time. */
+function MovementsTab() {
+  const { t, num, date, status } = useApp()
+  const { data: stores } = useLoad(() => call('stores.list', { includeInactive: true }), [])
+  const { data: items } = useLoad(() => call('inventory.items', {}), [])
+  const own = (stores ?? []).filter((w) => w.farmId === status.farm?.id)
+  const [from, setFrom] = useState(addDays(status.today, -29))
+  const [to, setTo] = useState(status.today)
+  const [warehouseId, setWarehouseId] = useState<number | null>(null)
+  const [itemId, setItemId] = useState<number | null>(null)
+  const [type, setType] = useState<TxnType | null>(null)
+  const [page, setPage] = useState(1)
+  const { data } = useLoad(() => call('stores.movements', { from, to, warehouseId, itemId, type, page, pageSize: 50 }), [from, to, warehouseId, itemId, type, page])
+  const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
+  const reset = <T,>(set: (v: T) => void) => (v: T) => {
+    set(v)
+    setPage(1)
+  }
+  return (
+    <Card title={t('ov.movements')} actions={<CsvButton kind="movements" from={from} to={to} warehouseId={warehouseId} />}>
+      <div className="form-grid" style={{ marginBottom: 12 }}>
+        <Field label={t('common.from')}>
+          <input className="input" type="date" value={from} max={to} onChange={(e) => reset(setFrom)(e.target.value)} />
+        </Field>
+        <Field label={t('common.to')}>
+          <input className="input" type="date" value={to} min={from} max={status.today} onChange={(e) => reset(setTo)(e.target.value)} />
+        </Field>
+        <Field label={t('stores.store')}>
+          <select className="select" value={warehouseId ?? ''} onChange={(e) => reset(setWarehouseId)(e.target.value ? Number(e.target.value) : null)}>
+            <option value="">{t('stores.allStores')}</option>
+            {own.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t('inv.item')}>
+          <select className="select" value={itemId ?? ''} onChange={(e) => reset(setItemId)(e.target.value ? Number(e.target.value) : null)}>
+            <option value="">{t('common.all')}</option>
+            {items?.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t('ov.movement')}>
+          <select className="select" value={type ?? ''} onChange={(e) => reset(setType)((e.target.value || null) as TxnType | null)}>
+            <option value="">{t('common.all')}</option>
+            {TXN_TYPES.map((x) => (
+              <option key={x} value={x}>
+                {t('txn.' + x)}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+      {!data ? null : data.rows.length === 0 ? (
+        <Empty text={t('common.noData')} />
+      ) : (
+        <>
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>{t('common.date')}</th>
+                  <th>{t('stores.store')}</th>
+                  <th>{t('inv.item')}</th>
+                  <th>{t('ov.movement')}</th>
+                  <th className="num">{t('common.quantity')}</th>
+                  <th>{t('ov.reference')}</th>
+                  <th>{t('common.recordedBy')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((r) => (
+                  <tr key={r.id}>
+                    <td className="nowrap">{date(r.date)}</td>
+                    <td>
+                      {r.store}
+                      {r.counterpart && <div className="muted small">{(r.quantity < 0 ? '→ ' : '← ') + r.counterpart}</div>}
+                    </td>
+                    <td>
+                      {r.item}
+                      {r.batchNo && <span className="muted small"> · {r.batchNo}</span>}
+                    </td>
+                    <td>{t('txn.' + r.type)}</td>
+                    <td className={`num ${r.quantity < 0 ? 'bad' : ''}`}>
+                      {r.quantity > 0 ? '+' : ''}
+                      {num(r.quantity, 2)} {r.unit}
+                    </td>
+                    <td>
+                      {r.reference}
+                      {r.notes && <div className="muted small">{r.notes}</div>}
+                    </td>
+                    <td>{r.by}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="row" style={{ justifyContent: 'space-between', marginTop: 10 }}>
+            <span className="muted small">{t('ov.pageOf', { page, pages, total: data.total })}</span>
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                ‹ {t('task.prevWeek')}
+              </button>
+              <button className="btn sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>
+                {t('task.nextWeek')} ›
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </Card>
   )
 }

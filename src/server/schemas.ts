@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { isIsoDate } from '@shared/dates'
-import { EGG_SESSIONS, INVENTORY_CATEGORIES } from '@shared/types'
+import { EGG_SESSIONS, INVENTORY_CATEGORIES, TXN_TYPES } from '@shared/types'
 import type { ApiMethod } from '@shared/api'
 import { PERMISSIONS } from '@shared/permissions'
 import { MODULES, SUBSCRIPTION_STATUSES } from '@shared/platform'
@@ -353,6 +353,16 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
     lines: z.array(z.object({ itemId: id, batchId: id.nullable(), countedQty: qty })).min(1).max(500)
   }),
   'stores.counts': z.object({ from: date, to: date }),
+  'stores.movements': z.object({
+    from: date,
+    to: date,
+    warehouseId: id.nullable().optional(),
+    itemId: id.nullable().optional(),
+    type: z.enum(TXN_TYPES).nullable().optional(),
+    page: z.number().int().min(1).max(100000),
+    pageSize: z.number().int().min(10).max(500).optional()
+  }),
+  'overview.organization': z.object({ from: date, to: date }),
   'tasks.list': z.object({ from: date, to: date, mineOnly: z.boolean().optional() }),
   'tasks.get': z.object({ id }),
   'tasks.save': z.object({

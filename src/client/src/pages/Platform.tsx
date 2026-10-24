@@ -157,6 +157,38 @@ function Overview() {
           tone={m.backups.failedLast7Days > 0 || !m.backups.lastWholeDatabase ? 'bad' : undefined}
         />
       </div>
+      <Card title={t('plat.health')}>
+        <dl className="kv">
+          <dt>{t('plat.h.version')}</dt>
+          <dd>
+            v{m.health.version} · {t('plat.h.schema', { n: m.health.schemaVersion })}
+          </dd>
+          <dt>{t('plat.h.uptime')}</dt>
+          <dd>{t('plat.h.uptimeValue', { h: Math.floor(m.health.uptimeSeconds / 3600), m: Math.floor((m.health.uptimeSeconds % 3600) / 60) })}</dd>
+          <dt>{t('plat.h.database')}</dt>
+          <dd>{num(m.health.databaseMb, 1)} MB</dd>
+          <dt>{t('plat.h.backups')}</dt>
+          <dd>{m.health.backupFolderMb === null ? '—' : t('plat.h.backupFolder', { mb: num(m.health.backupFolderMb, 1), files: m.health.backupFiles ?? 0 })}</dd>
+          <dt>{t('plat.h.failedBackups')}</dt>
+          <dd className={m.backups.failedLast7Days ? 'bad' : ''}>{m.backups.failedLast7Days}</dd>
+        </dl>
+        <h3>{t('plat.h.jobFailures')}</h3>
+        {m.health.jobFailures.length === 0 ? (
+          <div className="muted small">{t('plat.h.noJobFailures')}</div>
+        ) : (
+          <table className="data">
+            <tbody>
+              {m.health.jobFailures.map((f, i) => (
+                <tr key={i}>
+                  <td className="nowrap">{dateTime(f.at)}</td>
+                  <td>{f.job}</td>
+                  <td className="muted small">{f.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
       <Card title={t('plat.recent')}>
         {m.recentEvents.length === 0 ? (
           <Empty text={t('common.noData')} />

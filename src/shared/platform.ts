@@ -74,6 +74,16 @@ export interface PlatformMetrics {
   users: { active: number; signedInLast7Days: number }
   backups: { lastWholeDatabase: { status: string; createdAt: string } | null; failedLast7Days: number }
   recentEvents: { at: string; action: string; organization: string | null; by: string | null; details: string | null }[]
+  health: {
+    version: string
+    schemaVersion: number
+    uptimeSeconds: number
+    databaseMb: number
+    backupFolderMb: number | null
+    backupFiles: number | null
+    /** Background job failures since the server started */
+    jobFailures: { at: string; job: string; message: string }[]
+  }
 }
 
 export interface SubscriptionChange {

@@ -36,6 +36,7 @@ export async function dailySeries(
         feedKg: null,
         waterLitres: null,
         deaths: 0,
+        removals: 0,
         cumulativeDeaths: cumulative,
         mortalityPct: null,
         feedPerHenG: null
@@ -56,6 +57,7 @@ export async function dailySeries(
       feedKg: t.feedKg,
       waterLitres: t.waterLitres,
       deaths: t.movements.deaths,
+      removals: t.movements.removals,
       cumulativeDeaths: cumulative,
       mortalityPct: t.mortalityPct,
       feedPerHenG: feedPerHenGrams(t.feedKg, t.avgHens)
@@ -114,7 +116,7 @@ export async function dashboard(ctx: Ctx, date: string, isDemo: boolean, backupW
   const today = await getOverview(ctx, date)
   const inv = await balances(ctx, undefined, undefined, { farmId: ctx.farm })
   const lowStock = inv.filter((b) => b.active && b.isLow)
-  const expiring = (await listBatches(ctx, { onlyInStock: true })).filter(
+  const expiring = (await listBatches(ctx, { onlyInStock: true, farmId: ctx.farm })).filter(
     (b) => b.daysToExpiry !== null && b.daysToExpiry <= settings.medicineExpiryWarnDays
   )
   const alerts: Alert[] = []
