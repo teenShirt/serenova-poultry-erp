@@ -5,12 +5,20 @@ import type { Ctx } from '../context'
 import { getOverview } from './days'
 import { balances, listBatches } from './inventory'
 import { getSettings } from './settings'
-import { groupByDay, loadCageDayStats, sumCages } from './stats'
+import { groupByDay, loadCageDayStats, sumCages, type CageDayStat } from './stats'
 
 /** One point per calendar date in the range; dates without a farm day carry nulls (gaps, not zeros). */
-export async function dailySeries(ctx: Ctx, from: string, to: string, cageId?: number | null): Promise<DailySeriesPoint[]> {
+export async function dailySeries(
+  ctx: Ctx,
+  from: string,
+  to: string,
+  cageId?: number | null,
+  /** Only these cage-days (e.g. the cages a flock occupied on each date) */
+  include?: (row: CageDayStat) => boolean
+): Promise<DailySeriesPoint[]> {
   const settings = await getSettings(ctx)
-  const byDay = groupByDay(await loadCageDayStats(ctx, settings, from, to, cageId))
+  const rows = await loadCageDayStats(ctx, settings, from, to, cageId)
+  const byDay = groupByDay(include ? rows.filter(include) : rows)
   let cumulative = 0
   return dateRange(from, to).map((date) => {
     const rows = byDay.get(date)

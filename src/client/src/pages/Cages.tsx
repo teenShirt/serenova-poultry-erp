@@ -5,6 +5,7 @@ import type { Cage } from '@shared/types'
 import { call } from '../lib/api'
 import { useApp, useLoad } from '../lib/app'
 import { Card, Field, Modal, Notice, NumInput, PageHeader, nz } from '../components/ui'
+import { HousesCard } from '../components/Farms'
 
 export function CagesPage() {
   const { t, num, can, status } = useApp()
@@ -78,6 +79,9 @@ export function CagesPage() {
           </table>
         </div>
       </Card>
+      <div className="mt">
+        <HousesCard />
+      </div>
       {editing && <CageForm cage={editing === 'new' ? null : editing} nextOrder={(cages?.length ?? 0) + 1} onClose={() => setEditing(null)} />}
     </div>
   )
@@ -87,10 +91,11 @@ function CageForm({ cage, nextOrder, onClose }: { cage: (Cage & { hasHistory: bo
   const { t, toast, fail } = useApp()
   const [f, setF] = useState<CageInputDto>(
     cage
-      ? { code: cage.code, name: cage.name, initialHens: cage.initialHens, capacity: cage.capacity, hasWaterMeter: cage.hasWaterMeter, active: cage.active, sortOrder: cage.sortOrder, notes: cage.notes }
-      : { code: String(nextOrder).padStart(2, '0'), name: `Cage ${String(nextOrder).padStart(2, '0')}`, initialHens: 0, capacity: null, hasWaterMeter: true, active: true, sortOrder: nextOrder, notes: null }
+      ? { code: cage.code, name: cage.name, initialHens: cage.initialHens, capacity: cage.capacity, hasWaterMeter: cage.hasWaterMeter, active: cage.active, sortOrder: cage.sortOrder, notes: cage.notes, houseId: cage.houseId }
+      : { code: String(nextOrder).padStart(2, '0'), name: `Cage ${String(nextOrder).padStart(2, '0')}`, initialHens: 0, capacity: null, hasWaterMeter: true, active: true, sortOrder: nextOrder, notes: null, houseId: null }
   )
   const [reason, setReason] = useState('')
+  const { data: houses } = useLoad(() => call('houses.list'), [])
   const locked = !!cage?.hasHistory
   const ok = f.code.trim() && f.name.trim()
   return (
@@ -138,6 +143,18 @@ function CageForm({ cage, nextOrder, onClose }: { cage: (Cage & { hasHistory: bo
           <Field label={t('cage.order')}>
             <NumInput value={f.sortOrder} onChange={(v) => setF({ ...f, sortOrder: v ?? 0 })} />
           </Field>
+          {houses && houses.length > 0 && (
+            <Field label={t('house.one')}>
+              <select className="select" value={f.houseId ?? ''} onChange={(e) => setF({ ...f, houseId: e.target.value ? Number(e.target.value) : null })}>
+                <option value="">—</option>
+                {houses.map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
         </div>
         <label className="check">
           <input type="checkbox" checked={f.hasWaterMeter} onChange={(e) => setF({ ...f, hasWaterMeter: e.target.checked })} />

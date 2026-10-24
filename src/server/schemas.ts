@@ -34,7 +34,8 @@ const cageInput = z.object({
   hasWaterMeter: z.boolean(),
   active: z.boolean(),
   sortOrder: z.number().int().min(0).max(10000),
-  notes: optText()
+  notes: optText(),
+  houseId: id.nullable().optional()
 })
 
 const itemInput = z.object({
@@ -66,7 +67,8 @@ const settingsPatch = z
     backupRetention: z.number().int().min(1).max(365),
     allowSignup: z.boolean(),
     autoCheckUpdates: z.boolean(),
-    currency: text(10)
+    currency: text(10),
+    productionStages: z.array(z.object({ name: text(60).min(1), fromWeek: z.number().int().min(0).max(200) })).max(20)
   })
   .partial()
 
@@ -124,6 +126,33 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
 
   'cages.list': z.object({ includeInactive: z.boolean().optional() }),
   'cages.create': cageInput,
+  'farms.list': none,
+  'farms.save': z.object({ id: id.nullable(), name: text(100), location: optText(200) }),
+  'farms.setStatus': z.object({ id, status: z.enum(['active', 'archived']), reason: text(500) }),
+  'farms.switch': z.object({ id }),
+  'houses.list': none,
+  'houses.save': z.object({ id: id.nullable(), code: text(40), name: text(100), active: z.boolean(), sortOrder: z.number().int().min(0).max(10000), notes: optText() }),
+  'flocks.list': z.object({ includeClosed: z.boolean().optional() }),
+  'flocks.get': z.object({ id }),
+  'flocks.save': z.object({
+    id: id.nullable(),
+    code: text(40),
+    breed: optText(100),
+    source: z.enum(['hatched', 'purchased']),
+    hatchDate: date.nullable(),
+    arrivalDate: date,
+    ageOnArrivalDays: z.number().int().min(0).max(1500).nullable(),
+    initialCount: count,
+    notes: optText()
+  }),
+  'flocks.place': z.object({ id, cageIds: z.array(id).min(1).max(200), fromDate: date }),
+  'flocks.endPlacement': z.object({ id, cageId: id, toDate: date }),
+  'flocks.close': z.object({ id, date, reason: text(500) }),
+  'flocks.series': z.object({ id, from: date, to: date }),
+  'flocks.reminders': none,
+  'flocks.saveReminder': z.object({ id: id.nullable(), atWeek: z.number().int().min(0).max(200), title: text(200), instructions: optText(2000), active: z.boolean() }),
+  'flocks.dueReminders': none,
+  'flocks.markReminder': z.object({ flockId: id, reminderId: id, outcome: z.enum(['done', 'skipped']), note: optText() }),
   'cages.update': z.object({ id, cage: cageInput, reason: optText() }),
 
   'days.preview': z.object({ date }),

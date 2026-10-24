@@ -1,4 +1,5 @@
 import type { FarmSettings } from '@shared/types'
+import { DEFAULT_STAGES } from '@shared/flocks'
 import type { Ctx } from '../context'
 
 export const DEFAULT_SETTINGS: FarmSettings = {
@@ -22,6 +23,7 @@ export const DEFAULT_SETTINGS: FarmSettings = {
   allowSignup: true,
   autoCheckUpdates: true,
   currency: 'Rs.',
+  productionStages: DEFAULT_STAGES,
   setupComplete: false
 }
 

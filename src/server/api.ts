@@ -35,6 +35,7 @@ import { cancelReceipt, createReceipt, listReceipts } from './services/purchases
 import * as sales from './services/sales'
 import { flowSummary, purchasesSeries } from './services/supply'
 import * as adminSvc from './services/admin'
+import * as flocks from './services/flocks'
 import { assertModule, assertWritable, getEntitlements, today } from './services/subscriptions'
 import type { RestoreTokens } from './uploads'
 
@@ -79,7 +80,7 @@ type Handlers = { [M in OrgMethod]: Handler<M> }
  * Requests that still work while the subscription is read-only (expired, cancelled, suspended):
  * signing out, looking after one's own account, and taking a backup of the organization's records.
  */
-const ALLOWED_WHILE_READ_ONLY = new Set<ApiMethod>(['auth.logout', 'auth.changePassword', 'auth.newRecoveryCode', 'app.setLanguage', 'backup.create'])
+const ALLOWED_WHILE_READ_ONLY = new Set<ApiMethod>(['auth.logout', 'auth.changePassword', 'auth.newRecoveryCode', 'app.setLanguage', 'backup.create', 'farms.switch'])
 
 function validatePeriod(from: string, to: string) {
   if (from > to || from < addDays(to, -400)) throw new AppError('invalid_date')
@@ -268,6 +269,30 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     'cages.create': (c, ctx) => cages.createCage(ctx, c),
     'cages.update': ({ id, cage, reason }, ctx) => cages.updateCage(ctx, id, cage, reason),
 
+    'farms.list': (_, ctx) => flocks.listFarms(ctx),
+    'farms.save': (f, ctx) => flocks.saveFarm(ctx, f),
+    'farms.setStatus': ({ id, status, reason }, ctx) => flocks.setFarmStatus(ctx, id, status, reason),
+    'farms.switch': async ({ id }, ctx) => {
+      await flocks.checkFarmForSwitch(ctx, id)
+      ctx.session.farmId = id
+    },
+    'houses.list': (_, ctx) => flocks.listHouses(ctx),
+    'houses.save': (h, ctx) => flocks.saveHouse(ctx, h),
+    'flocks.list': ({ includeClosed }, ctx) => flocks.listFlocks(ctx, includeClosed ?? true),
+    'flocks.get': ({ id }, ctx) => flocks.getFlock(ctx, id),
+    'flocks.save': (f, ctx) => flocks.saveFlock(ctx, f),
+    'flocks.place': ({ id, cageIds, fromDate }, ctx) => flocks.placeFlock(ctx, id, cageIds, fromDate),
+    'flocks.endPlacement': ({ id, cageId, toDate }, ctx) => flocks.endPlacement(ctx, id, cageId, toDate),
+    'flocks.close': ({ id, date, reason }, ctx) => flocks.closeFlock(ctx, id, date, reason),
+    'flocks.series': ({ id, from, to }, ctx) => {
+      validatePeriod(from, to)
+      return flocks.flockSeries(ctx, id, from, to)
+    },
+    'flocks.reminders': (_, ctx) => flocks.listReminders(ctx),
+    'flocks.saveReminder': (r, ctx) => flocks.saveReminder(ctx, r),
+    'flocks.dueReminders': async (_, ctx) => flocks.remindersFor(ctx, await flocks.listFlocks(ctx, false)),
+    'flocks.markReminder': ({ flockId, reminderId, outcome, note }, ctx) => flocks.markReminder(ctx, flockId, reminderId, outcome, note),
+
     'days.preview': ({ date }, ctx) => days.previewStartDay(ctx, date),
     'days.start': (input, ctx) => days.startDay(ctx, input),
     'days.overview': ({ date }, ctx) => days.getOverview(ctx, date),
@@ -322,6 +347,12 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
       const d = await analytics.dashboard(ctx, date, ctx.mode === 'demo', (await status(ctx)).backupWarning)
       const pending = hasPermission(ctx.user, 'users.manage') ? await auth.countPendingSignups(ctx) : 0
       if (pending > 0) d.alerts.unshift({ code: 'pending_signups', severity: 'info', params: { count: pending } })
+      // Age reminders the organization set up (its own programme; never suggested by the system).
+      for (const r of await flocks.remindersFor(ctx, await flocks.listFlocks(ctx, false), 0)) {
+        if (r.state === 'due' || r.state === 'overdue') {
+          d.alerts.push({ code: r.state === 'due' ? 'flock_reminder_due' : 'flock_reminder_overdue', severity: r.state === 'due' ? 'info' : 'warning', params: { flock: r.flockCode, title: r.title, week: r.atWeek } })
+        }
+      }
       return d
     },
     'analytics.series': ({ from, to, cageId }, ctx) => analytics.dailySeries(ctx, from, to, cageId),

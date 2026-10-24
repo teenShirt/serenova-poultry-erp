@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { CagesDialog, useCageSummary } from '../components/Duties'
 import { EGG_SESSIONS, type FarmSettings, type RoleRow, type UserRow } from '@shared/types'
 import { RolesCard } from '../components/Roles'
+import { FarmsCard, StagesCard } from '../components/Farms'
 import { call } from '../lib/api'
 import { useApp, useLoad } from '../lib/app'
 import { Card, ConfirmDialog, Field, Modal, Notice, NumInput, PageHeader, RecoveryCodeDialog, Tabs } from '../components/ui'
@@ -119,6 +120,8 @@ function FarmTab() {
         </dl>
       </div>
     </Card>
+    <FarmsCard />
+    <StagesCard />
     </div>
   )
 }

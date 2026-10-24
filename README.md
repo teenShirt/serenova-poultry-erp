@@ -43,6 +43,23 @@ signed-in user's organization, and MySQL itself rejects a record that points at 
 - The day cycle, cages and hen counts belong to a **farm**; stock, suppliers, customers and the egg store belong to the organization.
 - Additional organizations are added by the platform owner in the Super Admin console (below).
 
+## Farms, houses and flocks
+
+- An organization can have several **farms** (up to its plan's limit; *Settings → Farms*). Each farm has its own cages,
+  houses, flocks and day cycle; stock, suppliers, customers and users are shared. Users switch farms from the farm name
+  in the top bar. Archiving a farm keeps its records.
+- **Poultry houses** (sheds) group a farm's cages (*Cage Management*). Optional.
+- A **flock** (batch) is tracked as a group, not bird by bird. It has a breed, source, arrival date, birds on arrival
+  and a hatch date (or, when unknown, the age on arrival, from which the hatch date is estimated and marked as such).
+  It is placed in cages for date ranges; a cage holds one flock at a time. Its birds, eggs, deaths, feed, water and
+  treatments are the records of those cages on those dates, so nothing is entered twice.
+- **Age:** the hatch date is day 0; weeks are completed weeks (7 days = 1 week). **Production stages** start at an age
+  in weeks and can be changed in *Settings* (the starting values are examples to adjust to the breed's guide).
+- **Age reminders** (*Flocks → Age reminders*) are the organization's own programme, entered by authorized staff, for
+  example from its veterinarian. They show on the dashboard in their week of age and stay overdue until marked done or
+  skipped (with a reason). The system never suggests treatments or doses.
+- Quantities, meter readings and money are stored as exact decimals (3 places for quantities, 2 for amounts).
+
 ## Plans, subscriptions and the Super Admin console
 
 Every organization has one subscription to a **plan**. The three plans created by the database upgrade are:
@@ -134,7 +151,7 @@ npm run create-super-admin -- <email> "<name>"   # a platform administrator for 
 ## Tests
 
 ```sh
-npm test         # 110 tests; a temporary MySQL 8.4 server is downloaded once and started automatically
+npm test         # 117 tests; a temporary MySQL 8.4 server is downloaded once and started automatically
 npm run typecheck
 npm run lint     # includes checks that every database call is awaited
 ```

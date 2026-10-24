@@ -28,6 +28,8 @@ export const PERMISSIONS = [
   'sales.cancel',
   'sales.adjust_store',
   'cages.manage',
+  'flocks.manage',
+  'farms.manage',
   'reports.view',
   'reports.export',
   'backup.create',
@@ -44,10 +46,11 @@ export type Permission = (typeof PERMISSIONS)[number]
 export const PERMISSION_GROUPS: { key: string; permissions: Permission[] }[] = [
   { key: 'day', permissions: ['day.start', 'day.backfill', 'day.correct_opening', 'day.approve_issues', 'day.comment', 'day.close', 'day.amend'] },
   { key: 'records', permissions: ['eggs.record', 'feed.record', 'water.record', 'water.meter_reset', 'flock.record', 'medicine.record'] },
+  { key: 'flocks', permissions: ['flocks.manage'] },
   { key: 'stores', permissions: ['inventory.record', 'inventory.adjust', 'inventory.manage_items', 'purchases.record', 'purchases.cancel'] },
   { key: 'sales', permissions: ['sales.record', 'sales.cancel', 'sales.adjust_store'] },
   { key: 'reports', permissions: ['reports.view', 'reports.export', 'audit.view'] },
-  { key: 'admin', permissions: ['cages.manage', 'users.manage', 'roles.manage', 'settings.manage', 'backup.create', 'backup.restore', 'database.manage'] }
+  { key: 'admin', permissions: ['cages.manage', 'farms.manage', 'users.manage', 'roles.manage', 'settings.manage', 'backup.create', 'backup.restore', 'database.manage'] }
 ]
 
 /**
@@ -70,6 +73,14 @@ export const PERMISSION_FOR_METHOD: Partial<Record<ApiMethod, Permission>> = {
   'settings.save': 'settings.manage',
   'cages.create': 'cages.manage',
   'cages.update': 'cages.manage',
+  'farms.save': 'farms.manage',
+  'farms.setStatus': 'farms.manage',
+  'houses.save': 'cages.manage',
+  'flocks.save': 'flocks.manage',
+  'flocks.place': 'flocks.manage',
+  'flocks.endPlacement': 'flocks.manage',
+  'flocks.close': 'flocks.manage',
+  'flocks.saveReminder': 'flocks.manage',
   'days.start': 'day.start',
   'days.correctOpening': 'day.correct_opening',
   'days.confirmMortality': 'flock.record',
@@ -136,11 +147,11 @@ export const DUTY_PERMISSION: Record<Duty, Permission> = {
 export const ROLE_TEMPLATES: { key: string; permissions: Permission[] }[] = [
   {
     key: 'farm_manager',
-    permissions: PERMISSIONS.filter((p) => !['users.manage', 'roles.manage', 'settings.manage', 'backup.restore', 'database.manage'].includes(p))
+    permissions: PERMISSIONS.filter((p) => !['users.manage', 'roles.manage', 'settings.manage', 'farms.manage', 'backup.restore', 'database.manage'].includes(p))
   },
   { key: 'farm_supervisor', permissions: ['day.start', 'day.approve_issues', 'day.comment', 'eggs.record', 'feed.record', 'water.record', 'flock.record', 'medicine.record', 'reports.view'] },
   { key: 'poultry_technician', permissions: ['day.start', 'eggs.record', 'feed.record', 'water.record', 'flock.record'] },
-  { key: 'veterinarian', permissions: ['medicine.record', 'flock.record', 'reports.view'] },
+  { key: 'veterinarian', permissions: ['medicine.record', 'flock.record', 'flocks.manage', 'reports.view'] },
   { key: 'storekeeper', permissions: ['inventory.record', 'inventory.adjust', 'inventory.manage_items', 'purchases.record', 'feed.record', 'reports.view'] },
   { key: 'purchasing_officer', permissions: ['purchases.record', 'purchases.cancel', 'inventory.record', 'reports.view', 'reports.export'] },
   { key: 'accountant', permissions: ['sales.record', 'sales.cancel', 'reports.view', 'reports.export', 'audit.view'] },

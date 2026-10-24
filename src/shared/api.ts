@@ -1,3 +1,4 @@
+import type { FarmRow, FlockDetail, FlockInput, FlockSummary, HouseRow, ReminderDue, ReminderRow } from './flocks'
 import type { OrgSummary, Plan, PlatformMetrics, PlatformStatus, PlatformUser, SubscriptionChange } from './platform'
 import type {
   AppStatus,
@@ -54,6 +55,8 @@ export interface CageInputDto {
   active: boolean
   sortOrder: number
   notes: string | null
+  /** The poultry house the cage is in (optional; unchanged when left out) */
+  houseId?: number | null
 }
 
 export interface ItemInputDto {
@@ -158,6 +161,27 @@ export interface Api {
   'cages.list': { in: { includeInactive?: boolean }; out: (Cage & { hasHistory: boolean })[] }
   'cages.create': { in: CageInputDto; out: number }
   'cages.update': { in: { id: number; cage: CageInputDto; reason: string | null }; out: void }
+
+  // ---- Farms, poultry houses and flocks ----
+  'farms.list': { in: void; out: FarmRow[] }
+  'farms.save': { in: { id: number | null; name: string; location: string | null }; out: number }
+  'farms.setStatus': { in: { id: number; status: 'active' | 'archived'; reason: string }; out: void }
+  /** Switches the farm this browser session works on */
+  'farms.switch': { in: { id: number }; out: void }
+  'houses.list': { in: void; out: HouseRow[] }
+  'houses.save': { in: Omit<HouseRow, 'cages' | 'id'> & { id: number | null }; out: number }
+  'flocks.list': { in: { includeClosed?: boolean }; out: FlockSummary[] }
+  'flocks.get': { in: { id: number }; out: FlockDetail }
+  'flocks.save': { in: FlockInput; out: number }
+  'flocks.place': { in: { id: number; cageIds: number[]; fromDate: string }; out: void }
+  'flocks.endPlacement': { in: { id: number; cageId: number; toDate: string }; out: void }
+  'flocks.close': { in: { id: number; date: string; reason: string }; out: void }
+  'flocks.series': { in: { id: number; from: string; to: string }; out: (DailySeriesPoint & { ageDays: number; ageWeeks: number })[] }
+  'flocks.reminders': { in: void; out: ReminderRow[] }
+  'flocks.saveReminder': { in: Omit<ReminderRow, 'id'> & { id: number | null }; out: number }
+  /** Reminders due now (and in the coming week) for the farm's active flocks */
+  'flocks.dueReminders': { in: void; out: ReminderDue[] }
+  'flocks.markReminder': { in: { flockId: number; reminderId: number; outcome: 'done' | 'skipped'; note: string | null }; out: void }
 
   'days.preview': { in: DateArg; out: StartDayPreview }
   'days.start': {
@@ -367,6 +391,23 @@ export const API_KIND: Record<ApiMethod, 'read' | 'write'> = {
   'cages.list': 'read',
   'cages.create': 'write',
   'cages.update': 'write',
+  'farms.list': 'read',
+  'farms.save': 'write',
+  'farms.setStatus': 'write',
+  'farms.switch': 'write',
+  'houses.list': 'read',
+  'houses.save': 'write',
+  'flocks.list': 'read',
+  'flocks.get': 'read',
+  'flocks.save': 'write',
+  'flocks.place': 'write',
+  'flocks.endPlacement': 'write',
+  'flocks.close': 'write',
+  'flocks.series': 'read',
+  'flocks.reminders': 'read',
+  'flocks.saveReminder': 'write',
+  'flocks.dueReminders': 'read',
+  'flocks.markReminder': 'write',
   'days.preview': 'read',
   'days.start': 'write',
   'days.overview': 'read',

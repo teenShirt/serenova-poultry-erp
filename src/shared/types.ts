@@ -1,3 +1,4 @@
+import type { ProductionStage } from './flocks'
 import type { Entitlements } from './platform'
 
 import type { FeedMethod, MortalityDenominator, ProductionDenominator } from './calc'
@@ -102,6 +103,8 @@ export interface FarmSettings {
   autoCheckUpdates: boolean
   /** Currency shown on sales and purchases */
   currency: string
+  /** Production stages by flock age (completed weeks) */
+  productionStages: ProductionStage[]
   setupComplete: boolean
 }
 
@@ -115,6 +118,7 @@ export interface Cage {
   active: boolean
   sortOrder: number
   notes: string | null
+  houseId: number | null
 }
 
 export type DayStatus = 'not_started' | 'in_progress' | 'ready_to_close' | 'closed'

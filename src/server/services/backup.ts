@@ -306,7 +306,11 @@ const AUDIT_ENTITY: Record<string, string> = {
   treatment: 'medicine_treatments',
   water_record: 'water_records',
   supplier: 'suppliers',
-  customer: 'customers'
+  customer: 'customers',
+  farm: 'farms',
+  house: 'houses',
+  flock: 'flocks',
+  flock_reminder: 'flock_reminders'
 }
 
 /** Which table a stock transaction's source_id refers to. */

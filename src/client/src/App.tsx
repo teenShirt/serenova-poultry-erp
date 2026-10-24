@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { HashRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import {
   Bell,
+  Bird,
   BookOpen,
   Boxes,
   CalendarCheck,
@@ -9,7 +10,6 @@ import {
   ChevronDown,
   ChevronsLeft,
   ChevronsRight,
-  Building2,
   Leaf,
   Menu as MenuIcon,
   ClipboardList,
@@ -57,6 +57,8 @@ import { SalesPage } from './pages/Sales'
 import { FlowPage } from './pages/Flow'
 import { AdminPage } from './pages/Admin'
 import { PlatformConsole } from './pages/Platform'
+import { FlocksPage } from './pages/Flocks'
+import { FarmSwitcher } from './components/Farms'
 
 export function App() {
   const [status, setStatus] = useState<AppStatus | null>(null)
@@ -152,6 +154,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'navg.farm',
     items: [
+      { to: '/flocks', key: 'nav.flocks', icon: Bird },
       { to: '/cages', key: 'nav.cages', icon: Warehouse },
       { to: '/reports', key: 'nav.reports', icon: ChartColumn, perm: 'reports.view' }
     ]
@@ -347,6 +350,7 @@ function Shell() {
           <Route path="/mortality" element={<MortalityPage />} />
           <Route path="/purchases" element={<PurchasesPage />} />
           <Route path="/sales" element={<SalesPage />} />
+          <Route path="/flocks" element={<FlocksPage />} />
           <Route path="/cages" element={<CagesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
@@ -445,12 +449,7 @@ function TopBar({ onSearch, onLogout, onMenu, userName, role }: { onSearch: () =
           )}
         </div>
       )}
-      {status.farm && (
-        <div className="farm-chip" title={status.organization?.name}>
-          <Building2 size={18} />
-          <span>{status.farm.name}</span>
-        </div>
-      )}
+      <FarmSwitcher />
       <div className="menu-anchor">
         <button className="icon-btn bell" onClick={() => setMenu(menu === 'alerts' ? null : 'alerts')} aria-label={t('dash.alerts')} title={t('dash.alerts')}>
           <Bell size={20} />

@@ -607,8 +607,151 @@ ALTER TABLE sessions ADD COLUMN platform_user_id INT NULL AFTER farm_id;
           .run(o.id, enterprise, today, at)
       }
     }
+  },
+  {
+    version: 8,
+    name: 'poultry operations: exact decimals, houses, flocks, age reminders',
+    up: async (db) => {
+      // Quantities, meter readings and money as exact decimals instead of floating point.
+      // Values are rounded to the stated places (they were entered with at most this precision).
+      for (const [table, cols] of Object.entries(DECIMAL_COLUMNS)) {
+        const parts = Object.entries(cols).map(([c, type]) => `MODIFY ${c} ${type}`)
+        await db.query(`ALTER TABLE ${table} ${parts.join(', ')}`)
+      }
+      await db.exec(`
+-- Poultry houses (sheds) of a farm; cages and pens belong to a house (optional).
+CREATE TABLE houses (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  farm_id INT NOT NULL,
+  code VARCHAR(40) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  active TINYINT NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  sort_order INT NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at VARCHAR(32) NOT NULL,
+  UNIQUE KEY ux_houses_code (farm_id, code),
+  UNIQUE KEY ux_houses_org_id (organization_id, id),
+  CONSTRAINT fk_houses_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_houses_farm FOREIGN KEY (organization_id, farm_id) REFERENCES farms(organization_id, id)
+) ${T};
+
+ALTER TABLE cages ADD COLUMN house_id INT NULL AFTER farm_id,
+  ADD CONSTRAINT fk_cages_house FOREIGN KEY (organization_id, house_id) REFERENCES houses(organization_id, id);
+
+-- A flock (batch) of birds of one age, tracked as a group (not bird by bird). Its age is counted
+-- from the hatch date; when only the arrival date and age on arrival are known, the hatch date is
+-- worked out from them and marked as estimated.
+CREATE TABLE flocks (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  farm_id INT NOT NULL,
+  code VARCHAR(40) NOT NULL,
+  breed VARCHAR(100),
+  source VARCHAR(16) NOT NULL CHECK (source IN ('hatched','purchased')),
+  hatch_date DATE NOT NULL,
+  hatch_date_estimated TINYINT NOT NULL DEFAULT 0 CHECK (hatch_date_estimated IN (0,1)),
+  arrival_date DATE NOT NULL,
+  initial_count INT NOT NULL CHECK (initial_count >= 0),
+  status VARCHAR(16) NOT NULL DEFAULT 'active' CHECK (status IN ('active','closed')),
+  closed_on DATE,
+  close_reason TEXT,
+  notes TEXT,
+  created_by INT,
+  created_at VARCHAR(32) NOT NULL,
+  CHECK (arrival_date >= hatch_date),
+  UNIQUE KEY ux_flocks_code (farm_id, code),
+  UNIQUE KEY ux_flocks_org_id (organization_id, id),
+  CONSTRAINT fk_flocks_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_flocks_farm FOREIGN KEY (organization_id, farm_id) REFERENCES farms(organization_id, id),
+  CONSTRAINT fk_flocks_user FOREIGN KEY (organization_id, created_by) REFERENCES users(organization_id, id)
+) ${T};
+
+-- Which cages a flock occupied, and when (to_date NULL = still there). A cage holds one flock at a time.
+CREATE TABLE flock_placements (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  flock_id INT NOT NULL,
+  cage_id INT NOT NULL,
+  from_date DATE NOT NULL,
+  to_date DATE,
+  created_at VARCHAR(32) NOT NULL,
+  CHECK (to_date IS NULL OR to_date >= from_date),
+  KEY ix_placements_cage (cage_id, from_date),
+  CONSTRAINT fk_placements_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_placements_flock FOREIGN KEY (organization_id, flock_id) REFERENCES flocks(organization_id, id),
+  CONSTRAINT fk_placements_cage FOREIGN KEY (organization_id, cage_id) REFERENCES cages(organization_id, id)
+) ${T};
+
+-- Reminders by flock age, written by the organization (e.g. from its veterinarian's programme).
+-- They are reminders only: the system never suggests treatments or doses.
+CREATE TABLE flock_reminders (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  at_week INT NOT NULL CHECK (at_week >= 0 AND at_week <= 200),
+  title VARCHAR(200) NOT NULL,
+  instructions TEXT,
+  active TINYINT NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  created_by INT,
+  created_at VARCHAR(32) NOT NULL,
+  UNIQUE KEY ux_reminders_org_id (organization_id, id),
+  CONSTRAINT fk_reminders_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_reminders_user FOREIGN KEY (organization_id, created_by) REFERENCES users(organization_id, id)
+) ${T};
+
+CREATE TABLE flock_reminder_done (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  flock_id INT NOT NULL,
+  reminder_id INT NOT NULL,
+  outcome VARCHAR(16) NOT NULL CHECK (outcome IN ('done','skipped')),
+  note TEXT,
+  done_by INT,
+  done_at VARCHAR(32) NOT NULL,
+  UNIQUE KEY ux_reminder_done (flock_id, reminder_id),
+  CONSTRAINT fk_reminder_done_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_reminder_done_flock FOREIGN KEY (organization_id, flock_id) REFERENCES flocks(organization_id, id),
+  CONSTRAINT fk_reminder_done_reminder FOREIGN KEY (organization_id, reminder_id) REFERENCES flock_reminders(organization_id, id),
+  CONSTRAINT fk_reminder_done_user FOREIGN KEY (organization_id, done_by) REFERENCES users(organization_id, id)
+) ${T};
+`)
+      // Roles that manage cages also manage houses and flocks; roles that manage settings, farms.
+      await db.query(
+        `INSERT INTO role_permissions (organization_id, role_id, permission)
+         SELECT organization_id, role_id, 'flocks.manage' FROM role_permissions WHERE permission = 'cages.manage'`
+      )
+      await db.query(
+        `INSERT INTO role_permissions (organization_id, role_id, permission)
+         SELECT organization_id, role_id, 'farms.manage' FROM role_permissions WHERE permission = 'settings.manage'`
+      )
+    }
   }
 ]
+
+/** Exact decimal types (migration 8): quantities and readings to 3 places, prices to 4, amounts of money to 2. */
+const QTY = 'DECIMAL(16,3)'
+const DECIMAL_COLUMNS: Record<string, Record<string, string>> = {
+  inventory_items: { low_stock_threshold: QTY },
+  inventory_transactions: { quantity: `${QTY} NOT NULL`, unit_cost: 'DECIMAL(16,4)' },
+  feed_records: {
+    opening_stock: QTY,
+    issued: `${QTY} NOT NULL DEFAULT 0`,
+    returned: `${QTY} NOT NULL DEFAULT 0`,
+    wasted: `${QTY} NOT NULL DEFAULT 0`,
+    measured_consumption: QTY,
+    closing_stock: QTY
+  },
+  water_records: { opening_reading: QTY, closing_reading: QTY, litres: QTY },
+  medicine_treatments: { quantity: `${QTY} NOT NULL` },
+  goods_receipt_lines: { quantity: `${QTY} NOT NULL`, unit_cost: 'DECIMAL(16,4)' },
+  egg_dispatches: {
+    good_price: 'DECIMAL(14,4) NOT NULL DEFAULT 0',
+    cracked_price: 'DECIMAL(14,4) NOT NULL DEFAULT 0',
+    amount: 'DECIMAL(16,2) NOT NULL',
+    amount_paid: 'DECIMAL(16,2) NOT NULL DEFAULT 0'
+  },
+  customer_payments: { amount: 'DECIMAL(16,2) NOT NULL' }
+}
 
 /** Platform tables: only in whole-database backups, never in (or restored from) an organization's backup. */
 export const PLATFORM_TABLES = ['platform_users', 'plans', 'subscriptions', 'platform_audit'] as const
@@ -621,7 +764,12 @@ export const DATA_TABLES = [
   'roles',
   'role_permissions',
   'users',
+  'houses',
+  'flock_reminders',
   'cages',
+  'flocks',
+  'flock_placements',
+  'flock_reminder_done',
   'farm_days',
   'cage_days',
   'egg_collections',

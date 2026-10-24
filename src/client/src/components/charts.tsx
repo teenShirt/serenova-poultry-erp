@@ -92,7 +92,7 @@ export function TimeChart({
             <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
               <XAxis dataKey="date" tickFormatter={short} {...axisProps} minTickGap={24} />
-              <YAxis {...axisProps} width={52} tickFormatter={(v) => num(v, digits > 1 ? 1 : 0)} domain={yDomain ?? ['auto', 'auto']} />
+              <YAxis {...axisProps} allowDecimals={digits > 0} width={52} tickFormatter={(v) => num(v, digits > 1 ? 1 : 0)} domain={yDomain ?? ['auto', 'auto']} />
               <Tooltip content={<Tip series={series} unit={unit} digits={digits} labelFormat={long} />} cursor={{ stroke: AXIS, strokeDasharray: '3 3' }} />
               {series.map((s) => (
                 <Line key={s.key} type="monotone" dataKey={s.key} stroke={s.color} strokeWidth={2} dot={data.length <= 31 ? { r: 3, strokeWidth: 0, fill: s.color } : false} activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }} connectNulls={false} isAnimationActive={false} />
@@ -102,7 +102,7 @@ export function TimeChart({
             <BarChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }} barCategoryGap={data.length > 40 ? 1 : '20%'}>
               <CartesianGrid stroke={GRID} vertical={false} />
               <XAxis dataKey="date" tickFormatter={short} {...axisProps} minTickGap={24} />
-              <YAxis {...axisProps} width={52} tickFormatter={(v) => num(v, 0)} />
+              <YAxis {...axisProps} allowDecimals={digits > 0} width={52} tickFormatter={(v) => num(v, 0)} />
               <Tooltip content={<Tip series={series} unit={unit} digits={digits} labelFormat={long} />} cursor={{ fill: 'rgba(42,120,214,0.06)' }} />
               {series.map((s, i) => (
                 <Bar

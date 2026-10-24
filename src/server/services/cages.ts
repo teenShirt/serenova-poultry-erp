@@ -4,7 +4,7 @@ import { assert } from '../errors'
 import { audit } from './audit'
 import { requirePermission } from './roles'
 
-const cols = `id, code, name, initial_hens AS initialHens, capacity, has_water_meter AS hasWaterMeter,
+const cols = `id, code, name, house_id AS houseId, initial_hens AS initialHens, capacity, has_water_meter AS hasWaterMeter,
   active, sort_order AS sortOrder, notes`
 
 function toCage(r: Record<string, unknown>): Cage {
@@ -37,6 +37,14 @@ export interface CageInput {
   active: boolean
   sortOrder: number
   notes: string | null
+  houseId?: number | null
+}
+
+/** A house must be one of the context's farm's houses. */
+async function checkHouse(ctx: Pick<Ctx, 'db' | 'org' | 'farm'>, houseId: number | null | undefined) {
+  if (!houseId) return
+  const ok = await ctx.db.prepare('SELECT 1 AS x FROM houses WHERE id = ? AND organization_id = ? AND farm_id = ?').get(houseId, ctx.org, ctx.farm)
+  assert(ok, 'house_not_found')
 }
 
 /** Inserts a cage into the context's farm without a permission check (used by the first-run wizard). */
@@ -45,14 +53,16 @@ export async function insertCageRaw(ctx: Ctx, c: CageInput): Promise<number> {
   assert(code.length > 0, 'required_field', { field: 'code' })
   const dup = await ctx.db.prepare('SELECT 1 AS x FROM cages WHERE farm_id = ? AND code = ?').get(ctx.farm, code)
   assert(!dup, 'cage_code_taken')
+  await checkHouse(ctx, c.houseId)
   const info = await ctx.db
     .prepare(
-      `INSERT INTO cages (organization_id, farm_id, code, name, initial_hens, capacity, has_water_meter, active, sort_order, notes, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO cages (organization_id, farm_id, house_id, code, name, initial_hens, capacity, has_water_meter, active, sort_order, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       ctx.org,
       ctx.farm,
+      c.houseId ?? null,
       code,
       c.name.trim() || code,
       c.initialHens,
@@ -86,12 +96,14 @@ export async function updateCage(ctx: Ctx, id: number, c: CageInput, reason: str
     assert(!dup, 'cage_code_taken')
     // Live counts come from daily records; changing the starting flock after days exist would rewrite history.
     assert(before.initialHens === c.initialHens || !(await cageHasHistory(ctx, id)), 'initial_hens_locked')
+    const houseId = c.houseId === undefined ? before.houseId : c.houseId
+    await checkHouse(ctx, houseId)
     await ctx.db
       .prepare(
         `UPDATE cages SET code = ?, name = ?, initial_hens = ?, capacity = ?, has_water_meter = ?, active = ?,
-           sort_order = ?, notes = ? WHERE id = ? AND organization_id = ?`
+           sort_order = ?, notes = ?, house_id = ? WHERE id = ? AND organization_id = ?`
       )
-      .run(c.code.trim(), c.name.trim() || c.code.trim(), c.initialHens, c.capacity, c.hasWaterMeter ? 1 : 0, c.active ? 1 : 0, c.sortOrder, c.notes, id, ctx.org)
+      .run(c.code.trim(), c.name.trim() || c.code.trim(), c.initialHens, c.capacity, c.hasWaterMeter ? 1 : 0, c.active ? 1 : 0, c.sortOrder, c.notes, houseId ?? null, id, ctx.org)
     await audit(ctx, { action: 'update', entity: 'cage', entityId: id, reason, details: { before, after: c } })
   })()
 }
