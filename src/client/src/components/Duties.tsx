@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CheckCircle2, Circle, ClipboardCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { DUTIES, type Duty, type DutyTask, type UserRow } from '@shared/types'
+import type { Duty, DutyTask, UserRow } from '@shared/types'
 import { call } from '../lib/api'
 import { useApp, useLoad } from '../lib/app'
 import { Card, Modal, Notice } from './ui'
@@ -20,30 +20,27 @@ const DUTY_PAGE: Record<Duty, string> = {
   backup: '/backup'
 }
 
-/** Short text such as "6 of 11 duties · Cage 01, Cage 02". */
-export function useDutySummary() {
+/** Short text such as "Cage 01, Cage 02": the cages a user looks after (administrators: all). */
+export function useCageSummary() {
   const { t } = useApp()
   const { data: cages } = useLoad(() => call('cages.list', { includeInactive: true }), [])
-  return (u: Pick<UserRow, 'role' | 'duties' | 'cages'>) => {
-    if (u.role === 'admin') return t('duty.allAdmin')
-    const cageText = u.cages === null ? t('duty.allCages') : u.cages.map((id) => cages?.find((c) => c.id === id)?.name ?? id).join(', ') || t('common.none')
-    return `${t('duty.count', { count: u.duties.length, total: DUTIES.length })} · ${cageText}`
+  return (u: Pick<UserRow, 'role' | 'cages'>) => {
+    if (u.role === 'admin' || u.cages === null) return t('duty.allCages')
+    return u.cages.map((id) => cages?.find((c) => c.id === id)?.name ?? id).join(', ') || t('common.none')
   }
 }
 
-/** Administrator chooses what a user may do and which cages they look after. */
-export function DutiesDialog({ user, onClose }: { user: UserRow; onClose: () => void }) {
+/** Which cages a user looks after. (What they may do comes from their role.) */
+export function CagesDialog({ user, onClose }: { user: UserRow; onClose: () => void }) {
   const { t, toast, fail } = useApp()
   const { data: cages } = useLoad(() => call('cages.list', { includeInactive: false }), [])
-  const [duties, setDuties] = useState<Duty[]>(user.duties)
   const [allCages, setAllCages] = useState(user.cages === null)
   const [picked, setPicked] = useState<number[]>(user.cages ?? [])
-  const toggle = (d: Duty) => setDuties(duties.includes(d) ? duties.filter((x) => x !== d) : [...duties, d])
   const ok = allCages || picked.length > 0
   return (
     <Modal
       wide
-      title={`${t('duty.title')} — ${user.displayName}`}
+      title={`${t('duty.cages')} — ${user.displayName}`}
       onClose={onClose}
       footer={
         <>
@@ -55,7 +52,7 @@ export function DutiesDialog({ user, onClose }: { user: UserRow; onClose: () => 
             disabled={!ok}
             onClick={async () => {
               try {
-                await call('users.setDuties', { id: user.id, duties, cages: allCages ? null : picked })
+                await call('users.setCages', { id: user.id, cages: allCages ? null : picked })
                 toast('success', t('common.saved'))
                 onClose()
               } catch (e) {
@@ -69,29 +66,7 @@ export function DutiesDialog({ user, onClose }: { user: UserRow; onClose: () => 
       }
     >
       <div className="stack">
-        <Notice tone="info">{t('duty.hint')}</Notice>
-        <div>
-          <div className="row" style={{ marginBottom: 8 }}>
-            <h3 className="grow">{t('duty.jobs')}</h3>
-            <button className="btn sm" onClick={() => setDuties([...DUTIES])}>
-              {t('duty.selectAll')}
-            </button>
-            <button className="btn sm" onClick={() => setDuties([])}>
-              {t('duty.clear')}
-            </button>
-          </div>
-          <div className="duty-grid">
-            {DUTIES.map((d) => (
-              <label key={d} className={`duty ${duties.includes(d) ? 'done' : ''}`} style={{ cursor: 'pointer' }}>
-                <span className="check">
-                  <input type="checkbox" checked={duties.includes(d)} onChange={() => toggle(d)} />
-                  <strong>{t('duty.' + d)}</strong>
-                </span>
-                <span className="small muted">{t('duty.' + d + '.hint')}</span>
-              </label>
-            ))}
-          </div>
-        </div>
+        <Notice tone="info">{t('role.cagesHint')}</Notice>
         <div>
           <h3 style={{ marginBottom: 8 }}>{t('duty.cages')}</h3>
           <label className="check" style={{ marginBottom: 10 }}>

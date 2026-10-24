@@ -119,7 +119,9 @@ export async function makeFarm(opts: { db?: DB; name?: string; domain?: string }
   const org = await createOrganization(anon, setupInput({ farmName: opts.name ?? 'Test Farm', admin: { email: `admin@${domain}`, displayName: 'Admin', password: 'secret123' } }))
   const scope = { db, org: org.organizationId, farm: org.farmId, now: () => now }
   const adminCtx: Ctx = { ...scope, user: (await login(anon, `admin@${domain}`, 'secret123')).user }
-  await createUser(adminCtx, { email: `worker@${domain}`, displayName: 'Worker', password: 'worker123', role: 'operator' })
+  const roleId = async (where: string) => ((await db.prepare(`SELECT id FROM roles WHERE organization_id = ? AND ${where}`).get(org.organizationId)) as { id: number }).id
+  const roles = { admin: await roleId('is_admin = 1'), worker: await roleId("name = 'Farm Worker'") }
+  await createUser(adminCtx, { email: `worker@${domain}`, displayName: 'Worker', password: 'worker123', roleId: roles.worker })
   const workerCtx: Ctx = { ...scope, user: (await login(anon, `worker@${domain}`, 'worker123')).user }
   const cageIds = ((await db.prepare('SELECT id FROM cages WHERE farm_id = ? ORDER BY sort_order').all(org.farmId)) as { id: number }[]).map((r) => r.id)
   const feedId = ((await db.prepare("SELECT id FROM inventory_items WHERE organization_id = ? AND category='feed'").get(org.organizationId)) as { id: number }).id
@@ -131,6 +133,9 @@ export async function makeFarm(opts: { db?: DB; name?: string; domain?: string }
     farm: org.farmId,
     orgCode: org.organizationCode,
     domain,
+    roles,
+    /** Signs a user in again (after their role or cages changed): the server reloads them on every request. */
+    signIn: async (email: string, password: string): Promise<Ctx> => ({ ...scope, user: (await login(anon, email, password)).user }),
     admin: adminCtx,
     worker: workerCtx,
     cageIds,

@@ -307,10 +307,10 @@ export function CageSelect({ cages, value, onChange, allowAll, allowFarm }: { ca
 
 /** Loads the day for the working date and reports whether its records can be edited. */
 export function useDay(date: string) {
-  const { isAdmin } = useApp()
+  const { can } = useApp()
   const r = useLoad(() => call('days.overview', { date }), [date])
   const ov = r.data
-  const writable = !!ov && ov.dayId !== null && (ov.status !== 'closed' || (ov.amendmentOpen && isAdmin))
+  const writable = !!ov && ov.dayId !== null && (ov.status !== 'closed' || (ov.amendmentOpen && can('day.amend')))
   return { ...r, overview: ov, writable }
 }
 

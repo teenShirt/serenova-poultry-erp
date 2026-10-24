@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { formatDate, formatDateTime, formatNumber, translate, type Params } from '@shared/i18n'
 import type { AppStatus, Language } from '@shared/types'
+import type { Permission } from '@shared/permissions'
 import { ApiError, call, onDataChanged } from './api'
 
 interface Toast {
@@ -26,6 +27,8 @@ interface AppCtx {
   fail: (e: unknown) => void
   errorText: (e: unknown) => string
   isAdmin: boolean
+  /** Whether the signed-in user's role allows this (the server checks it again on every request) */
+  can: (p: Permission) => boolean
   dataVersion: number
 }
 
@@ -124,6 +127,7 @@ export function AppProvider({ initial, children }: { initial: AppStatus; childre
       fail,
       errorText,
       isAdmin: status.user?.role === 'admin',
+      can: (p) => !!status.user?.permissions.includes(p),
       dataVersion
     }),
     [status, lang, t, refreshStatus, workDate, toast, fail, errorText, dataVersion]

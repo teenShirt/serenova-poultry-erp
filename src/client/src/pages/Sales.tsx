@@ -13,7 +13,7 @@ import { Kpi } from '../components/Kpi'
 const TRAY = 30
 
 export function SalesPage() {
-  const { t, num, status, isAdmin, date } = useApp()
+  const { t, num, status, can, date } = useApp()
   const [days, setDays] = useState(30)
   const [tab, setTab] = useState<'dispatches' | 'unpaid' | 'store'>('dispatches')
   const [params, setParams] = useSearchParams()
@@ -141,7 +141,7 @@ export function SalesPage() {
                               <Banknote size={14} /> {t('sal.addPayment')}
                             </button>
                           )}
-                          {isAdmin && (
+                          {can('sales.cancel') && (
                             <button className="icon-btn" title={t('sal.cancel')} onClick={() => setCancel(d)}>
                               <Ban size={16} />
                             </button>
@@ -159,7 +159,7 @@ export function SalesPage() {
           <Card
             title={t('sal.adjustments')}
             actions={
-              isAdmin && (
+              can('sales.adjust_store') && (
                 <button className="btn" onClick={() => setAdjusting(true)}>
                   <Scale size={18} /> {t('sal.adjust')}
                 </button>

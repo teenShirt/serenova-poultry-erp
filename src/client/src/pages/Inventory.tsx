@@ -8,7 +8,7 @@ import { useApp, useLoad } from '../lib/app'
 import { Card, Empty, Field, Modal, Notice, NumInput, PageHeader, Seg, Tabs, nz } from '../components/ui'
 
 export function InventoryPage() {
-  const { t, num, isAdmin, date, workDate, status } = useApp()
+  const { t, num, can, date, workDate, status } = useApp()
   const [tab, setTab] = useState<'balances' | 'history' | 'batches'>('balances')
   const [category, setCategory] = useState<InventoryCategory | 'all'>('all')
   const cat = category === 'all' ? undefined : category
@@ -25,7 +25,7 @@ export function InventoryPage() {
           <Repeat size={18} />
           {t('inv.record')}
         </button>
-        {isAdmin && (
+        {can('inventory.manage_items') && (
           <button className="btn" onClick={() => setEditing('new')}>
             <Plus size={18} />
             {t('inv.addItem')}
@@ -92,7 +92,7 @@ export function InventoryPage() {
                           <button className="btn sm" onClick={() => setRecord(i)}>
                             {t('inv.record')}
                           </button>
-                          {isAdmin && (
+                          {can('inventory.manage_items') && (
                             <button className="icon-btn" title={t('common.edit')} onClick={() => setEditing(i)}>
                               <Pencil size={16} />
                             </button>
@@ -196,7 +196,7 @@ export function InventoryPage() {
 const USER_TYPES: TxnType[] = ['purchase', 'receipt', 'usage', 'issue', 'return', 'wastage', 'expired']
 
 function RecordTxn({ items, initial, onClose }: { items: InventoryBalance[]; initial: InventoryBalance | null; onClose: () => void }) {
-  const { t, num, toast, fail, isAdmin, workDate, status } = useApp()
+  const { t, num, toast, fail, can, workDate, status } = useApp()
   const [itemId, setItemId] = useState<number | null>(initial?.id ?? items[0]?.id ?? null)
   const [type, setType] = useState<TxnType>('purchase')
   const [quantity, setQuantity] = useState<number | null>(null)
@@ -211,7 +211,7 @@ function RecordTxn({ items, initial, onClose }: { items: InventoryBalance[]; ini
   const item = items.find((i) => i.id === itemId)
   const isMed = item?.category === 'medicine'
   const incoming = ['purchase', 'receipt', 'return', 'opening'].includes(type)
-  const types = isAdmin ? [...USER_TYPES, 'adjustment' as TxnType] : USER_TYPES
+  const types = can('inventory.adjust') ? [...USER_TYPES, 'adjustment' as TxnType] : USER_TYPES
   const ok =
     itemId !== null &&
     quantity !== null &&

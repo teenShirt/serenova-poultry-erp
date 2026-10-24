@@ -1,10 +1,11 @@
 import { daysBetween, isIsoDate, todayInTimezone } from '@shared/dates'
 import { round } from '@shared/calc'
 import type { InventoryBalance, InventoryBatch, InventoryCategory, InventoryItem, InventoryTxn, TxnType } from '@shared/types'
-import { type Ctx, requireAdmin, requireUser } from '../context'
+import { type Ctx, requireUser } from '../context'
 import { assert } from '../errors'
 import { audit } from './audit'
 import { getSettings } from './settings'
+import { requirePermission } from './roles'
 
 const itemCols = `id, category, name, unit, low_stock_threshold AS lowStockThreshold, active, notes`
 
@@ -61,12 +62,12 @@ export async function insertItemRaw(ctx: Ctx, i: ItemInput): Promise<number> {
 }
 
 export async function createItem(ctx: Ctx, i: ItemInput) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'inventory.manage_items')
   return ctx.db.transaction(async () => insertItemRaw(ctx, i))()
 }
 
 export async function updateItem(ctx: Ctx, id: number, i: ItemInput) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'inventory.manage_items')
   await ctx.db.transaction(async () => {
     const before = await getItem(ctx, id)
     assert(before.category === i.category, 'cannot_change_category')
@@ -172,7 +173,7 @@ export async function assertDateWritable(ctx: Ctx, date: string) {
     .get(ctx.org, ctx.farm, date)) as { status: string; amendment_open: number } | undefined
   if (d && d.status === 'closed') {
     assert(d.amendment_open, 'day_closed', { date })
-    requireAdmin(ctx)
+    requirePermission(ctx, 'day.amend')
   }
 }
 
@@ -214,7 +215,7 @@ export async function recordTxn(ctx: Ctx, t: TxnInput): Promise<number> {
   assert(isIsoDate(t.date), 'invalid_date')
   assert(t.quantity !== 0 && Number.isFinite(t.quantity), 'quantity_required')
   if (t.type === 'adjustment' || t.type === 'opening') {
-    requireAdmin(ctx)
+    requirePermission(ctx, 'inventory.adjust')
     assert(t.notes && t.notes.trim().length >= 3, 'reason_required')
   } else {
     assert(t.quantity > 0, 'quantity_positive')

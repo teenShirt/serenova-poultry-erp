@@ -1,5 +1,6 @@
 import type { DB } from './connection'
 import { addTenancy } from './tenancy-migration'
+import { ensureRoles } from '../services/roles'
 
 export interface Migration {
   version: number
@@ -482,6 +483,42 @@ CREATE TABLE sessions (
     version: 5,
     name: 'organizations and farms (multi-tenant), email sign-in',
     up: (db) => addTenancy(db)
+  },
+  {
+    version: 6,
+    name: 'organization roles and permissions',
+    up: async (db) => {
+      await db.exec(`
+CREATE TABLE roles (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  is_admin TINYINT NOT NULL DEFAULT 0 CHECK (is_admin IN (0,1)),
+  created_at VARCHAR(32) NOT NULL,
+  archived_at VARCHAR(32),
+  UNIQUE KEY ux_roles_name (organization_id, name),
+  UNIQUE KEY ux_roles_org_id (organization_id, id),
+  CONSTRAINT fk_roles_org FOREIGN KEY (organization_id) REFERENCES organizations(id)
+) ${T};
+
+CREATE TABLE role_permissions (
+  organization_id INT NOT NULL,
+  role_id INT NOT NULL,
+  permission VARCHAR(64) NOT NULL,
+  PRIMARY KEY (role_id, permission),
+  CONSTRAINT fk_role_permissions_role FOREIGN KEY (organization_id, role_id) REFERENCES roles(organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT fk_role_permissions_org FOREIGN KEY (organization_id) REFERENCES organizations(id)
+) ${T};
+
+-- What a user may do now comes from their role. The old role and duties columns stay for the
+-- conversion of older backups (see ensureRoles); role keeps mirroring whether the role is the administrator one.
+ALTER TABLE users ADD COLUMN role_id INT NULL AFTER role,
+  ADD CONSTRAINT fk_users_role FOREIGN KEY (organization_id, role_id) REFERENCES roles(organization_id, id);
+`)
+      const orgs = (await db.prepare('SELECT id FROM organizations').all()) as { id: number }[]
+      for (const o of orgs) await ensureRoles(db, o.id)
+    }
   }
 ]
 
@@ -490,6 +527,8 @@ export const DATA_TABLES = [
   'organizations',
   'farms',
   'app_settings',
+  'roles',
+  'role_permissions',
   'users',
   'cages',
   'farm_days',

@@ -34,7 +34,7 @@ export function DailyPage() {
 }
 
 function StartDay({ date, onStarted }: { date: string; onStarted: () => void }) {
-  const { t, num, isAdmin, toast, fail, status } = useApp()
+  const { t, num, can, toast, fail, status } = useApp()
   const { data: p } = useLoad(() => call('days.preview', { date }), [date])
   const [corr, setCorr] = useState<Record<number, { opening: number | null; reason: string }>>({})
   const [ack, setAck] = useState(false)
@@ -51,7 +51,7 @@ function StartDay({ date, onStarted }: { date: string; onStarted: () => void }) 
     .map(([cageId, c]) => ({ cageId: Number(cageId), opening: c.opening, reason: c.reason.trim() }))
     .filter((c) => c.opening !== null && c.opening !== p.cages.find((x) => x.cageId === c.cageId)?.carried)
   const correctionsValid = corrections.every((c) => c.reason.length >= 3)
-  const backfillBlocked = p.laterDayExists && !isAdmin
+  const backfillBlocked = p.laterDayExists && !can('day.backfill')
   const canStart = blocking.length === 0 && (!needAck || ack) && correctionsValid && !backfillBlocked && !busy
 
   const start = async () => {
@@ -89,8 +89,8 @@ function StartDay({ date, onStarted }: { date: string; onStarted: () => void }) 
                     <tr>
                       <th>{t('common.cage')}</th>
                       <th className="num">{t('day.carried')}</th>
-                      {isAdmin && <th className="num">{t('day.opening')}</th>}
-                      {isAdmin && <th>{t('common.reason')}</th>}
+                      {can('day.correct_opening') && <th className="num">{t('day.opening')}</th>}
+                      {can('day.correct_opening') && <th>{t('common.reason')}</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -103,12 +103,12 @@ function StartDay({ date, onStarted }: { date: string; onStarted: () => void }) 
                             <strong>{c.name}</strong>
                           </td>
                           <td className="num">{num(c.carried)}</td>
-                          {isAdmin && (
+                          {can('day.correct_opening') && (
                             <td style={{ width: 150 }}>
                               <NumInput value={v?.opening ?? c.carried} onChange={(o) => setCorr({ ...corr, [c.cageId]: { opening: o, reason: v?.reason ?? '' } })} ariaLabel={`${c.name} ${t('day.opening')}`} />
                             </td>
                           )}
-                          {isAdmin && (
+                          {can('day.correct_opening') && (
                             <td>
                               {changed && (
                                 <input
@@ -128,13 +128,13 @@ function StartDay({ date, onStarted }: { date: string; onStarted: () => void }) 
                     <tr>
                       <th>{t('common.total')}</th>
                       <th className="num">{num(totalCarried)}</th>
-                      {isAdmin && <th className="num">{num(totalOpening)}</th>}
-                      {isAdmin && <th />}
+                      {can('day.correct_opening') && <th className="num">{num(totalOpening)}</th>}
+                      {can('day.correct_opening') && <th />}
                     </tr>
                   </tfoot>
                 </table>
               </div>
-              {isAdmin && <div className="muted small">{t('day.correctionHint')}</div>}
+              {can('day.correct_opening') && <div className="muted small">{t('day.correctionHint')}</div>}
               <InventoryCarried preview={p} />
               {needAck && (
                 <label className="check">
@@ -176,7 +176,7 @@ function InventoryCarried({ preview }: { preview: StartDayPreview }) {
 }
 
 function DayReview({ overview: ov }: { overview: DayOverview }) {
-  const { t, num, isAdmin, toast, fail, dateTime } = useApp()
+  const { t, num, can, toast, fail, dateTime } = useApp()
   const [comment, setComment] = useState(ov.managerComment ?? '')
   const [confirmIssue, setConfirmIssue] = useState<DayIssue | null>(null)
   const [confirmGroup, setConfirmGroup] = useState<DayIssue[] | null>(null)
@@ -186,7 +186,7 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
   const [finishing, setFinishing] = useState(false)
   useEffect(() => setComment(ov.managerComment ?? ''), [ov.managerComment, ov.date])
 
-  const writable = ov.status !== 'closed' || (ov.amendmentOpen && isAdmin)
+  const writable = ov.status !== 'closed' || (ov.amendmentOpen && can('day.amend'))
   const cageName = (id: number | null) => (id === null ? t('common.farm') : (ov.cages.find((c) => c.cageId === id)?.name ?? ''))
   const blocking = ov.issues.filter((i) => i.severity !== 'info' && !i.confirmation)
   const unconfirmedMortality = ov.cages.filter((c) => !c.mortalityConfirmed).map((c) => c.cageId)
@@ -253,7 +253,7 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
                         {c.adjustment}
                       </span>
                     )}
-                    {isAdmin && writable && (
+                    {can('day.correct_opening') && writable && (
                       <button className="icon-btn" title={t('day.correction')} onClick={() => setCorrect({ cageId: c.cageId, name: c.name, opening: c.opening })}>
                         <Pencil size={14} />
                       </button>
@@ -329,7 +329,7 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
         {ov.issues.length === 0 || blocking.length === 0 ? (
           <Notice tone="good">{t('day.allClear')}</Notice>
         ) : null}
-        {writable && isAdmin && (
+        {writable && can('day.approve_issues') && (
           <div className="row mt">
             {Object.entries(
               ov.issues.filter((i) => i.confirmable && !i.confirmation).reduce<Record<string, DayIssue[]>>((g, i) => ({ ...g, [i.code]: [...(g[i.code] ?? []), i] }), {})
@@ -352,12 +352,12 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
                 {i.confirmation && <div className="sub">{t('day.confirmedBy', { by: i.confirmation.by, reason: i.confirmation.reason })}</div>}
                 {['production_drop', 'high_mortality', 'water_change'].includes(i.code) && <div className="sub">{t('issue.informational')}</div>}
               </div>
-              {writable && isAdmin && i.confirmable && !i.confirmation && (
+              {writable && can('day.approve_issues') && i.confirmable && !i.confirmation && (
                 <button className="btn sm" onClick={() => setConfirmIssue(i)}>
                   {t('day.confirmWithReason')}
                 </button>
               )}
-              {writable && isAdmin && i.confirmation && (
+              {writable && can('day.approve_issues') && i.confirmation && (
                 <button
                   className="btn sm ghost"
                   onClick={() => call('days.revokeConfirmation', { date: ov.date, cageId: i.cageId, key: i.key }).catch(fail)}
@@ -377,7 +377,7 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
 
       <Card title={t('day.managerComment')}>
         <div className="stack">
-          <textarea className="input" value={comment} disabled={!isAdmin || !writable} onChange={(e) => setComment(e.target.value)} maxLength={2000} />
+          <textarea className="input" value={comment} disabled={!can('day.comment') || !writable} onChange={(e) => setComment(e.target.value)} maxLength={2000} />
           <div className="row">
             <button className="btn" onClick={() => setPreview({ kind: 'day_open', date: ov.date })}>
               <Printer size={18} /> {t('day.openReport')}
@@ -386,7 +386,7 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
               <Printer size={18} /> {t('day.closeReport')}
             </button>
             <div className="grow" />
-            {isAdmin && writable && ov.status !== 'closed' && comment !== (ov.managerComment ?? '') && (
+            {can('day.comment') && writable && ov.status !== 'closed' && comment !== (ov.managerComment ?? '') && (
               <button
                 className="btn"
                 onClick={() =>
@@ -398,23 +398,23 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
                 {t('day.saveProgress')}
               </button>
             )}
-            {isAdmin && ov.status !== 'closed' && (
+            {can('day.close') && ov.status !== 'closed' && (
               <button className="btn primary big" disabled={blocking.length > 0} onClick={() => setClosing(true)} title={blocking.length ? t('err.day_has_open_issues', { count: blocking.length }) : ''}>
                 <Lock size={18} /> {t('day.closeButton')}
               </button>
             )}
-            {isAdmin && ov.status === 'closed' && !ov.amendmentOpen && (
+            {can('day.amend') && ov.status === 'closed' && !ov.amendmentOpen && (
               <button className="btn" onClick={() => setAmending(true)}>
                 <Unlock size={18} /> {t('day.amend')}
               </button>
             )}
-            {isAdmin && ov.amendmentOpen && (
+            {can('day.amend') && ov.amendmentOpen && (
               <button className="btn primary big" disabled={blocking.length > 0} onClick={() => setFinishing(true)}>
                 <Lock size={18} /> {t('day.finishAmend')}
               </button>
             )}
           </div>
-          {!isAdmin && ov.status !== 'closed' && <div className="muted small">{t('common.adminOnly')}</div>}
+          {!can('day.close') && ov.status !== 'closed' && <div className="muted small">{t('common.adminOnly')}</div>}
         </div>
       </Card>
 

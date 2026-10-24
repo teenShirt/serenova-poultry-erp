@@ -1,9 +1,10 @@
 import { addDays, dateRange } from '@shared/dates'
 import type { ActivitySummary, DbInfo } from '@shared/types'
-import { type Ctx, requireAdmin } from '../context'
+import { type Ctx } from '../context'
 import { currentSchemaVersion, DATA_TABLES } from '../db/migrations'
 import { audit } from './audit'
 import { foreignKeyProblems } from './backup'
+import { requirePermission } from './roles'
 
 /** Tables holding an organization's records (organizations and farms are counted separately). */
 const ORG_TABLES = DATA_TABLES.filter((t) => t !== 'organizations' && t !== 'farms')
@@ -13,7 +14,7 @@ const ORG_TABLES = DATA_TABLES.filter((t) => t !== 'organizations' && t !== 'far
  * last integrity check. Only this organization's records are counted.
  */
 export async function dbInfo(ctx: Ctx, location: string): Promise<DbInfo> {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'database.manage')
   const last = (await ctx.db
     .prepare('SELECT status, created_at AS createdAt, path FROM backup_runs WHERE organization_id = ? ORDER BY id DESC LIMIT 1')
     .get(ctx.org)) as DbInfo['lastBackup'] | undefined
@@ -63,7 +64,7 @@ export async function dbInfo(ctx: Ctx, location: string): Promise<DbInfo> {
 
 /** Checks the organization's tables with MySQL's CHECK TABLE and every link between its records, and records the result. */
 export async function checkDatabase(ctx: Ctx): Promise<{ ok: boolean; message: string }> {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'database.manage')
   const rows = (await ctx.db.query(`CHECK TABLE ${ORG_TABLES.join(', ')}`)) as { Table: string; Msg_type: string; Msg_text: string }[]
   const problems = rows.filter((r) => r.Msg_type === 'error' || (r.Msg_type === 'status' && r.Msg_text !== 'OK')).map((r) => `${r.Table}: ${r.Msg_text}`)
   problems.push(...(await foreignKeyProblems(ctx.db, ctx.org)))
@@ -74,14 +75,14 @@ export async function checkDatabase(ctx: Ctx): Promise<{ ok: boolean; message: s
 
 /** Refreshes MySQL's index statistics so queries keep choosing good plans as the data grows. */
 export async function optimizeDatabase(ctx: Ctx) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'database.manage')
   await ctx.db.query(`ANALYZE TABLE ${ORG_TABLES.join(', ')}`)
   await audit(ctx, { action: 'database_optimize', entity: 'database' })
 }
 
 /** Who has been changing what in the organization: changes and sign-ins per day, per user and per action. */
 export async function activitySummary(ctx: Ctx, from: string, to: string): Promise<ActivitySummary> {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'audit.view')
   const range = [ctx.org, from, addDays(to, 1)]
   const rows = (await ctx.db
     .prepare(

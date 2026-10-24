@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Check, ClipboardList, KeyRound, Pencil, Plus, Settings as SettingsIcon, ShieldCheck, ShieldQuestion, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { DutiesDialog, useDutySummary } from '../components/Duties'
-import { EGG_SESSIONS, type FarmSettings, type Role, type UserRow } from '@shared/types'
+import { CagesDialog, useCageSummary } from '../components/Duties'
+import { EGG_SESSIONS, type FarmSettings, type RoleRow, type UserRow } from '@shared/types'
+import { RolesCard } from '../components/Roles'
 import { call } from '../lib/api'
 import { useApp, useLoad } from '../lib/app'
 import { Card, ConfirmDialog, Field, Modal, Notice, NumInput, PageHeader, RecoveryCodeDialog, Tabs } from '../components/ui'
 
 export function SettingsPage() {
-  const { t, isAdmin } = useApp()
-  const [tab, setTab] = useState<'farm' | 'calc' | 'me'>(isAdmin ? 'farm' : 'me')
+  const { t, can } = useApp()
+  const manage = can('settings.manage')
+  const [tab, setTab] = useState<'farm' | 'calc' | 'me'>(manage ? 'farm' : 'me')
   const nav = useNavigate()
   return (
     <div className="page">
@@ -18,7 +20,7 @@ export function SettingsPage() {
         value={tab}
         onChange={setTab}
         tabs={[
-          ...(isAdmin
+          ...(manage
             ? [
                 { value: 'farm' as const, label: t('set.farm') },
                 { value: 'calc' as const, label: `${t('set.calc')} & ${t('set.alerts')}` }
@@ -29,7 +31,7 @@ export function SettingsPage() {
       />
       {tab === 'farm' && <FarmTab />}
       {tab === 'calc' && <CalcTab />}
-      {isAdmin && tab === 'farm' && (
+      {manage && tab === 'farm' && (
         <div className="mt">
           <Notice tone="info">
             <div className="row">
@@ -208,17 +210,23 @@ export function UsersTab() {
   const [editing, setEditing] = useState<UserRow | 'new' | null>(null)
   const [resetFor, setResetFor] = useState<UserRow | null>(null)
   const [codeFor, setCodeFor] = useState<UserRow | null>(null)
-  const [dutiesFor, setDutiesFor] = useState<UserRow | null>(null)
-  const dutySummary = useDutySummary()
+  const [cagesFor, setCagesFor] = useState<UserRow | null>(null)
+  const cageSummary = useCageSummary()
+  const { can } = useApp()
+  const { data: roleList } = useLoad(() => call('roles.list'), [])
+  const roles = (roleList ?? []).filter((r) => !r.archived)
+  const defaultRole = roles.find((r) => r.name === 'Farm Worker') ?? roles.find((r) => !r.isAdmin)
   const [shownCode, setShownCode] = useState<{ code: string; name: string } | null>(null)
   const [rejecting, setRejecting] = useState<UserRow | null>(null)
-  const [approveRole, setApproveRole] = useState<Record<number, Role>>({})
+  const [approveRole, setApproveRole] = useState<Record<number, number>>({})
   const pending = (users ?? []).filter((u) => u.pending)
   const accounts = (users ?? []).filter((u) => !u.pending)
 
   const approve = async (u: UserRow) => {
     try {
-      await call('users.approve', { id: u.id, role: approveRole[u.id] ?? 'operator' })
+      const roleId = approveRole[u.id] ?? defaultRole?.id
+      if (!roleId) return
+      await call('users.approve', { id: u.id, roleId })
       toast('success', t('common.saved'))
       await refreshStatus()
     } catch (e) {
@@ -241,10 +249,7 @@ export function UsersTab() {
                     <td className="nowrap">{dateTime(u.createdAt)}</td>
                     <td className="nowrap">
                       <span className="field-label">{t('set.approveAs')} </span>
-                      <select className="select" style={{ width: 'auto' }} value={approveRole[u.id] ?? 'operator'} onChange={(e) => setApproveRole({ ...approveRole, [u.id]: e.target.value as Role })}>
-                        <option value="operator">{t('auth.role.operator')}</option>
-                        <option value="admin">{t('auth.role.admin')}</option>
-                      </select>
+                      <RoleSelect roles={roles} value={approveRole[u.id] ?? defaultRole?.id ?? null} onChange={(id) => setApproveRole({ ...approveRole, [u.id]: id })} />
                     </td>
                     <td className="nowrap right">
                       <button className="btn sm primary" onClick={() => approve(u)}>
@@ -276,9 +281,9 @@ export function UsersTab() {
               <tr>
                 <th>{t('setup.displayName')}</th>
                 <th>{t('auth.email')}</th>
-                <th>{t('common.type')}</th>
+                <th>{t('role.label')}</th>
                 <th>{t('common.status')}</th>
-                <th>{t('duty.title')}</th>
+                <th>{t('duty.cages')}</th>
                 <th>{t('set.lastLogin')}</th>
                 <th />
               </tr>
@@ -290,13 +295,13 @@ export function UsersTab() {
                     <strong>{u.displayName}</strong>
                   </td>
                   <td>{u.email ?? <span className="badge bad">{t('set.noEmail')}</span>}</td>
-                  <td>{t('auth.role.' + u.role)}</td>
+                  <td>{u.roleName ?? '—'}</td>
                   <td>{u.active ? <span className="badge good">{t('common.active')}</span> : <span className="badge">{t('common.inactive')}</span>}</td>
-                  <td className="small">{dutySummary(u)}</td>
+                  <td className="small">{cageSummary(u)}</td>
                   <td>{dateTime(u.lastLoginAt)}</td>
                   <td className="nowrap">
                     {u.role !== 'admin' && (
-                      <button className="icon-btn" title={t('duty.title')} onClick={() => setDutiesFor(u)}>
+                      <button className="icon-btn" title={t('duty.cages')} onClick={() => setCagesFor(u)}>
                         <ClipboardList size={16} />
                       </button>
                     )}
@@ -317,9 +322,12 @@ export function UsersTab() {
           </table>
         </div>
       </Card>
-      {editing && <UserForm user={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onCode={(code, name) => setShownCode({ code, name })} />}
+      {can('roles.manage') && <RolesCard />}
+      {editing && (
+        <UserForm user={editing === 'new' ? null : editing} roles={roles} defaultRole={defaultRole ?? null} onClose={() => setEditing(null)} onCode={(code, name) => setShownCode({ code, name })} />
+      )}
       {resetFor && <ResetPassword user={resetFor} onClose={() => setResetFor(null)} />}
-      {dutiesFor && <DutiesDialog user={dutiesFor} onClose={() => setDutiesFor(null)} />}
+      {cagesFor && <CagesDialog user={cagesFor} onClose={() => setCagesFor(null)} />}
       {codeFor && (
         <ConfirmDialog
           title={`${t('set.newCodeFor')} — ${codeFor.displayName}`}
@@ -349,14 +357,40 @@ export function UsersTab() {
   )
 }
 
-function UserForm({ user, onClose, onCode }: { user: UserRow | null; onClose: () => void; onCode: (code: string, name: string) => void }) {
+/** A role picker: the organization's active roles. */
+function RoleSelect({ roles, value, onChange }: { roles: RoleRow[]; value: number | null; onChange: (id: number) => void }) {
+  return (
+    <select className="select" style={{ width: 'auto', minWidth: 180 }} value={value ?? ''} onChange={(e) => onChange(Number(e.target.value))}>
+      {value === null && <option value="">—</option>}
+      {roles.map((r) => (
+        <option key={r.id} value={r.id}>
+          {r.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function UserForm({
+  user,
+  roles,
+  defaultRole,
+  onClose,
+  onCode
+}: {
+  user: UserRow | null
+  roles: RoleRow[]
+  defaultRole: RoleRow | null
+  onClose: () => void
+  onCode: (code: string, name: string) => void
+}) {
   const { t, toast, fail } = useApp()
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [email, setEmail] = useState(user?.email ?? '')
-  const [role, setRole] = useState<Role>(user?.role ?? 'operator')
+  const [roleId, setRoleId] = useState<number | null>(user?.roleId ?? defaultRole?.id ?? null)
   const [active, setActive] = useState(user?.active ?? true)
   const [password, setPassword] = useState('')
-  const ok = email.includes('@') && (user ? displayName.trim().length > 0 : password.length >= 6)
+  const ok = email.includes('@') && roleId !== null && (user ? displayName.trim().length > 0 : password.length >= 6)
   return (
     <Modal
       title={user ? `${t('common.edit')} — ${user.displayName}` : t('set.addUser')}
@@ -371,9 +405,9 @@ function UserForm({ user, onClose, onCode }: { user: UserRow | null; onClose: ()
             disabled={!ok}
             onClick={async () => {
               try {
-                if (user) await call('users.update', { id: user.id, email: email.trim(), displayName, role, active })
+                if (user) await call('users.update', { id: user.id, email: email.trim(), displayName, roleId: roleId!, active })
                 else {
-                  const r = await call('users.create', { email: email.trim(), displayName: displayName.trim(), password, role })
+                  const r = await call('users.create', { email: email.trim(), displayName: displayName.trim(), password, roleId: roleId! })
                   // The new user's recovery code is shown once so the administrator can hand it over.
                   onCode(r.recoveryCode, displayName.trim() || email.trim())
                 }
@@ -396,11 +430,8 @@ function UserForm({ user, onClose, onCode }: { user: UserRow | null; onClose: ()
         <Field label={t('auth.email')}>
           <input className="input" type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
-        <Field label={t('common.type')}>
-          <select className="select" value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            <option value="operator">{t('auth.role.operator')}</option>
-            <option value="admin">{t('auth.role.admin')}</option>
-          </select>
+        <Field label={t('role.label')}>
+          <RoleSelect roles={roles} value={roleId} onChange={setRoleId} />
         </Field>
         {!user && (
           <Field label={t('auth.password')} hint={t('err.password_too_short')}>

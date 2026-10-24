@@ -14,9 +14,19 @@ import { AuditTab } from './Reports'
 type Tab = 'overview' | 'users' | 'database' | 'activity'
 
 export function AdminPage() {
-  const { t, isAdmin } = useApp()
-  const [tab, setTab] = useState<Tab>('overview')
-  if (!isAdmin) {
+  const { t, can } = useApp()
+  // Each tab needs its own permission; the overview combines them all.
+  const tabs = (
+    [
+      { value: 'overview', label: t('admin.overview'), ok: can('users.manage') && can('database.manage') && can('audit.view') },
+      { value: 'users', label: t('admin.users'), ok: can('users.manage') || can('roles.manage') },
+      { value: 'database', label: t('admin.database'), ok: can('database.manage') },
+      { value: 'activity', label: t('admin.activity'), ok: can('audit.view') }
+    ] as { value: Tab; label: string; ok: boolean }[]
+  ).filter((x) => x.ok)
+  const [chosen, setTab] = useState<Tab | null>(null)
+  const tab = chosen ?? tabs[0]?.value
+  if (!tab) {
     return (
       <div className="page">
         <Notice tone="warn">{t('common.adminOnly')}</Notice>
@@ -29,12 +39,7 @@ export function AdminPage() {
       <Tabs
         value={tab}
         onChange={setTab}
-        tabs={[
-          { value: 'overview', label: t('admin.overview') },
-          { value: 'users', label: t('admin.users') },
-          { value: 'database', label: t('admin.database') },
-          { value: 'activity', label: t('admin.activity') }
-        ]}
+        tabs={tabs}
       />
       {tab === 'overview' && <Overview onTab={setTab} />}
       {tab === 'users' && <UsersTab />}

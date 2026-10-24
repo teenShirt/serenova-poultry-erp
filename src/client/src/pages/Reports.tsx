@@ -9,7 +9,7 @@ import { CageBars, SERIES, TimeChart } from '../components/charts'
 import { ReportPreview } from '../components/ReportPreview'
 
 export function ReportsPage() {
-  const { t, isAdmin } = useApp()
+  const { t, can } = useApp()
   const [tab, setTab] = useState<'reports' | 'analytics' | 'audit'>('reports')
   return (
     <div className="page">
@@ -20,7 +20,7 @@ export function ReportsPage() {
         tabs={[
           { value: 'reports', label: t('rep.daily') + ' / ' + t('rep.period') },
           { value: 'analytics', label: t('rep.compare') },
-          ...(isAdmin ? [{ value: 'audit' as const, label: t('rep.audit') }] : [])
+          ...(can('audit.view') ? [{ value: 'audit' as const, label: t('rep.audit') }] : [])
         ]}
       />
       {tab === 'reports' && <ReportsTab />}

@@ -44,9 +44,9 @@ describe('signing in with an email address', () => {
   it('an email address can belong to only one account on the platform', async () => {
     const f = await makeFarm()
     const g = await makeFarm({ db: f.db, name: 'Other Farm', domain: 'other.farm' })
-    expect(await code(() => createUser(g.admin, { email: 'worker@test.farm', displayName: 'X', password: 'abcdef', role: 'operator' }))).toBe('email_taken')
-    expect(await code(() => updateUser(g.admin, { id: g.worker.user!.id, email: 'Worker@Test.Farm', displayName: 'W', role: 'operator', active: true }))).toBe('email_taken')
-    expect(await code(() => createUser(g.admin, { email: 'not-an-address', displayName: 'X', password: 'abcdef', role: 'operator' }))).toBe('invalid_email')
+    expect(await code(() => createUser(g.admin, { email: 'worker@test.farm', displayName: 'X', password: 'abcdef', roleId: g.roles.worker }))).toBe('email_taken')
+    expect(await code(() => updateUser(g.admin, { id: g.worker.user!.id, email: 'Worker@Test.Farm', displayName: 'W', roleId: g.roles.worker, active: true }))).toBe('email_taken')
+    expect(await code(() => createUser(g.admin, { email: 'not-an-address', displayName: 'X', password: 'abcdef', roleId: g.roles.worker }))).toBe('invalid_email')
   })
 
   it('a suspended organization cannot sign in', async () => {
@@ -66,8 +66,8 @@ describe('self sign-up', () => {
     const pending = (await listUsers(f.admin)).find((u) => u.email === 'nimal@test.farm')!
     expect(pending).toMatchObject({ username: 'nimal', pending: true, active: false, role: 'operator', hasRecoveryCode: true })
 
-    expect(await code(() => approveSignup(f.worker, pending.id, 'operator'))).toBe('admin_only')
-    await approveSignup(f.admin, pending.id, 'operator')
+    expect(await code(() => approveSignup(f.worker, pending.id, f.roles.worker))).toBe('no_permission')
+    await approveSignup(f.admin, pending.id, f.roles.worker)
     expect((await login(f.anon, 'nimal@test.farm', 'nimal123')).user).toMatchObject({ username: 'nimal', role: 'operator' })
     expect(await countPendingSignups(f.admin)).toBe(0)
   })
@@ -89,7 +89,7 @@ describe('self sign-up', () => {
 
   it('usernames for the audit history are unique within the organization', async () => {
     const f = await makeFarm()
-    await createUser(f.admin, { email: 'worker@elsewhere.org', displayName: 'Second worker', password: 'abcdef', role: 'operator' })
+    await createUser(f.admin, { email: 'worker@elsewhere.org', displayName: 'Second worker', password: 'abcdef', roleId: f.roles.worker })
     expect((await listUsers(f.admin)).map((u) => u.username).sort()).toEqual(['admin', 'worker', 'worker2'])
   })
 })
@@ -138,7 +138,7 @@ describe('password reset with recovery code', () => {
 
   it('users and administrators can issue a new code, which replaces the old one', async () => {
     const f = await makeFarm()
-    const { recoveryCode: created } = await createUser(f.admin, { email: 'ruwan@test.farm', displayName: 'Ruwan', password: 'ruwan123', role: 'operator' })
+    const { recoveryCode: created } = await createUser(f.admin, { email: 'ruwan@test.farm', displayName: 'Ruwan', password: 'ruwan123', roleId: f.roles.worker })
     const ruwan: Ctx = { ...f.admin, user: (await login(f.anon, 'ruwan@test.farm', 'ruwan123')).user }
     expect(await code(() => newOwnRecoveryCode(ruwan, 'wrong'))).toBe('wrong_password')
     const { recoveryCode: own } = await newOwnRecoveryCode(ruwan, 'ruwan123')

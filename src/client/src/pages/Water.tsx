@@ -20,7 +20,7 @@ interface Row {
 }
 
 export function WaterPage() {
-  const { t, num, workDate, toast, fail, isAdmin } = useApp()
+  const { t, num, workDate, toast, fail, can } = useApp()
   const { overview, writable } = useDay(workDate)
   const { data: records } = useLoad(() => call('water.list', { date: workDate }), [workDate])
   const { data: cageList } = useLoad(() => call('cages.list', { includeInactive: true }), [])
@@ -150,7 +150,7 @@ export function WaterPage() {
                           <input className="input" disabled={!writable} value={r.notes} onChange={(e) => upd(c.cageId, { notes: e.target.value })} />
                         </td>
                         <td className="nowrap">
-                          {isAdmin && writable && r.method === 'meter' && (
+                          {can('water.meter_reset') && writable && r.method === 'meter' && (
                             <button className="icon-btn" title={t('water.meterReset')} onClick={() => setReset({ cageId: c.cageId, name: c.name })}>
                               <Wrench size={16} />
                             </button>

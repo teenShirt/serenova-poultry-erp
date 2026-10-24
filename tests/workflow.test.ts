@@ -110,7 +110,7 @@ describe('starting a day', () => {
     const f = await makeFarm()
     const c = f.cageIds[0]
     expect(await code(() => startDay(f.worker, { date: D1, corrections: [{ cageId: c, opening: 990, reason: 'recount' }], acknowledgeWarnings: false }))).toBe(
-      'admin_only'
+      'no_permission'
     )
     expect(await code(() => startDay(f.admin, { date: D1, corrections: [{ cageId: c, opening: 990, reason: '' }], acknowledgeWarnings: false }))).toBe(
       'reason_required'
@@ -220,7 +220,7 @@ describe('feed and inventory', () => {
     const f = await makeFarm()
     await recordTxn(f.worker, { itemId: f.feedId, type: 'purchase', quantity: 1000, date: D1, batchNo: null, expiryDate: null, unitCost: 150, supplier: 'Mill', reference: 'INV-1', notes: null, cageId: null })
     expect(await itemBalance(f.worker, f.feedId)).toBe(6000)
-    expect(await code(() => recordTxn(f.worker, { itemId: f.feedId, type: 'adjustment', quantity: -5700, date: D1, batchNo: null, expiryDate: null, unitCost: null, supplier: null, reference: null, notes: 'stock count', cageId: null }))).toBe('admin_only')
+    expect(await code(() => recordTxn(f.worker, { itemId: f.feedId, type: 'adjustment', quantity: -5700, date: D1, batchNo: null, expiryDate: null, unitCost: null, supplier: null, reference: null, notes: 'stock count', cageId: null }))).toBe('no_permission')
     await recordTxn(f.admin, { itemId: f.feedId, type: 'adjustment', quantity: -5700, date: D1, batchNo: null, expiryDate: null, unitCost: null, supplier: null, reference: null, notes: 'stock count', cageId: null })
     expect((await balances(f.worker, 'feed'))[0]).toMatchObject({ balance: 300, isLow: true })
   })
@@ -233,7 +233,7 @@ describe('water', () => {
     const c = f.cageIds[0]
     expect(await code(() => saveWater(f.worker, water(D1, c, 1500, 1200), null))).toBe('meter_closing_below_opening')
     const reset = { ...water(D1, c, 1500, 20), meterReset: true, correctionReason: 'Meter replaced', litres: 240 }
-    expect(await code(() => saveWater(f.worker, reset, null))).toBe('admin_only')
+    expect(await code(() => saveWater(f.worker, reset, null))).toBe('no_permission')
     await saveWater(f.admin, reset, null)
     expect((await getOverview(f.worker, D1)).cages[0].water.litres).toBe(240)
   })
@@ -260,7 +260,7 @@ describe('closing and amending', () => {
     const codes = new Set(ov.issues.map((i) => i.code))
     for (const c of ['missing_eggs', 'missing_feed', 'missing_water', 'mortality_unconfirmed']) expect(codes.has(c)).toBe(true)
     expect(await code(() => closeDay(f.admin, D1, null))).toBe('day_has_open_issues')
-    expect(await code(() => closeDay(f.worker, D1, null))).toBe('admin_only')
+    expect(await code(() => closeDay(f.worker, D1, null))).toBe('no_permission')
 
     await completeDay(f.worker, D1, f.cageIds.slice(1), f.feedId)
     await confirmMortality(f.worker, D1, [f.cageIds[0]])
@@ -290,9 +290,9 @@ describe('closing and amending', () => {
     await closeDay(f.admin, D2, null)
 
     expect(await code(() => addMovement(f.worker, { date: D1, cageId: a, type: 'death', quantity: 5, reason: null, notes: null }))).toBe('day_closed')
-    expect(await code(() => startAmendment(f.worker, D1, 'Late death report'))).toBe('admin_only')
+    expect(await code(() => startAmendment(f.worker, D1, 'Late death report'))).toBe('no_permission')
     await startAmendment(f.admin, D1, 'Late death report from night shift')
-    expect(await code(() => addMovement(f.worker, { date: D1, cageId: a, type: 'death', quantity: 5, reason: null, notes: null }))).toBe('admin_only')
+    expect(await code(() => addMovement(f.worker, { date: D1, cageId: a, type: 'death', quantity: 5, reason: null, notes: null }))).toBe('no_permission')
     await addMovement(f.admin, { date: D1, cageId: a, type: 'death', quantity: 5, reason: null, notes: null })
     await confirmIssue(f.admin, D1, a, 'high_mortality', 'Reported late by night shift')
     await finishAmendment(f.admin, D1, null)

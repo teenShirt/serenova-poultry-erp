@@ -2,13 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { HashRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import {
   Bell,
-  Bird,
   BookOpen,
   Boxes,
   CalendarCheck,
   ChartColumn,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
+  Building2,
+  Leaf,
+  Menu as MenuIcon,
+  ClipboardList,
   DatabaseBackup,
   Droplets,
   Egg,
@@ -27,7 +31,8 @@ import {
   PackagePlus,
   type LucideIcon
 } from 'lucide-react'
-import type { AppStatus, Duty, Language } from '@shared/types'
+import type { AppStatus, Language } from '@shared/types'
+import type { Permission } from '@shared/permissions'
 import { translate } from '@shared/i18n'
 import { call } from './lib/api'
 import { AppProvider, useApp, useLoad } from './lib/app'
@@ -83,9 +88,22 @@ interface NavItem {
   to: string
   key: string
   icon: LucideIcon
-  /** Hidden for users without this duty */
-  duty?: Duty
-  adminOnly?: boolean
+  /** Hidden unless the user's role allows this */
+  perm?: Permission
+  /** Hidden unless the role allows at least one of these */
+  anyOf?: Permission[]
+}
+
+/** The admin portal is shown to anyone who may manage users, the database or read the activity history. */
+export const ADMIN_PERMISSIONS: Permission[] = ['users.manage', 'roles.manage', 'database.manage', 'audit.view']
+
+/** Icon of each menu group (the sidebar shows groups as expandable sections). */
+const GROUP_ICON: Record<string, LucideIcon> = {
+  'navg.overview': GitBranch,
+  'navg.daily': ClipboardList,
+  'navg.stores': Boxes,
+  'navg.farm': Warehouse,
+  'navg.system': Settings
 }
 
 const NAV: { group: string; items: NavItem[] }[] = [
@@ -100,51 +118,50 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'navg.daily',
     items: [
       { to: '/daily', key: 'nav.daily', icon: CalendarCheck },
-      { to: '/eggs', key: 'nav.eggs', icon: Egg, duty: 'eggs' },
-      { to: '/feed', key: 'nav.feed', icon: Wheat, duty: 'feed' },
-      { to: '/water', key: 'nav.water', icon: Droplets, duty: 'water' },
-      { to: '/mortality', key: 'nav.mortality', icon: TrendingDown, duty: 'flock' },
-      { to: '/medicine', key: 'nav.medicine', icon: Pill, duty: 'medicine' }
+      { to: '/eggs', key: 'nav.eggs', icon: Egg, perm: 'eggs.record' },
+      { to: '/feed', key: 'nav.feed', icon: Wheat, perm: 'feed.record' },
+      { to: '/water', key: 'nav.water', icon: Droplets, perm: 'water.record' },
+      { to: '/mortality', key: 'nav.mortality', icon: TrendingDown, perm: 'flock.record' },
+      { to: '/medicine', key: 'nav.medicine', icon: Pill, perm: 'medicine.record' }
     ]
   },
   {
     group: 'navg.stores',
     items: [
-      { to: '/purchases', key: 'nav.purchases', icon: PackagePlus, duty: 'purchases' },
-      { to: '/inventory', key: 'nav.inventory', icon: Boxes, duty: 'inventory' },
-      { to: '/sales', key: 'nav.sales', icon: Truck, duty: 'sales' }
+      { to: '/purchases', key: 'nav.purchases', icon: PackagePlus, perm: 'purchases.record' },
+      { to: '/inventory', key: 'nav.inventory', icon: Boxes, perm: 'inventory.record' },
+      { to: '/sales', key: 'nav.sales', icon: Truck, perm: 'sales.record' }
     ]
   },
   {
     group: 'navg.farm',
     items: [
       { to: '/cages', key: 'nav.cages', icon: Warehouse },
-      { to: '/reports', key: 'nav.reports', icon: ChartColumn, duty: 'reports' }
+      { to: '/reports', key: 'nav.reports', icon: ChartColumn, perm: 'reports.view' }
     ]
   },
   {
     group: 'navg.system',
     items: [
-      { to: '/admin', key: 'nav.admin', icon: ShieldCheck, adminOnly: true },
+      { to: '/admin', key: 'nav.admin', icon: ShieldCheck, anyOf: ADMIN_PERMISSIONS },
       { to: '/settings', key: 'nav.settings', icon: Settings },
-      { to: '/backup', key: 'nav.backup', icon: DatabaseBackup, duty: 'backup' }
+      { to: '/backup', key: 'nav.backup', icon: DatabaseBackup, perm: 'backup.create' }
     ]
   }
 ]
 
 /** Quick actions offered by the "New" menu and the search box (only those the user may do). */
-const QUICK: { to: string; key: string; icon: LucideIcon; duty?: Duty }[] = [
-  { to: '/eggs', key: 'quick.eggs', icon: Egg, duty: 'eggs' },
-  { to: '/mortality?new=1', key: 'quick.death', icon: TrendingDown, duty: 'flock' },
-  { to: '/feed', key: 'quick.feed', icon: Wheat, duty: 'feed' },
-  { to: '/purchases?new=1', key: 'quick.receipt', icon: PackagePlus, duty: 'purchases' },
-  { to: '/sales?new=1', key: 'quick.dispatch', icon: Truck, duty: 'sales' }
+const QUICK: { to: string; key: string; icon: LucideIcon; perm?: Permission }[] = [
+  { to: '/eggs', key: 'quick.eggs', icon: Egg, perm: 'eggs.record' },
+  { to: '/mortality?new=1', key: 'quick.death', icon: TrendingDown, perm: 'flock.record' },
+  { to: '/feed', key: 'quick.feed', icon: Wheat, perm: 'feed.record' },
+  { to: '/purchases?new=1', key: 'quick.receipt', icon: PackagePlus, perm: 'purchases.record' },
+  { to: '/sales?new=1', key: 'quick.dispatch', icon: Truck, perm: 'sales.record' }
 ]
 
 function useVisibleNav() {
-  const { status, isAdmin } = useApp()
-  const duties = status.user?.duties
-  const can = (i: { duty?: Duty; adminOnly?: boolean }) => (i.adminOnly ? isAdmin : !i.duty || isAdmin || !duties || duties.includes(i.duty))
+  const { can: allowed } = useApp()
+  const can = (i: { perm?: Permission; anyOf?: Permission[] }) => (i.anyOf ? i.anyOf.some(allowed) : !i.perm || allowed(i.perm))
   return {
     groups: NAV.map((g) => ({ ...g, items: g.items.filter(can) })).filter((g) => g.items.length),
     quick: QUICK.filter(can)
@@ -184,6 +201,24 @@ function Shell() {
   const [palette, setPalette] = useState(false)
   const { groups } = useVisibleNav()
   const user = status.user!
+  const { pathname } = useLocation()
+  const [openGroups, setOpenGroups] = useState<string[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem('pfm.navOpen') ?? '[]') as unknown
+      return Array.isArray(v) ? v.map(String) : []
+    } catch {
+      return []
+    }
+  })
+  const toggleGroup = (g: string) => {
+    const next = openGroups.includes(g) ? openGroups.filter((x) => x !== g) : [...openGroups, g]
+    setOpenGroups(next)
+    try {
+      localStorage.setItem('pfm.navOpen', JSON.stringify(next))
+    } catch {
+      /* preference only */
+    }
+  }
 
   useEffect(() => {
     try {
@@ -214,25 +249,41 @@ function Shell() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-logo">
-            <Bird size={22} />
+            <Leaf size={26} />
           </div>
           <div className="brand-text">
-            {t('app.name')}
-            <small>{status.settings.farmName}</small>
+            Serenova Tech
+            <small>{t('brand.platform')}</small>
           </div>
         </div>
         <nav className="nav" aria-label={t('app.name')}>
-          {groups.map((g) => (
-            <div key={g.group} className="nav-group">
-              <div className="nav-group-label">{t(g.group)}</div>
-              {g.items.map((n) => (
-                <NavLink key={n.to} to={n.to} end={n.to === '/'} title={t(n.key)}>
-                  <n.icon size={19} />
-                  <span>{t(n.key)}</span>
-                </NavLink>
-              ))}
-            </div>
-          ))}
+          <NavLink to="/" end title={t('nav.dashboard')} className="nav-top">
+            <LayoutDashboard size={19} />
+            <span>{t('nav.dashboard')}</span>
+          </NavLink>
+          {groups.map((g) => {
+            const items = g.items.filter((n) => n.to !== '/')
+            if (!items.length) return null
+            const Icon = GROUP_ICON[g.group] ?? ClipboardList
+            const active = items.some((n) => (n.to === '/' ? pathname === '/' : pathname.startsWith(n.to.split('?')[0])))
+            const open = active || openGroups.includes(g.group)
+            return (
+              <div key={g.group} className={`nav-group ${open ? 'open' : ''} ${active ? 'has-active' : ''}`}>
+                <button className="nav-group-head" onClick={() => toggleGroup(g.group)} aria-expanded={open} title={t(g.group)}>
+                  <Icon size={19} />
+                  <span>{t(g.group)}</span>
+                  <ChevronDown size={16} className="chev" />
+                </button>
+                {open &&
+                  items.map((n) => (
+                    <NavLink key={n.to} to={n.to} end={n.to === '/'} title={t(n.key)}>
+                      <n.icon size={17} />
+                      <span>{t(n.key)}</span>
+                    </NavLink>
+                  ))}
+              </div>
+            )
+          })}
         </nav>
         <div className="sidebar-foot">
           <LanguageSwitch dark />
@@ -244,7 +295,10 @@ function Shell() {
             {collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
             <span>{t('nav.collapse')}</span>
           </button>
-          <div className="side-version">{t('app.version', { version: status.version })}</div>
+          <div className="side-status">
+            <i /> {t('brand.online')}
+            <span className="grow" />v{status.version}
+          </div>
         </div>
       </aside>
       <main className="main">
@@ -263,7 +317,7 @@ function Shell() {
             </button>
           </div>
         )}
-        <TopBar onSearch={() => setPalette(true)} onLogout={logout} userName={user.displayName} role={user.role} />
+        <TopBar onSearch={() => setPalette(true)} onLogout={logout} onMenu={() => setCollapsed(!collapsed)} userName={user.displayName} role={user.roleName ?? t('auth.role.' + user.role)} />
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/flow" element={<FlowPage />} />
@@ -302,7 +356,7 @@ function Shell() {
   )
 }
 
-function TopBar({ onSearch, onLogout, userName, role }: { onSearch: () => void; onLogout: () => void; userName: string; role: string }) {
+function TopBar({ onSearch, onLogout, onMenu, userName, role }: { onSearch: () => void; onLogout: () => void; onMenu: () => void; userName: string; role: string }) {
   const { t, status } = useApp()
   const nav = useNavigate()
   const { quick } = useVisibleNav()
@@ -327,6 +381,9 @@ function TopBar({ onSearch, onLogout, userName, role }: { onSearch: () => void; 
 
   return (
     <header className="topbar no-print" ref={ref}>
+      <button className="icon-btn" onClick={onMenu} aria-label={t('nav.collapse')} title={t('nav.collapse')}>
+        <MenuIcon size={22} />
+      </button>
       <button className="search-trigger" onClick={onSearch}>
         <Search size={17} />
         <span>{t('top.search')}</span>
@@ -354,6 +411,12 @@ function TopBar({ onSearch, onLogout, userName, role }: { onSearch: () => void; 
               ))}
             </div>
           )}
+        </div>
+      )}
+      {status.farm && (
+        <div className="farm-chip" title={status.organization?.name}>
+          <Building2 size={18} />
+          <span>{status.farm.name}</span>
         </div>
       )}
       <div className="menu-anchor">
@@ -389,7 +452,7 @@ function TopBar({ onSearch, onLogout, userName, role }: { onSearch: () => void; 
           <span className="avatar">{initials}</span>
           <span className="user-chip-text">
             <strong>{userName}</strong>
-            <small>{t('auth.role.' + role)}</small>
+            <small>{role}</small>
           </span>
         </button>
         {menu === 'user' && (

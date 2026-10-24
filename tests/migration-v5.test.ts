@@ -69,6 +69,25 @@ INSERT INTO farms (id, organization_id, code, name, created_at) VALUES (2, 2, 'm
     await db.prepare("INSERT INTO users (organization_id, username, display_name, password_hash, role, created_at) VALUES (2, 'admin', 'A', 'x', 'admin', 'x')").run()
   })
 
+  it('gives existing accounts roles matching what they could do (schema v6)', async () => {
+    const db = await singleFarmInstallation()
+    await db.exec(`UPDATE users SET duties = '["eggs","flock"]', assigned_cages = '[1]' WHERE id = 2;
+INSERT INTO users (id, username, display_name, password_hash, role, active, created_at) VALUES (3, 'helper', 'Helper', 'x', 'operator', 1, 'x');`)
+    await migrate(db)
+    const users = await db
+      .prepare('SELECT u.username, r.name, r.is_admin, u.assigned_cages FROM users u JOIN roles r ON r.id = u.role_id ORDER BY u.id')
+      .all()
+    expect(users).toEqual([
+      { username: 'admin', name: 'Organization Admin', is_admin: 1, assigned_cages: null },
+      { username: 'worker', name: 'Worker (duties)', is_admin: 0, assigned_cages: '[1]' },
+      { username: 'helper', name: 'Farm Worker', is_admin: 0, assigned_cages: null }
+    ])
+    const limited = (await db
+      .prepare("SELECT p.permission FROM role_permissions p JOIN roles r ON r.id = p.role_id WHERE r.name = 'Worker (duties)' ORDER BY p.permission")
+      .all()) as { permission: string }[]
+    expect(limited.map((p) => p.permission)).toEqual(['eggs.record', 'flock.record'])
+  })
+
   it('creates an empty schema directly on a new installation', async () => {
     const db = await openTestDb()
     expect(await db.prepare('SELECT COUNT(*) AS n FROM organizations').get()).toEqual({ n: 0 })

@@ -7,14 +7,14 @@ import { useApp, useLoad } from '../lib/app'
 import { Card, Field, Modal, Notice, NumInput, PageHeader, nz } from '../components/ui'
 
 export function CagesPage() {
-  const { t, num, isAdmin, status } = useApp()
+  const { t, num, can, status } = useApp()
   const { data: cages } = useLoad(() => call('cages.list', { includeInactive: true }), [])
   const { data: today } = useLoad(() => call('days.overview', { date: status.today }), [status.today])
   const [editing, setEditing] = useState<(Cage & { hasHistory: boolean }) | 'new' | null>(null)
   return (
     <div className="page">
       <PageHeader title={t('cage.title')} icon={<Warehouse size={26} color="var(--brand)" />}>
-        {isAdmin && (
+        {can('cages.manage') && (
           <button className="btn primary" onClick={() => setEditing('new')}>
             <Plus size={18} />
             {t('cage.add')}
@@ -56,7 +56,7 @@ export function CagesPage() {
                     <td>{c.active ? <span className="badge good">{t('common.active')}</span> : <span className="badge">{t('common.inactive')}</span>}</td>
                     <td className="muted">{c.notes}</td>
                     <td>
-                      {isAdmin && (
+                      {can('cages.manage') && (
                         <button className="icon-btn" title={t('common.edit')} onClick={() => setEditing(c)}>
                           <Pencil size={16} />
                         </button>

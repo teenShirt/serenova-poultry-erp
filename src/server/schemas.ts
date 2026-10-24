@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { isIsoDate } from '@shared/dates'
-import { DUTIES, EGG_SESSIONS, INVENTORY_CATEGORIES, TXN_TYPES } from '@shared/types'
+import { EGG_SESSIONS, INVENTORY_CATEGORIES, TXN_TYPES } from '@shared/types'
 import type { ApiMethod } from '@shared/api'
+import { PERMISSIONS } from '@shared/permissions'
 
 /** Input schemas for every API method. Unknown keys are stripped; wrong types are rejected. */
 const date = z.string().refine(isIsoDate, 'date')
@@ -12,7 +13,6 @@ const text = (max = 500) => z.string().max(max)
 const optText = (max = 500) => z.string().max(max).nullable()
 const time = z.string().regex(/^\d{2}:\d{2}$/).nullable()
 const none = z.unknown().optional()
-const role = z.enum(['admin', 'operator'])
 const lang = z.enum(['en', 'si'])
 const category = z.enum(INVENTORY_CATEGORIES)
 const range = z.object({ from: date, to: date, cageId: id.nullable().optional() })
@@ -107,10 +107,13 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
   'auth.resetWithCode': z.object({ email: text(255), recoveryCode: text(40), newPassword: text(200) }),
   'auth.newRecoveryCode': z.object({ password: text(200) }),
   'users.list': none,
-  'users.create': z.object({ email: text(255), displayName: text(80), password: text(200), role }),
-  'users.update': z.object({ id, email: text(255), displayName: text(80), role, active: z.boolean() }),
+  'users.create': z.object({ email: text(255), displayName: text(80), password: text(200), roleId: id }),
+  'users.update': z.object({ id, email: text(255), displayName: text(80), roleId: id, active: z.boolean() }),
+  'roles.list': none,
+  'roles.save': z.object({ id: id.nullable(), name: text(100), description: optText(500), permissions: z.array(z.enum(PERMISSIONS)).max(100) }),
+  'roles.archive': z.object({ id }),
   'users.resetPassword': z.object({ id, password: text(200) }),
-  'users.approve': z.object({ id, role }),
+  'users.approve': z.object({ id, roleId: id }),
   'users.reject': z.object({ id }),
   'users.newRecoveryCode': z.object({ id }),
 
@@ -250,7 +253,7 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
   'reports.recent': none,
 
   'duties.mine': z.object({ date }),
-  'users.setDuties': z.object({ id, duties: z.array(z.enum(DUTIES)).max(20), cages: z.array(id).max(500).nullable() }),
+  'users.setCages': z.object({ id, cages: z.array(id).max(500).nullable() }),
 
   'parties.list': z.object({ kind: z.enum(['supplier', 'customer']) }),
   'parties.saveSupplier': partyInput,

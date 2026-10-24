@@ -13,11 +13,11 @@ import { AppError } from './errors'
 import { reportSpecSchema } from './schemas'
 import { SESSION_COOKIE, Sessions, type Session } from './sessions'
 import { RestoreTokens } from './uploads'
-import { requireAdmin } from './context'
 import { checkAccess } from './services/duties'
 import { getSettings } from './services/settings'
 import { applyRetention, createBackup, inspectBackup, isDesktopBackup, lastBackup } from './services/backup'
 import { renderXlsx } from './reports/render'
+import { requirePermission } from './services/roles'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 // Works both from the source tree (src/server) and from the build (dist/server).
@@ -136,6 +136,7 @@ export async function createServer(cfg: ServerConfig) {
     if (!spec.success) throw new AppError('invalid_input', { field: 'spec' })
     const file = await withSignedIn(req, res, async (ctx) => {
       await checkAccess(ctx, 'reports.preview', spec.data)
+      requirePermission(ctx, 'reports.export')
       const model = await buildReport(ctx, spec.data)
       const data = await renderXlsx(model, (await getSettings(ctx)).language)
       await recordReport(ctx, spec.data, 'xlsx', `${model.fileStem}.xlsx`)
@@ -150,7 +151,7 @@ export async function createServer(cfg: ServerConfig) {
   // administrators may download it; whole-database backups never leave the server this way.
   app.get('/api/backup/download/:id', async (req, res) => {
     const file = await withSignedIn(req, res, async (ctx) => {
-      requireAdmin(ctx)
+      requirePermission(ctx, 'backup.restore')
       if (ctx.mode === 'demo') throw new AppError('demo_mode_blocked')
       const row = (await ctx.db
         .prepare("SELECT path FROM backup_runs WHERE id = ? AND organization_id = ? AND status = 'ok'")
@@ -169,7 +170,7 @@ export async function createServer(cfg: ServerConfig) {
   app.post('/api/backup/upload', sameOrigin, express.raw({ type: () => true, limit: `${cfg.maxUploadMb}mb` }), async (req, res) => {
     const name = String(req.query['name'] ?? 'backup').slice(0, 200)
     const out = await withSignedIn(req, res, async (ctx) => {
-      requireAdmin(ctx)
+      requirePermission(ctx, 'backup.restore')
       if (ctx.mode === 'demo') throw new AppError('demo_mode_blocked')
       const tmp = path.join(os.tmpdir(), `pfm-upload-${randomUUID()}`)
       fs.writeFileSync(tmp, req.body as Buffer)

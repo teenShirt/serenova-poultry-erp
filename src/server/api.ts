@@ -4,7 +4,7 @@ import type { Api, ApiMethod, ApiResponse, ReportSpec } from '@shared/api'
 import { API_KIND } from '@shared/api'
 import { addDays, todayInTimezone } from '@shared/dates'
 import type { AppStatus, SessionUser } from '@shared/types'
-import { requireAdmin, requireUser, type AnonCtx, type Ctx } from './context'
+import { requireUser, type AnonCtx, type Ctx } from './context'
 import type { ServerConfig } from './config'
 import type { Databases, Mode } from './databases'
 import { AppError } from './errors'
@@ -27,7 +27,8 @@ import { DEMO_USERS } from './services/demo'
 import { createBackup, lastBackup, listBackupRuns, restoreOrganization } from './services/backup'
 import { dayReport, periodReport, type ReportModel } from './reports/model'
 import { renderHtml } from './reports/render'
-import { accessFromRow, checkAccess, dutyTasks, setUserDuties } from './services/duties'
+import { checkAccess, dutyTasks, setUserCages } from './services/duties'
+import { archiveRole, hasPermission, listRoles, saveRole, requirePermission } from './services/roles'
 import { listParties, saveParty } from './services/parties'
 import { cancelReceipt, createReceipt, listReceipts } from './services/purchases'
 import * as sales from './services/sales'
@@ -107,26 +108,26 @@ export async function loadSessionUser(ctx: Pick<Ctx, 'db'>, userId: number | nul
   if (!userId || !orgId) return null
   const row = (await ctx.db
     .prepare(
-      `SELECT u.id, u.username, u.email, u.display_name, u.role, u.active, u.pending, u.duties, u.assigned_cages, o.status AS org_status
+      `SELECT u.id, u.organization_id, u.username, u.email, u.display_name, u.role_id, u.active, u.pending, u.assigned_cages, o.status AS org_status
        FROM users u JOIN organizations o ON o.id = u.organization_id WHERE u.id = ? AND u.organization_id = ?`
     )
     .get(userId, orgId)) as
     | {
         id: number
+        organization_id: number
         username: string
         email: string | null
         display_name: string
-        role: 'admin' | 'operator'
+        role_id: number | null
         active: number
         pending: number
-        duties: string | null
         assigned_cages: string | null
         org_status: string
       }
     | undefined
   if (!row || !row.active || row.pending || !row.email || row.org_status !== 'active') return null
-  const access = accessFromRow(row)
-  return { id: row.id, username: row.username, email: row.email, displayName: row.display_name, role: row.role, duties: access.duties, cages: access.cages }
+  // The role is read afresh too: a changed or archived role takes effect on the next request.
+  return auth.toSessionUser(ctx, row)
 }
 
 /** The farm a session works on: the one it chose, if it is still an active farm of the organization, else the first one. */
@@ -160,7 +161,7 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
       dataDir: dbs.location(ctx.mode),
       today: scoped ? await days.farmToday(scoped) : todayInTimezone(DEFAULT_SETTINGS.timezone, ctx.now()),
       backupWarning: lastAuto && lastAuto.status === 'failed' ? lastAuto.message : null,
-      pendingSignups: scoped && scoped.user?.role === 'admin' ? await auth.countPendingSignups(scoped) : 0
+      pendingSignups: scoped && hasPermission(scoped.user, 'users.manage') ? await auth.countPendingSignups(scoped) : 0
     }
   }
 
@@ -230,13 +231,16 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     'users.create': (u, ctx) => auth.createUser(ctx, u),
     'users.update': (u, ctx) => auth.updateUser(ctx, u),
     'users.resetPassword': ({ id, password }, ctx) => auth.resetPassword(ctx, id, password),
-    'users.approve': ({ id, role }, ctx) => auth.approveSignup(ctx, id, role),
+    'users.approve': ({ id, roleId }, ctx) => auth.approveSignup(ctx, id, roleId),
+    'roles.list': (_, ctx) => listRoles(ctx),
+    'roles.save': (r, ctx) => saveRole(ctx, r),
+    'roles.archive': ({ id }, ctx) => archiveRole(ctx, id),
     'users.reject': ({ id }, ctx) => auth.rejectSignup(ctx, id),
     'users.newRecoveryCode': ({ id }, ctx) => auth.adminNewRecoveryCode(ctx, id),
 
     'settings.get': (_, ctx) => getSettings(ctx),
     'settings.save': async (patch, ctx) => {
-      requireAdmin(ctx)
+      requirePermission(ctx, 'settings.manage')
       await ctx.db.transaction(async () => {
         const changed = await saveSettings(ctx, patch)
         if (Object.keys(changed).length) await audit(ctx, { action: 'update', entity: 'settings', details: changed })
@@ -304,7 +308,7 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
 
     'analytics.dashboard': async ({ date }, ctx) => {
       const d = await analytics.dashboard(ctx, date, ctx.mode === 'demo', (await status(ctx)).backupWarning)
-      const pending = ctx.user?.role === 'admin' ? await auth.countPendingSignups(ctx) : 0
+      const pending = hasPermission(ctx.user, 'users.manage') ? await auth.countPendingSignups(ctx) : 0
       if (pending > 0) d.alerts.unshift({ code: 'pending_signups', severity: 'info', params: { count: pending } })
       return d
     },
@@ -312,7 +316,7 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     'analytics.comparison': ({ from, to }, ctx) => analytics.cageComparison(ctx, from, to),
 
     'audit.list': (f, ctx) => {
-      requireAdmin(ctx)
+      requirePermission(ctx, 'audit.view')
       return listAudit(ctx, f)
     },
 
@@ -335,7 +339,7 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
         .all()) as Api['reports.recent']['out'],
 
     'duties.mine': ({ date }, ctx) => dutyTasks(ctx, date),
-    'users.setDuties': ({ id, duties, cages }, ctx) => setUserDuties(ctx, id, duties, cages),
+    'users.setCages': ({ id, cages }, ctx) => setUserCages(ctx, id, cages),
 
     'parties.list': ({ kind }, ctx) => listParties(ctx, kind),
     'parties.saveSupplier': (p, ctx) => saveParty(ctx, 'supplier', p),
@@ -376,7 +380,7 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     },
     'backup.restore': async ({ token }, ctx) => {
       if (ctx.mode === 'demo') throw new AppError('demo_mode_blocked')
-      requireAdmin(ctx)
+      requirePermission(ctx, 'backup.restore')
       const upload = restoreTokens.take(token, ctx.user!.id)
       if (!upload?.data) throw new AppError('file_not_allowed')
       try {

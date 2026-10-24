@@ -1,12 +1,13 @@
 import { round } from '@shared/calc'
 import { addDays, dateRange, isIsoDate } from '@shared/dates'
 import type { EggDispatch, EggStock, EggStoreAdjustment, SalesDay } from '@shared/types'
-import { type Ctx, requireAdmin, requireUser } from '../context'
+import { type Ctx, requireUser } from '../context'
 import { AppError, assert } from '../errors'
 import { audit } from './audit'
 import { farmToday } from './days'
 import { assertDateWritable } from './inventory'
 import { nextNumber } from './purchases'
+import { requirePermission } from './roles'
 
 /**
  * Egg store stock is never typed in. It is always:
@@ -113,7 +114,7 @@ export async function addPayment(ctx: Ctx, p: { dispatchId: number; date: string
 
 /** Cancels a dispatch entered by mistake (administrator, with a reason); the eggs return to the store. */
 export async function cancelDispatch(ctx: Ctx, id: number, reason: string) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'sales.cancel')
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const d = (await ctx.db.prepare('SELECT * FROM egg_dispatches WHERE id = ? AND organization_id = ?').get(id, ctx.org)) as { dispatch_date: string } | undefined
@@ -126,7 +127,7 @@ export async function cancelDispatch(ctx: Ctx, id: number, reason: string) {
 
 /** Breakage in the store, opening stock or a counted difference (administrator; signed quantity). */
 export async function adjustEggStore(ctx: Ctx, a: { date: string; grade: 'good' | 'cracked'; quantity: number; reason: string }) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'sales.adjust_store')
   assert(isIsoDate(a.date) && a.date <= await farmToday(ctx), 'invalid_date')
   assert(Number.isInteger(a.quantity) && a.quantity !== 0, 'quantity_required')
   assert(a.reason.trim().length >= 3, 'reason_required')

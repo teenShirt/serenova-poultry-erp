@@ -4,9 +4,10 @@ import type { Ctx } from '../src/server/context'
 import { confirmMortality, startDay } from '../src/server/services/days'
 import { saveEggs } from '../src/server/services/eggs'
 import { saveFeed } from '../src/server/services/feed'
-import { itemBalance } from '../src/server/services/inventory'
-import { checkAccess, dutyTasks, setUserDuties } from '../src/server/services/duties'
-import { listUsers, login } from '../src/server/services/auth'
+import { itemBalance, recordTxn } from '../src/server/services/inventory'
+import { checkAccess, dutyTasks, setUserCages } from '../src/server/services/duties'
+import { archiveRole, saveRole } from '../src/server/services/roles'
+import { createUser, listUsers, resetPassword, updateUser } from '../src/server/services/auth'
 import { saveParty } from '../src/server/services/parties'
 import { cancelReceipt, createReceipt, listReceipts } from '../src/server/services/purchases'
 import { addPayment, adjustEggStore, cancelDispatch, createDispatch, eggStock, listDispatches, outstandingTotal, salesSeries } from '../src/server/services/sales'
@@ -54,18 +55,20 @@ const dispatch = (customerId: number, goodQty: number, extra: Partial<Parameters
   ...extra
 })
 
-describe('duties and cage responsibility', () => {
-  it('limits a worker to the duties and cages the administrator assigned', async () => {
+describe('roles, permissions and cage responsibility', () => {
+  it("limits a worker to their role's permissions and the cages the administrator assigned", async () => {
     const f = await makeFarm()
     await startDay(f.admin, { date: D1, corrections: [], acknowledgeWarnings: false })
     const [c1, c2] = f.cageIds
-    await setUserDuties(f.admin, f.worker.user!.id, ['eggs', 'flock'], [c1])
-    const w = f.worker
+    const collector = await saveRole(f.admin, { id: null, name: 'Egg collector', description: null, permissions: ['eggs.record', 'flock.record'] })
+    await updateUser(f.admin, { id: f.worker.user!.id, email: 'worker@test.farm', displayName: 'Worker', roleId: collector, active: true })
+    await setUserCages(f.admin, f.worker.user!.id, [c1])
+    const w = await f.signIn('worker@test.farm', 'worker123')
     // Allowed: eggs for own cage
     expect(await code(() => checkAccess(w, 'eggs.save', { cageId: c1 }))).toBe('no_error')
     // Not their cage
     expect(await code(() => checkAccess(w, 'eggs.save', { cageId: c2 }))).toBe('cage_not_assigned')
-    // Not their duty
+    // Not in their role
     expect(await code(() => checkAccess(w, 'feed.save', { cageId: c1 }))).toBe('no_permission')
     expect(await code(() => checkAccess(w, 'sales.dispatch', {}))).toBe('no_permission')
     // Transfers must involve only their cages; confirmations too
@@ -77,30 +80,75 @@ describe('duties and cage responsibility', () => {
     // Reading is always allowed; administrators are never limited
     expect(await code(() => checkAccess(w, 'days.overview', { date: D1 }))).toBe('no_error')
     expect(await code(() => checkAccess(f.admin, 'sales.dispatch', {}))).toBe('no_error')
-    // The session reflects the assignment at sign-in, and the user list shows it
-    expect((await login(f.anon, 'worker@test.farm', 'worker123')).user).toMatchObject({ duties: ['eggs', 'flock'], cages: [c1] })
-    expect((await listUsers(f.admin)).find((u) => u.username === 'worker')).toMatchObject({ duties: ['eggs', 'flock'], cages: [c1] })
+    // The session and the user list show the role, its duties and the cages
+    expect(w.user).toMatchObject({ roleName: 'Egg collector', duties: ['eggs', 'flock'], cages: [c1] })
+    expect((await listUsers(f.admin)).find((u) => u.username === 'worker')).toMatchObject({ roleName: 'Egg collector', duties: ['eggs', 'flock'], cages: [c1] })
   })
 
-  it('users created before duties existed keep every duty; only admins can assign', async () => {
+  it('a role can give a non-administrator an administrative task, such as stock adjustments', async () => {
     const f = await makeFarm()
-    expect((await listUsers(f.admin)).find((u) => u.username === 'worker')!.duties).toHaveLength(11)
-    expect(await code(() => setUserDuties(f.worker, f.worker.user!.id, ['sales'], null))).toBe('admin_only')
+    const adjust = { itemId: f.feedId, type: 'adjustment' as const, quantity: -10, date: D1, batchNo: null, expiryDate: null, unitCost: null, supplier: null, reference: null, notes: 'Counted', cageId: null }
+    expect(await code(() => recordTxn(f.worker, adjust))).toBe('no_permission')
+    const storekeeper = await saveRole(f.admin, { id: null, name: 'Storekeeper', description: null, permissions: ['inventory.record', 'inventory.adjust'] })
+    await updateUser(f.admin, { id: f.worker.user!.id, email: 'worker@test.farm', displayName: 'Worker', roleId: storekeeper, active: true })
+    const w = await f.signIn('worker@test.farm', 'worker123')
+    expect(w.user!.role).toBe('operator')
+    expect(await code(() => recordTxn(w, adjust))).toBe('no_error')
+  })
+
+  it('nobody can give permissions they do not hold, or change an account more powerful than their own', async () => {
+    const f = await makeFarm()
+    const userManager = await saveRole(f.admin, { id: null, name: 'User manager', description: null, permissions: ['users.manage', 'roles.manage', 'eggs.record'] })
+    await updateUser(f.admin, { id: f.worker.user!.id, email: 'worker@test.farm', displayName: 'Worker', roleId: userManager, active: true })
+    const m = await f.signIn('worker@test.farm', 'worker123')
+    // Cannot make a role with more than they hold, or give anyone (themselves included) the administrator role.
+    expect(await code(() => saveRole(m, { id: null, name: 'Big', description: null, permissions: ['backup.restore'] }))).toBe('cannot_grant_permission')
+    expect(await code(() => updateUser(m, { id: m.user!.id, email: 'worker@test.farm', displayName: 'Worker', roleId: f.roles.admin, active: true }))).toBe('cannot_grant_permission')
+    expect(await code(() => createUser(m, { email: 'friend@test.farm', displayName: 'Friend', password: 'abcdef', roleId: f.roles.admin }))).toBe('cannot_grant_permission')
+    // Cannot touch the administrator's account.
+    expect(await code(() => resetPassword(m, f.admin.user!.id, 'hacked123'))).toBe('no_permission')
+    expect(await code(() => updateUser(m, { id: f.admin.user!.id, email: 'admin@test.farm', displayName: 'A', roleId: userManager, active: false }))).toBe('no_permission')
+    expect(await code(() => setUserCages(m, f.admin.user!.id, [f.cageIds[0]]))).toBe('no_permission')
+    // Within their own level they can work normally.
+    const helper = await saveRole(m, { id: null, name: 'Helper', description: null, permissions: ['eggs.record'] })
+    await createUser(m, { email: 'helper@test.farm', displayName: 'Helper', password: 'abcdef', roleId: helper })
+  })
+
+  it('the administrator role cannot be changed or archived; a role in use cannot be archived', async () => {
+    const f = await makeFarm()
+    expect(await code(() => saveRole(f.admin, { id: f.roles.admin, name: 'Renamed', description: null, permissions: [] }))).toBe('admin_role_locked')
+    expect(await code(() => archiveRole(f.admin, f.roles.admin))).toBe('admin_role_locked')
+    expect(await code(() => archiveRole(f.admin, f.roles.worker))).toBe('role_in_use')
+    const spare = await saveRole(f.admin, { id: null, name: 'Spare', description: null, permissions: ['eggs.record'] })
+    await archiveRole(f.admin, spare)
+    expect(await code(() => createUser(f.admin, { email: 'x@test.farm', displayName: 'X', password: 'abcdef', roleId: spare }))).toBe('role_not_found')
+    // The last active administrator stays an administrator.
+    expect(await code(() => updateUser(f.admin, { id: f.admin.user!.id, email: 'admin@test.farm', displayName: 'Admin', roleId: f.roles.worker, active: true }))).toBe('last_admin')
+  })
+
+  it('data-entry users get the Farm Worker role with every duty', async () => {
+    const f = await makeFarm()
+    const worker = (await listUsers(f.admin)).find((u) => u.username === 'worker')!
+    expect(worker).toMatchObject({ roleName: 'Farm Worker', role: 'operator' })
+    expect(worker.duties).toHaveLength(11)
   })
 
   it('builds "my duties today" and ticks off work as it is recorded', async () => {
     const f = await makeFarm()
     const [c1] = f.cageIds
-    await setUserDuties(f.admin, f.worker.user!.id, ['start_day', 'eggs', 'feed', 'flock'], [c1])
-    let tasks = await dutyTasks(f.worker, D1)
+    const role = await saveRole(f.admin, { id: null, name: 'Morning shift', description: null, permissions: ['day.start', 'eggs.record', 'feed.record', 'flock.record'] })
+    await updateUser(f.admin, { id: f.worker.user!.id, email: 'worker@test.farm', displayName: 'Worker', roleId: role, active: true })
+    await setUserCages(f.admin, f.worker.user!.id, [c1])
+    const w = await f.signIn('worker@test.farm', 'worker123')
+    let tasks = await dutyTasks(w, D1)
     expect(tasks).toEqual([expect.objectContaining({ key: 'start_day', done: false })])
-    await startDay(f.worker, { date: D1, corrections: [], acknowledgeWarnings: false })
-    tasks = await dutyTasks(f.worker, D1)
+    await startDay(w, { date: D1, corrections: [], acknowledgeWarnings: false })
+    tasks = await dutyTasks(w, D1)
     // start day + 2 egg sessions + feed + deaths for one cage
     expect(tasks.map((t) => t.key)).toEqual(['start_day', `eggs:morning:${c1}`, `eggs:evening:${c1}`, `feed:${c1}`, `deaths:${c1}`])
-    await saveEggs(f.worker, egg(D1, c1, 'morning', 500), null)
-    await confirmMortality(f.worker, D1, [c1])
-    const done = Object.fromEntries((await dutyTasks(f.worker, D1)).map((t) => [t.key, t.done]))
+    await saveEggs(w, egg(D1, c1, 'morning', 500), null)
+    await confirmMortality(w, D1, [c1])
+    const done = Object.fromEntries((await dutyTasks(w, D1)).map((t) => [t.key, t.done]))
     expect(done).toEqual({ start_day: true, [`eggs:morning:${c1}`]: true, [`eggs:evening:${c1}`]: false, [`feed:${c1}`]: false, [`deaths:${c1}`]: true })
   })
 })
@@ -128,7 +176,7 @@ describe('goods received from suppliers', () => {
     const list = await listReceipts(f.worker, D1, D1)
     expect(list.find((r) => r.grnNo === r1.grnNo)).toMatchObject({ supplierName: 'Prima Feed Mill', totalCost: 2000 * 160 + 500 * 2 })
     expect(await code(() => createReceipt(f.worker, { date: D1, supplierId: null, invoiceNo: null, vehicle: null, notes: null, lines: [{ itemId: f.medId, quantity: 5, unitCost: null, batchNo: null, expiryDate: null }] }))).toBe('batch_required')
-    expect(await code(() => cancelReceipt(f.worker, r2.id, 'typo'))).toBe('admin_only')
+    expect(await code(() => cancelReceipt(f.worker, r2.id, 'typo'))).toBe('no_permission')
     await cancelReceipt(f.admin, r2.id, 'Entered twice')
     expect(await itemBalance(f.worker, f.feedId)).toBe(7000)
   })
@@ -162,7 +210,7 @@ describe('egg store and sales', () => {
     expect(await code(() => createDispatch(f.worker, dispatch(shop, 501)))).toBe('not_enough_eggs')
     // A dispatch back-dated before the eggs were collected is refused.
     expect(await code(() => createDispatch(f.worker, { ...dispatch(shop, 10), date: '2026-03-08' }))).toBe('not_enough_eggs')
-    expect(await code(() => adjustEggStore(f.worker, { date: D2, grade: 'good', quantity: -12, reason: 'Broken tray' }))).toBe('admin_only')
+    expect(await code(() => adjustEggStore(f.worker, { date: D2, grade: 'good', quantity: -12, reason: 'Broken tray' }))).toBe('no_permission')
     await adjustEggStore(f.admin, { date: D2, grade: 'good', quantity: -12, reason: 'Broken tray in store' })
     expect((await eggStock(f.worker)).good).toBe(488)
   })
@@ -206,7 +254,7 @@ describe('admin portal: database monitoring', () => {
   it('reports database health, runs integrity checks and summarises activity', async () => {
     const f = await makeFarm()
     const ctx: Ctx = f.admin
-    expect(await code(() => dbInfo(f.worker, ':memory:'))).toBe('admin_only')
+    expect(await code(() => dbInfo(f.worker, ':memory:'))).toBe('no_permission')
     const info = await dbInfo(ctx, ':memory:')
     expect(info.schemaVersion).toBeGreaterThanOrEqual(3)
     expect(info.tables.find((t) => t.name === 'cages')!.rows).toBe(10)

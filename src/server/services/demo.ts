@@ -7,7 +7,8 @@ import { saveEggs } from './eggs'
 import { saveFeed } from './feed'
 import { addMovement } from './flock'
 import { listBatches } from './inventory'
-import { setUserDuties } from './duties'
+import { setUserCages } from './duties'
+import { saveRole } from './roles'
 import { saveParty } from './parties'
 import { createReceipt } from './purchases'
 import { addPayment, createDispatch, eggStock } from './sales'
@@ -68,7 +69,10 @@ async function seedDemoData(db: DB, now: Date, days: number) {
   })
   const scope = { db, org: created.organizationId, farm: created.farmId, now: () => now }
   const admin: Ctx = { ...scope, user: (await login(anon, DEMO_USERS.admin.email, DEMO_USERS.admin.password)).user }
-  await createUserRaw(admin, { email: DEMO_USERS.operator.email, displayName: 'Demo Worker', password: DEMO_USERS.operator.password, role: 'operator' })
+  // Two data-entry roles sharing the cages, to show what roles and cage assignments do (Settings → Users and Roles).
+  const technician = await saveRole(admin, { id: null, name: 'Poultry Technician', description: 'Daily records for the cages they look after', permissions: ['day.start', 'eggs.record', 'feed.record', 'water.record', 'flock.record', 'medicine.record', 'reports.view'] })
+  const stores = await saveRole(admin, { id: null, name: 'Stores & Sales', description: null, permissions: ['eggs.record', 'feed.record', 'water.record', 'flock.record', 'purchases.record', 'inventory.record', 'sales.record', 'backup.create'] })
+  await createUserRaw(admin, { email: DEMO_USERS.operator.email, displayName: 'Demo Worker', password: DEMO_USERS.operator.password, roleId: technician })
   const worker: Ctx = { ...scope, user: (await login(anon, DEMO_USERS.operator.email, DEMO_USERS.operator.password)).user }
 
   const rand = rng(20240601)
@@ -81,10 +85,9 @@ async function seedDemoData(db: DB, now: Date, days: number) {
   const meter = cages.map(() => 10000 + Math.round(rand() * 5000))
   const cageStock = cages.map(() => 20)
 
-  // Two data-entry workers sharing the cages, with different duties (see Admin portal → Users & duties).
-  await setUserDuties(admin, worker.user!.id, ['start_day', 'eggs', 'feed', 'water', 'flock', 'medicine', 'reports'], cages.slice(0, 5))
-  const { id: salesId } = await createUserRaw(admin, { email: DEMO_USERS.sales.email, displayName: 'Nimal (stores & sales)', password: DEMO_USERS.sales.password, role: 'operator' })
-  await setUserDuties(admin, salesId, ['eggs', 'feed', 'water', 'flock', 'purchases', 'inventory', 'sales', 'backup'], cages.slice(5))
+  await setUserCages(admin, worker.user!.id, cages.slice(0, 5))
+  const { id: salesId } = await createUserRaw(admin, { email: DEMO_USERS.sales.email, displayName: 'Nimal (stores & sales)', password: DEMO_USERS.sales.password, roleId: stores })
+  await setUserCages(admin, salesId, cages.slice(5))
   const mill = await saveParty(admin, 'supplier', { id: null, name: 'Prima Feed Mill', phone: '037 222 3344', address: 'Kurunegala', notes: 'Layer mash, weekly', active: true })
   const vet = await saveParty(admin, 'supplier', { id: null, name: 'Lanka Vet Supplies', phone: '011 255 7788', address: 'Colombo', notes: null, active: true })
   const buyers = [

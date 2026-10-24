@@ -17,11 +17,28 @@ export interface SessionUser {
   /** Sign-in name, unique across the platform */
   email: string
   displayName: string
+  /** 'admin' for the organization's administrator role (every permission), otherwise 'operator' */
   role: Role
-  /** What this user may do (all duties for administrators) */
+  roleId: number | null
+  roleName: string | null
+  /** What the user's role allows (every permission for administrators) */
+  permissions: string[]
+  /** The jobs shown under "My duties today", derived from the permissions */
   duties?: Duty[]
   /** Cages this user looks after; null = all cages */
   cages?: number[] | null
+}
+
+export interface RoleRow {
+  id: number
+  name: string
+  description: string | null
+  /** The organization administrator role: every permission, cannot be changed or archived */
+  isAdmin: boolean
+  permissions: string[]
+  /** Active users with this role */
+  users: number
+  archived: boolean
 }
 
 export interface UserRow extends Omit<SessionUser, 'email'> {

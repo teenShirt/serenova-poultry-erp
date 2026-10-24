@@ -8,13 +8,14 @@ import type {
   FarmSettings,
   StartDayPreview
 } from '@shared/types'
-import { type Ctx, requireAdmin, requireUser } from '../context'
+import { type Ctx, requireUser } from '../context'
 import { AppError, assert } from '../errors'
 import { audit } from './audit'
 import { listCages } from './cages'
 import { balances } from './inventory'
 import { getSettings } from './settings'
 import { loadCageDayStats, sumCages } from './stats'
+import { requirePermission } from './roles'
 
 export interface DayRow {
   id: number
@@ -50,7 +51,7 @@ export async function requireWritableDay(ctx: Ctx, date: string): Promise<DayRow
   if (!day) throw new AppError('day_not_started', { date })
   if (day.status === 'closed') {
     if (!day.amendment_open) throw new AppError('day_closed', { date })
-    requireAdmin(ctx)
+    requirePermission(ctx, 'day.amend')
   }
   return day
 }
@@ -198,10 +199,10 @@ export async function startDay(ctx: Ctx, input: StartDayInput): Promise<DayOverv
     if (p.exists) throw new AppError('day_already_started', { date })
     if (p.warnings.includes('future_date')) throw new AppError('future_date')
     if (p.warnings.includes('no_active_cages')) throw new AppError('no_active_cages')
-    if (p.laterDayExists) requireAdmin(ctx)
+    if (p.laterDayExists) requirePermission(ctx, 'day.backfill')
     const needsAck = p.warnings.some((w) => ['previous_not_closed', 'gap_days', 'backfill'].includes(w))
     if (needsAck && !input.acknowledgeWarnings) throw new AppError('warnings_not_acknowledged')
-    if (input.corrections.length > 0) requireAdmin(ctx)
+    if (input.corrections.length > 0) requirePermission(ctx, 'day.correct_opening')
 
     const info = await ctx.db
       .prepare('INSERT INTO farm_days (organization_id, farm_id, business_date, status, opened_by, opened_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -247,7 +248,7 @@ export async function startDay(ctx: Ctx, input: StartDayInput): Promise<DayOverv
 
 /** Authorised correction of a cage's opening hen count (stored as an adjustment with a reason). */
 export async function correctOpening(ctx: Ctx, date: string, cageId: number, opening: number, reason: string) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'day.correct_opening')
   assert(Number.isInteger(opening) && opening >= 0, 'invalid_hen_count')
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
@@ -290,7 +291,7 @@ export async function confirmMortality(ctx: Ctx, date: string, cageIds: number[]
 }
 
 export async function confirmIssue(ctx: Ctx, date: string, cageId: number | null, key: string, reason: string) {
-  const user = requireAdmin(ctx)
+  const user = requirePermission(ctx, 'day.approve_issues')
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const day = await requireWritableDay(ctx, date)
@@ -309,7 +310,7 @@ export async function confirmIssue(ctx: Ctx, date: string, cageId: number | null
 }
 
 export async function revokeConfirmation(ctx: Ctx, date: string, cageId: number | null, key: string) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'day.approve_issues')
   await ctx.db.transaction(async () => {
     const day = await requireWritableDay(ctx, date)
     await ctx.db
@@ -534,7 +535,7 @@ async function writeSnapshot(ctx: Ctx, dayId: number, date: string, kind: 'open'
 }
 
 export async function saveComment(ctx: Ctx, date: string, comment: string) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'day.comment')
   await ctx.db.transaction(async () => {
     const day = await requireWritableDay(ctx, date)
     await ctx.db.prepare('UPDATE farm_days SET manager_comment = ? WHERE id = ?').run(comment.trim() || null, day.id)
@@ -543,7 +544,7 @@ export async function saveComment(ctx: Ctx, date: string, comment: string) {
 }
 
 export async function closeDay(ctx: Ctx, date: string, comment: string | null): Promise<DayOverview> {
-  const user = requireAdmin(ctx)
+  const user = requirePermission(ctx, 'day.close')
   await ctx.db.transaction(async () => {
     const day = await getDay(ctx, date)
     assert(day, 'day_not_started', { date })
@@ -572,7 +573,7 @@ export async function closeDay(ctx: Ctx, date: string, comment: string | null): 
 }
 
 export async function startAmendment(ctx: Ctx, date: string, reason: string) {
-  const user = requireAdmin(ctx)
+  const user = requirePermission(ctx, 'day.amend')
   assert(reason.trim().length >= 5, 'reason_required')
   await ctx.db.transaction(async () => {
     const day = await getDay(ctx, date)
@@ -592,7 +593,7 @@ export async function startAmendment(ctx: Ctx, date: string, reason: string) {
  * refreshes the snapshots of later closed days whose balances changed as a result.
  */
 export async function finishAmendment(ctx: Ctx, date: string, comment: string | null) {
-  const user = requireAdmin(ctx)
+  const user = requirePermission(ctx, 'day.amend')
   await ctx.db.transaction(async () => {
     const day = await getDay(ctx, date)
     assert(day && day.status === 'closed' && day.amendment_open, 'no_amendment_open')

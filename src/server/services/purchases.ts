@@ -1,11 +1,12 @@
 import { round } from '@shared/calc'
 import { isIsoDate } from '@shared/dates'
 import type { GoodsReceipt, GoodsReceiptLine } from '@shared/types'
-import { type Ctx, requireAdmin, requireUser } from '../context'
+import { type Ctx, requireUser } from '../context'
 import { assert } from '../errors'
 import { audit } from './audit'
 import { farmToday } from './days'
 import { assertDateWritable, assertNotNegative, getItem, getOrCreateBatch } from './inventory'
+import { requirePermission } from './roles'
 
 export interface ReceiptInput {
   date: string
@@ -78,7 +79,7 @@ export async function createReceipt(ctx: Ctx, r: ReceiptInput): Promise<{ id: nu
 
 /** Cancels a receipt entered by mistake (administrator, with a reason): its stock is removed again. */
 export async function cancelReceipt(ctx: Ctx, id: number, reason: string) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'purchases.cancel')
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const r = (await ctx.db.prepare('SELECT * FROM goods_receipts WHERE id = ? AND organization_id = ?').get(id, ctx.org)) as { receipt_date: string; grn_no: string } | undefined

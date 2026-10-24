@@ -1,9 +1,10 @@
 import { waterConsumption } from '@shared/calc'
 import type { WaterRecord } from '@shared/types'
-import { type Ctx, requireAdmin, requireUser } from '../context'
+import { type Ctx, requireUser } from '../context'
 import { AppError, assert } from '../errors'
 import { audit } from './audit'
 import { getDay, requireCageDay, requireWritableDay } from './days'
+import { requirePermission } from './roles'
 
 const select = `SELECT w.id, d.business_date AS date, w.cage_id AS cageId, c.name AS cageName, w.method,
     w.opening_reading AS openingReading, w.closing_reading AS closingReading, w.litres, w.meter_reset AS meterReset,
@@ -52,7 +53,7 @@ export async function saveWater(ctx: Ctx, w: WaterInput, expectedId: number | nu
     if (!w.meterReset) throw new AppError('meter_closing_below_opening')
   }
   if (w.meterReset) {
-    requireAdmin(ctx)
+    requirePermission(ctx, 'water.meter_reset')
     assert(w.correctionReason && w.correctionReason.trim().length >= 3, 'reason_required')
   }
   const r = waterConsumption(w)

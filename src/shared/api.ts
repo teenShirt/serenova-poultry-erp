@@ -20,15 +20,14 @@ import type {
   InventoryItem,
   InventoryTxn,
   Language,
-  Role,
   SessionUser,
   StartDayPreview,
   Treatment,
   TxnType,
   UserRow,
+  RoleRow,
   ActivitySummary,
   DbInfo,
-  Duty,
   DutyTask,
   EggDispatch,
   EggStock,
@@ -141,11 +140,15 @@ export interface Api {
   'auth.resetWithCode': { in: { email: string; recoveryCode: string; newPassword: string }; out: { recoveryCode: string } }
   'auth.newRecoveryCode': { in: { password: string }; out: { recoveryCode: string } }
   'users.list': { in: void; out: UserRow[] }
-  'users.create': { in: { email: string; displayName: string; password: string; role: Role }; out: { id: number; recoveryCode: string } }
-  'users.approve': { in: { id: number; role: Role }; out: void }
+  'users.create': { in: { email: string; displayName: string; password: string; roleId: number }; out: { id: number; recoveryCode: string } }
+  'users.approve': { in: { id: number; roleId: number }; out: void }
   'users.reject': { in: { id: number }; out: void }
   'users.newRecoveryCode': { in: { id: number }; out: { recoveryCode: string } }
-  'users.update': { in: { id: number; email: string; displayName: string; role: Role; active: boolean }; out: void }
+  'users.update': { in: { id: number; email: string; displayName: string; roleId: number; active: boolean }; out: void }
+  'roles.list': { in: void; out: RoleRow[] }
+  /** Creates (id null) or changes a role. Only permissions the signed-in user holds can be given. */
+  'roles.save': { in: { id: number | null; name: string; description: string | null; permissions: string[] }; out: number }
+  'roles.archive': { in: { id: number }; out: void }
   'users.resetPassword': { in: { id: number; password: string }; out: void }
 
   'settings.get': { in: void; out: FarmSettings }
@@ -274,7 +277,8 @@ export interface Api {
   'reports.recent': { in: void; out: { id: number; kind: ReportKind; periodStart: string; periodEnd: string; format: 'pdf' | 'xlsx'; generatedAt: string }[] }
 
   'duties.mine': { in: { date: string }; out: DutyTask[] }
-  'users.setDuties': { in: { id: number; duties: Duty[]; cages: number[] | null }; out: void }
+  /** The cages a user looks after (null = all cages). What they may do comes from their role. */
+  'users.setCages': { in: { id: number; cages: number[] | null }; out: void }
 
   'parties.list': { in: { kind: 'supplier' | 'customer' }; out: Party[] }
   'parties.saveSupplier': { in: PartyDto; out: number }
@@ -338,7 +342,10 @@ export const API_KIND: Record<ApiMethod, 'read' | 'write'> = {
   'users.newRecoveryCode': 'write',
   'users.update': 'write',
   'users.resetPassword': 'write',
-  'users.setDuties': 'write',
+  'users.setCages': 'write',
+  'roles.list': 'read',
+  'roles.save': 'write',
+  'roles.archive': 'write',
   'settings.get': 'read',
   'settings.save': 'write',
   'cages.list': 'read',

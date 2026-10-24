@@ -28,10 +28,4 @@ export function requireUser(ctx: Pick<Ctx, 'user'>): SessionUser {
   return ctx.user
 }
 
-export function requireAdmin(ctx: Pick<Ctx, 'user'>): SessionUser {
-  const u = requireUser(ctx)
-  if (u.role !== 'admin') throw new AppError('admin_only')
-  return u
-}
-
 export const nowIso = (ctx: Pick<Ctx, 'now'>) => ctx.now().toISOString()

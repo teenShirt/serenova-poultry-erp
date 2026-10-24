@@ -3,7 +3,8 @@ import type { InventoryCategory, Language } from '@shared/types'
 import type { AnonCtx, Ctx } from '../context'
 import { assert } from '../errors'
 import { audit } from './audit'
-import { createUserRaw } from './auth'
+import { createUserRaw, toSessionUser } from './auth'
+import { ensureRoles } from './roles'
 import { insertCageRaw } from './cages'
 import { getOrCreateBatch, insertItemRaw } from './inventory'
 import { saveSettings } from './settings'
@@ -77,8 +78,11 @@ export async function createOrganization(anon: AnonCtx, s: SetupInput): Promise<
         .run(org, 'main', name, s.farmLocation.trim() || null, at)
     ).lastInsertRowid
     const ctx: Ctx = { db: anon.db, now: anon.now, org, farm, user: null }
-    const { id: adminId, recoveryCode } = await createUserRaw(ctx, { ...s.admin, role: 'admin' })
-    const actor: Ctx = { ...ctx, user: { id: adminId, username: '', email: s.admin.email, displayName: s.admin.displayName, role: 'admin' } }
+    await ensureRoles(anon.db, org)
+    const adminRole = (await anon.db.prepare('SELECT id FROM roles WHERE organization_id = ? AND is_admin = 1').get(org)) as { id: number }
+    const { id: adminId, recoveryCode } = await createUserRaw(ctx, { ...s.admin, roleId: adminRole.id })
+    const adminRow = (await anon.db.prepare('SELECT * FROM users WHERE id = ?').get(adminId)) as Parameters<typeof toSessionUser>[1]
+    const actor: Ctx = { ...ctx, user: await toSessionUser(ctx, adminRow) }
     await saveSettings(actor, {
       farmName: name,
       farmLocation: s.farmLocation.trim(),

@@ -12,7 +12,7 @@ import { Kpi } from '../components/Kpi'
 import { PartyDialog, PartyList } from './Sales'
 
 export function PurchasesPage() {
-  const { t, num, status, isAdmin, date } = useApp()
+  const { t, num, status, can, date } = useApp()
   const [days, setDays] = useState(30)
   const [params, setParams] = useSearchParams()
   const [creating, setCreating] = useState(params.get('new') === '1')
@@ -107,7 +107,7 @@ export function PurchasesPage() {
                       <td className="num">{money(r.totalCost)}</td>
                       <td>{r.recordedBy}</td>
                       <td>
-                        {isAdmin && (
+                        {can('purchases.cancel') && (
                           <button className="icon-btn" title={t('pur.cancel')} onClick={() => setCancel(r)}>
                             <Ban size={16} />
                           </button>

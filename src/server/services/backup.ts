@@ -5,6 +5,7 @@ import { gunzipSync, gzipSync } from 'node:zlib'
 import type { BackupFileCheck, BackupInfo } from '@shared/types'
 import type { DB } from '../db/connection'
 import { DATA_TABLES, latestSchemaVersion } from '../db/migrations'
+import { ensureRoles } from './roles'
 
 export const BACKUP_EXT = '.pfmbackup'
 const FORMAT = 'poultry-farm-manager-backup'
@@ -264,6 +265,7 @@ export async function restoreDatabase(db: DB, data: BackupData) {
     } finally {
       await db.query('SET FOREIGN_KEY_CHECKS = 1')
     }
+    for (const o of (await db.prepare('SELECT id FROM organizations').all()) as { id: number }[]) await ensureRoles(db, o.id)
     const problems = await foreignKeyProblems(db)
     if (problems.length) throw new Error('foreign_key_errors: ' + problems.slice(0, 3).join('; '))
   })()
@@ -403,6 +405,8 @@ export async function restoreOrganization(db: DB, orgId: number, data: BackupDat
     } finally {
       await db.query('SET FOREIGN_KEY_CHECKS = 1')
     }
+    // Backups from before roles existed: give every account the role matching what it could do.
+    await ensureRoles(db, orgId)
     const problems = await foreignKeyProblems(db, orgId)
     if (problems.length) throw new Error('foreign_key_errors: ' + problems.slice(0, 3).join('; '))
     // Every link must stay inside the organization (MySQL does not re-check links added while checks were off).

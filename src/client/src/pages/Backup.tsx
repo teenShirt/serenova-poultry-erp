@@ -6,7 +6,7 @@ import { useApp, useLoad } from '../lib/app'
 import { Card, Empty, Field, Modal, Notice, NumInput, PageHeader } from '../components/ui'
 
 export function BackupPage() {
-  const { t, isAdmin, status, toast, fail, refreshStatus, dateTime, num } = useApp()
+  const { t, can, status, toast, fail, refreshStatus, dateTime, num } = useApp()
   const { data: runs, reload } = useLoad(() => call('backup.list'), [])
   const [busy, setBusy] = useState(false)
   const [check, setCheck] = useState<(BackupFileCheck & { token: string }) | null>(null)
@@ -52,7 +52,7 @@ export function BackupPage() {
             </div>
           </Card>
           <Card title={t('bak.auto')}>
-            {isAdmin ? (
+            {can('settings.manage') ? (
               <div className="stack">
                 <label className="check">
                   <input type="checkbox" checked={auto.enabled} onChange={(e) => setAuto({ ...auto, enabled: e.target.checked })} />
@@ -92,7 +92,7 @@ export function BackupPage() {
         </div>
 
         <Card title={t('bak.restore')}>
-          {isAdmin ? (
+          {can('backup.restore') ? (
             <div className="stack">
               <Notice tone="warn">{t('bak.restoreIntro')}</Notice>
               <div className="muted small">{t('bak.desktopImport')}</div>
@@ -139,7 +139,7 @@ export function BackupPage() {
                     <th>{t('common.status')}</th>
                     <th className="num">{t('bak.size')}</th>
                     <th>{t('bak.folder')}</th>
-                    {isAdmin && <th />}
+                    {can('backup.restore') && <th />}
                   </tr>
                 </thead>
                 <tbody>
@@ -150,7 +150,7 @@ export function BackupPage() {
                       <td>{r.status === 'ok' ? <span className="badge good">{t('bak.ok')}</span> : <span className="badge bad" title={r.message ?? ''}>{t('bak.failed')}</span>}</td>
                       <td className="num">{r.sizeBytes ? `${num(r.sizeBytes / 1024 / 1024, 2)} MB` : '—'}</td>
                       <td className="small muted">{r.path ?? r.message}</td>
-                      {isAdmin && (
+                      {can('backup.restore') && (
                         <td>
                           {r.status === 'ok' && r.path && (
                             <a className="btn sm" href={backupDownloadUrl(r.id)} download>

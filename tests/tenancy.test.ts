@@ -64,13 +64,17 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
 
     // Every input below names one of organization A's records; B's administrator sends them all.
     const attacks: [ApiMethod, unknown][] = [
-      ['users.update', { id: ids.admin, email: 'x@b.farm', displayName: 'Taken over', role: 'operator', active: false }],
+      ['users.update', { id: ids.admin, email: 'x@b.farm', displayName: 'Taken over', roleId: b.roles.worker, active: false }],
+      ['users.update', { id: b.worker.user!.id, email: 'worker@b.farm', displayName: 'W', roleId: a.roles.admin, active: true }],
+      ['users.create', { email: 'spy@b.farm', displayName: 'Spy', password: 'secret123', roleId: a.roles.admin }],
+      ['roles.save', { id: a.roles.worker, name: 'Taken over', description: null, permissions: [] }],
+      ['roles.archive', { id: a.roles.worker }],
       ['users.resetPassword', { id: ids.admin, password: 'hacked123' }],
-      ['users.approve', { id: ids.worker, role: 'admin' }],
+      ['users.approve', { id: ids.worker, roleId: b.roles.admin }],
       ['users.reject', { id: ids.worker }],
       ['users.newRecoveryCode', { id: ids.admin }],
-      ['users.setDuties', { id: ids.worker, duties: [], cages: null }],
-      ['users.setDuties', { id: b.worker.user!.id, duties: ['eggs'], cages: [ids.cage] }],
+      ['users.setCages', { id: ids.worker, cages: null }],
+      ['users.setCages', { id: b.worker.user!.id, cages: [ids.cage] }],
       ['cages.update', { id: ids.cage, cage, reason: null }],
       ['days.correctOpening', { date: D, cageId: ids.cage, opening: 1, reason: 'Taken over' }],
       ['days.confirmMortality', { date: D, cageIds: [ids.cage] }],
@@ -107,7 +111,7 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
     for (const [method, input] of attacks) {
       const r = await call(b.admin, method, input)
       // Refused because the record is not B's (not for some unrelated reason such as invalid input).
-      expect(r.ok ? 'accepted' : r.code, `${method} ${JSON.stringify(input)}`).toMatch(/^(not_found|cage_not_found|cage_not_in_day|item_not_found|issue_not_confirmable)$/)
+      expect(r.ok ? 'accepted' : r.code, `${method} ${JSON.stringify(input)}`).toMatch(/^(not_found|cage_not_found|cage_not_in_day|item_not_found|issue_not_confirmable|role_not_found)$/)
     }
     // Organization A's records are exactly as they were.
     const after = await dumpDatabase(a.db, { orgId: a.org })
@@ -169,7 +173,7 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
     // A session that claims A's user belongs to organization B (a tampered session) has no user.
     expect(await loadSessionUser(a.admin, a.admin.user!.id, b.org)).toBeNull()
     expect(await loadSessionUser(a.admin, a.worker.user!.id, a.org)).toMatchObject({ email: 'worker@a.farm' })
-    await updateUser(a.admin, { id: a.worker.user!.id, email: 'worker@a.farm', displayName: 'Worker', role: 'operator', active: false })
+    await updateUser(a.admin, { id: a.worker.user!.id, email: 'worker@a.farm', displayName: 'Worker', roleId: a.roles.worker, active: false })
     expect(await loadSessionUser(a.admin, a.worker.user!.id, a.org)).toBeNull()
     // Signed out: nothing but the public requests works.
     const r = await api(a.db)({ ...a.worker, user: null }, 'eggs.list', { date: D })
@@ -182,7 +186,7 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
     // and methods covered by the attack and visibility tests above.
     const noRecordIds: ApiMethod[] = [
       'app.status', 'app.setLanguage', 'setup.complete', 'demo.enter', 'demo.exit', 'demo.reset', 'auth.login', 'auth.logout',
-      'auth.changePassword', 'auth.signup', 'auth.resetWithCode', 'auth.newRecoveryCode', 'users.create', 'settings.get', 'settings.save',
+      'auth.changePassword', 'auth.signup', 'auth.resetWithCode', 'auth.newRecoveryCode', 'roles.list', 'settings.get', 'settings.save',
       'cages.create', 'days.preview', 'days.start', 'days.list', 'days.latest', 'days.revokeConfirmation',
       'days.saveComment', 'days.close', 'days.startAmendment', 'days.finishAmendment', 'days.amendments', 'water.list',
       'inventory.createItem', 'analytics.dashboard', 'analytics.comparison', 'reports.print', 'duties.mine', 'purchases.series',
@@ -190,7 +194,7 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       'backup.list', 'backup.create', 'backup.restore'
     ]
     const covered: ApiMethod[] = [
-      'users.list', 'users.update', 'users.resetPassword', 'users.approve', 'users.reject', 'users.newRecoveryCode', 'users.setDuties',
+      'users.list', 'users.update', 'users.resetPassword', 'users.approve', 'users.reject', 'users.newRecoveryCode', 'users.setCages', 'users.create', 'roles.save', 'roles.archive',
       'cages.list', 'cages.update', 'days.overview', 'days.correctOpening', 'days.confirmMortality', 'days.confirmIssue', 'eggs.list', 'eggs.save', 'eggs.delete',
       'flock.list', 'flock.listRange', 'flock.add', 'flock.transfer', 'flock.delete', 'feed.list', 'feed.suggestOpening', 'feed.save',
       'feed.delete', 'water.suggestOpening', 'water.save', 'water.delete', 'medicine.treatments', 'medicine.addTreatment',

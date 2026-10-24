@@ -1,9 +1,10 @@
 import { randomBytes, randomInt, scryptSync, timingSafeEqual } from 'node:crypto'
 import type { Role, SessionUser, UserRow } from '@shared/types'
-import { type AnonCtx, type Ctx, requireAdmin, requireUser } from '../context'
+import { type AnonCtx, type Ctx, requireUser } from '../context'
 import { AppError, assert } from '../errors'
 import { audit } from './audit'
-import { accessFromRow } from './duties'
+import { parseCages } from './duties'
+import { assertCanAssignRole, assertCanManageUser, dutiesOf, ensureRoles, getRole, listRoles, requirePermission, rolePermissions, WORKER_ROLE } from './roles'
 import { getSettings } from './settings'
 
 const N = 16384
@@ -66,19 +67,21 @@ async function issueRecoveryCode(ctx: Pick<Ctx, 'db'>, userId: number): Promise<
   return code
 }
 
-const userCols = `id, username, email, display_name AS displayName, role, active, pending, recovery_hash IS NOT NULL AS hasRecoveryCode,
-  created_at AS createdAt, last_login_at AS lastLoginAt, duties, assigned_cages`
+const userCols = `u.id, u.username, u.email, u.display_name AS displayName, u.role, u.role_id AS roleId, r.name AS roleName, u.active, u.pending,
+  u.recovery_hash IS NOT NULL AS hasRecoveryCode, u.created_at AS createdAt, u.last_login_at AS lastLoginAt, u.assigned_cages`
+const userFrom = 'users u LEFT JOIN roles r ON r.id = u.role_id AND r.organization_id = u.organization_id'
 
-function toUser(r: Record<string, unknown>): UserRow {
-  const { duties: _d, assigned_cages: _c, ...rest } = r
-  const access = accessFromRow({ role: r.role as Role, duties: r.duties as string | null, assigned_cages: r.assigned_cages as string | null })
+function toUser(r: Record<string, unknown>, permissions: string[]): UserRow {
+  const { assigned_cages: _c, ...rest } = r
+  const isAdmin = r.role === 'admin'
   return {
     ...(rest as unknown as UserRow),
     active: !!r.active,
     pending: !!r.pending,
     hasRecoveryCode: !!r.hasRecoveryCode,
-    duties: access.duties,
-    cages: access.cages
+    permissions,
+    duties: dutiesOf(permissions),
+    cages: isAdmin ? null : parseCages(r.assigned_cages as string | null)
   }
 }
 
@@ -99,6 +102,7 @@ interface AuthRow {
   password_hash: string
   recovery_hash: string | null
   role: Role
+  role_id: number | null
   active: number
   pending: number
   failed_attempts: number
@@ -128,9 +132,21 @@ async function orgCtx(ctx: AnonCtx, orgId: number, user: SessionUser | null = nu
   return { db: ctx.db, now: ctx.now, org: orgId, farm: await defaultFarm(ctx, orgId), user }
 }
 
-function toSessionUser(row: AuthRow): SessionUser {
-  const access = accessFromRow(row)
-  return { id: row.id, username: row.username, email: row.email ?? '', displayName: row.display_name, role: row.role, duties: access.duties, cages: access.cages }
+/** The signed-in user as requests see them: their role's permissions and the cages they look after. */
+export async function toSessionUser(ctx: Pick<Ctx, 'db'>, row: Pick<AuthRow, 'id' | 'organization_id' | 'username' | 'email' | 'display_name' | 'role_id' | 'assigned_cages'>): Promise<SessionUser> {
+  const role = await rolePermissions(ctx.db, row.organization_id, row.role_id)
+  return {
+    id: row.id,
+    username: row.username,
+    email: row.email ?? '',
+    displayName: row.display_name,
+    role: role.isAdmin ? 'admin' : 'operator',
+    roleId: row.role_id,
+    roleName: role.name,
+    permissions: role.permissions,
+    duties: dutiesOf(role.permissions),
+    cages: role.isAdmin ? null : parseCages(row.assigned_cages)
+  }
 }
 
 function assertNotLocked(ctx: AnonCtx, row: AuthRow) {
@@ -183,7 +199,7 @@ export async function login(anon: AnonCtx, email: string, password: string): Pro
   if (org.status !== 'active') throw new AppError('organization_suspended')
   await clearFailures(anon, row.id)
   await anon.db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(anon.now().toISOString(), row.id)
-  const user = toSessionUser(row)
+  const user = await toSessionUser(anon, row)
   const ctx = await orgCtx(anon, row.organization_id, user)
   await audit(ctx, { action: 'login', entity: 'user', entityId: row.id })
   return { user, org: ctx.org, farm: ctx.farm }
@@ -193,7 +209,7 @@ export interface NewUser {
   email: string
   displayName: string
   password: string
-  role: Role
+  roleId: number
 }
 
 /** A short name for the audit history, taken from the email address, unique within the organization. */
@@ -215,15 +231,16 @@ export async function createUserRaw(ctx: Ctx, u: NewUser, opts: { pending?: bool
   const email = normalizeEmail(u.email)
   assert(!(await ctx.db.prepare('SELECT 1 AS x FROM users WHERE email = ?').get(email)), 'email_taken')
   const username = await usernameFor(ctx, email)
+  const role = await getRole(ctx, u.roleId)
   const pending = !!opts.pending
   const info = await ctx.db
     .prepare(
-      'INSERT INTO users (organization_id, username, email, display_name, password_hash, role, active, pending, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO users (organization_id, username, email, display_name, password_hash, role, role_id, active, pending, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
-    .run(ctx.org, username, email, u.displayName.trim() || username, hashPassword(u.password), u.role, pending ? 0 : 1, pending ? 1 : 0, ctx.now().toISOString())
+    .run(ctx.org, username, email, u.displayName.trim() || username, hashPassword(u.password), role.is_admin ? 'admin' : 'operator', role.id, pending ? 0 : 1, pending ? 1 : 0, ctx.now().toISOString())
   const id = Number(info.lastInsertRowid)
   const recoveryCode = await issueRecoveryCode(ctx, id)
-  await audit(ctx, { action: pending ? 'signup_request' : 'create', entity: 'user', entityId: id, details: { email, username, role: u.role } })
+  await audit(ctx, { action: pending ? 'signup_request' : 'create', entity: 'user', entityId: id, details: { email, username, role: role.name } })
   return { id, recoveryCode }
 }
 
@@ -239,7 +256,12 @@ export async function signup(anon: AnonCtx, u: { organizationCode: string; email
   const ctx = await orgCtx(anon, org.id)
   assert((await getSettings(ctx)).allowSignup, 'signup_disabled')
   return ctx.db.transaction(async () => {
-    const { recoveryCode } = await createUserRaw(ctx, { email: u.email, displayName: u.displayName, password: u.password, role: 'operator' }, { pending: true })
+    // Someone signing up gets the data-entry role; the administrator chooses the final role on approval.
+    await ensureRoles(ctx.db, ctx.org)
+    const worker = (await ctx.db.prepare('SELECT id FROM roles WHERE organization_id = ? AND name = ? AND archived_at IS NULL').get(ctx.org, WORKER_ROLE)) as { id: number } | undefined
+    const fallback = (await ctx.db.prepare('SELECT id FROM roles WHERE organization_id = ? AND is_admin = 0 AND archived_at IS NULL ORDER BY id LIMIT 1').get(ctx.org)) as { id: number } | undefined
+    assert(worker ?? fallback, 'role_not_found')
+    const { recoveryCode } = await createUserRaw(ctx, { email: u.email, displayName: u.displayName, password: u.password, roleId: (worker ?? fallback)!.id }, { pending: true })
     return { recoveryCode }
   })()
 }
@@ -255,7 +277,8 @@ export async function resetWithRecoveryCode(anon: AnonCtx, email: string, code: 
     await audit(ctx, { action: 'password_reset_failed', entity: 'user', details: { email } })
     throw new AppError('invalid_recovery')
   }
-  const ctx = await orgCtx(anon, row.organization_id, toSessionUser(row))
+  const ctx = await orgCtx(anon, row.organization_id)
+  ctx.user = await toSessionUser(anon, row)
   return ctx.db.transaction(async () => {
     await ctx.db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(newPassword), row.id)
     await clearFailures(ctx, row.id)
@@ -285,9 +308,10 @@ export async function newOwnRecoveryCode(ctx: Ctx, password: string) {
 }
 
 export async function adminNewRecoveryCode(ctx: Ctx, id: number) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'users.manage')
   return ctx.db.transaction(async () => {
     await getAuthRow(ctx, id)
+    await assertCanManageUser(ctx, id)
     const recoveryCode = await issueRecoveryCode(ctx, id)
     await audit(ctx, { action: 'new_recovery_code', entity: 'user', entityId: id })
     return { recoveryCode }
@@ -295,32 +319,38 @@ export async function adminNewRecoveryCode(ctx: Ctx, id: number) {
 }
 
 export async function listUsers(ctx: Ctx): Promise<UserRow[]> {
-  requireAdmin(ctx)
-  const rows = (await ctx.db.prepare(`SELECT ${userCols} FROM users WHERE organization_id = ? ORDER BY pending DESC, username`).all(ctx.org)) as Record<
+  requirePermission(ctx, 'users.manage')
+  const rows = (await ctx.db.prepare(`SELECT ${userCols} FROM ${userFrom} WHERE u.organization_id = ? ORDER BY u.pending DESC, u.username`).all(ctx.org)) as Record<
     string,
     unknown
   >[]
-  return rows.map(toUser)
+  const roles = new Map((await listRoles(ctx)).map((r) => [r.id, r.permissions]))
+  return rows.map((r) => toUser(r, roles.get(r.roleId as number) ?? []))
 }
 
 export async function createUser(ctx: Ctx, u: NewUser) {
-  requireAdmin(ctx)
-  return ctx.db.transaction(async () => createUserRaw(ctx, u))()
+  requirePermission(ctx, 'users.manage')
+  return ctx.db.transaction(async () => {
+    await assertCanAssignRole(ctx, u.roleId)
+    return createUserRaw(ctx, u)
+  })()
 }
 
-export async function approveSignup(ctx: Ctx, id: number, role: Role) {
-  requireAdmin(ctx)
+export async function approveSignup(ctx: Ctx, id: number, roleId: number) {
+  requirePermission(ctx, 'users.manage')
   await ctx.db.transaction(async () => {
     const row = await getAuthRow(ctx, id)
     assert(row.pending, 'not_pending')
-    await ctx.db.prepare('UPDATE users SET pending = 0, active = 1, role = ? WHERE id = ?').run(role, id)
-    await audit(ctx, { action: 'approve_signup', entity: 'user', entityId: id, details: { username: row.username, email: row.email, role } })
+    await assertCanAssignRole(ctx, roleId)
+    const role = await getRole(ctx, roleId)
+    await ctx.db.prepare('UPDATE users SET pending = 0, active = 1, role = ?, role_id = ? WHERE id = ?').run(role.is_admin ? 'admin' : 'operator', roleId, id)
+    await audit(ctx, { action: 'approve_signup', entity: 'user', entityId: id, details: { username: row.username, email: row.email, role: role.name } })
   })()
 }
 
 /** Rejecting removes the request; it has no farm records attached. */
 export async function rejectSignup(ctx: Ctx, id: number) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'users.manage')
   await ctx.db.transaction(async () => {
     const row = await getAuthRow(ctx, id)
     assert(row.pending, 'not_pending')
@@ -331,34 +361,45 @@ export async function rejectSignup(ctx: Ctx, id: number) {
 
 async function otherActiveAdmins(ctx: Ctx, excludeId: number) {
   const r = (await ctx.db
-    .prepare("SELECT COUNT(*) AS n FROM users WHERE organization_id = ? AND role = 'admin' AND active = 1 AND pending = 0 AND id <> ?")
+    .prepare(
+      `SELECT COUNT(*) AS n FROM users u JOIN roles r ON r.id = u.role_id
+       WHERE u.organization_id = ? AND r.is_admin = 1 AND r.archived_at IS NULL AND u.active = 1 AND u.pending = 0 AND u.id <> ?`
+    )
     .get(ctx.org, excludeId)) as { n: number }
   return r.n
 }
 
-export async function updateUser(ctx: Ctx, u: { id: number; email: string; displayName: string; role: Role; active: boolean }) {
-  const admin = requireAdmin(ctx)
+export async function updateUser(ctx: Ctx, u: { id: number; email: string; displayName: string; roleId: number; active: boolean }) {
+  const admin = requirePermission(ctx, 'users.manage')
   const email = normalizeEmail(u.email)
   await ctx.db.transaction(async () => {
-    const before = (await ctx.db.prepare(`SELECT ${userCols} FROM users WHERE id = ? AND organization_id = ?`).get(u.id, ctx.org)) as
+    const before = (await ctx.db.prepare(`SELECT ${userCols} FROM ${userFrom} WHERE u.id = ? AND u.organization_id = ?`).get(u.id, ctx.org)) as
       | Record<string, unknown>
       | undefined
     assert(before, 'not_found')
     assert(!before.pending, 'account_pending')
-    if (before.role === 'admin' && (u.role !== 'admin' || !u.active)) {
+    await assertCanManageUser(ctx, u.id)
+    await assertCanAssignRole(ctx, u.roleId)
+    const role = await getRole(ctx, u.roleId)
+    if (before.role === 'admin' && (!role.is_admin || !u.active)) {
       assert((await otherActiveAdmins(ctx, u.id)) > 0, 'last_admin')
     }
     assert(!(u.id === admin.id && !u.active), 'cannot_disable_self')
     assert(!(await ctx.db.prepare('SELECT 1 AS x FROM users WHERE email = ? AND id <> ?').get(email, u.id)), 'email_taken')
-    await ctx.db.prepare('UPDATE users SET email = ?, display_name = ?, role = ?, active = ? WHERE id = ?').run(email, u.displayName.trim(), u.role, u.active ? 1 : 0, u.id)
+    await ctx.db
+      .prepare('UPDATE users SET email = ?, display_name = ?, role = ?, role_id = ?, active = ? WHERE id = ?')
+      .run(email, u.displayName.trim(), role.is_admin ? 'admin' : 'operator', role.id, u.active ? 1 : 0, u.id)
+    // A disabled account is signed out everywhere at once.
+    if (!u.active) await ctx.db.prepare('DELETE FROM sessions WHERE user_id = ? AND organization_id = ?').run(u.id, ctx.org)
     await audit(ctx, { action: 'update', entity: 'user', entityId: u.id, details: { before, after: { ...u, email } } })
   })()
 }
 
 export async function resetPassword(ctx: Ctx, id: number, password: string) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'users.manage')
   validatePassword(password)
   await ctx.db.transaction(async () => {
+    await assertCanManageUser(ctx, id)
     const info = await ctx.db
       .prepare('UPDATE users SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ? AND organization_id = ?')
       .run(hashPassword(password), id, ctx.org)

@@ -1,7 +1,8 @@
 import type { Cage } from '@shared/types'
-import { type Ctx, requireAdmin } from '../context'
+import { type Ctx } from '../context'
 import { assert } from '../errors'
 import { audit } from './audit'
+import { requirePermission } from './roles'
 
 const cols = `id, code, name, initial_hens AS initialHens, capacity, has_water_meter AS hasWaterMeter,
   active, sort_order AS sortOrder, notes`
@@ -68,7 +69,7 @@ export async function insertCageRaw(ctx: Ctx, c: CageInput): Promise<number> {
 }
 
 export async function createCage(ctx: Ctx, c: CageInput) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'cages.manage')
   return ctx.db.transaction(async () => insertCageRaw(ctx, c))()
 }
 
@@ -78,7 +79,7 @@ export async function cageHasHistory(ctx: Pick<Ctx, 'db' | 'org'>, cageId: numbe
 }
 
 export async function updateCage(ctx: Ctx, id: number, c: CageInput, reason: string | null) {
-  requireAdmin(ctx)
+  requirePermission(ctx, 'cages.manage')
   await ctx.db.transaction(async () => {
     const before = await getCage(ctx, id)
     const dup = await ctx.db.prepare('SELECT 1 AS x FROM cages WHERE farm_id = ? AND code = ? AND id <> ?').get(ctx.farm, c.code.trim(), id)
