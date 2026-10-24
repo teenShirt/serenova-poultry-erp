@@ -3,6 +3,7 @@ import { HashRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate 
 import {
   Bell,
   Bird,
+  ListChecks,
   BookOpen,
   Boxes,
   CalendarCheck,
@@ -58,6 +59,8 @@ import { FlowPage } from './pages/Flow'
 import { AdminPage } from './pages/Admin'
 import { PlatformConsole } from './pages/Platform'
 import { FlocksPage } from './pages/Flocks'
+import { StoresPage } from './pages/Stores'
+import { TasksPage } from './pages/Tasks'
 import { FarmSwitcher } from './components/Farms'
 
 export function App() {
@@ -136,6 +139,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'navg.daily',
     items: [
       { to: '/daily', key: 'nav.daily', icon: CalendarCheck },
+      { to: '/tasks', key: 'nav.tasks', icon: ListChecks },
       { to: '/eggs', key: 'nav.eggs', icon: Egg, perm: 'eggs.record' },
       { to: '/feed', key: 'nav.feed', icon: Wheat, perm: 'feed.record' },
       { to: '/water', key: 'nav.water', icon: Droplets, perm: 'water.record' },
@@ -148,6 +152,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { to: '/purchases', key: 'nav.purchases', icon: PackagePlus, perm: 'purchases.record', module: 'purchasing' },
       { to: '/inventory', key: 'nav.inventory', icon: Boxes, perm: 'inventory.record' },
+      { to: '/stores', key: 'nav.stores', icon: Warehouse, anyOf: ['inventory.record', 'inventory.transfer', 'inventory.adjust', 'stores.manage'] },
       { to: '/sales', key: 'nav.sales', icon: Truck, perm: 'sales.record', module: 'sales' }
     ]
   },
@@ -351,6 +356,8 @@ function Shell() {
           <Route path="/purchases" element={<PurchasesPage />} />
           <Route path="/sales" element={<SalesPage />} />
           <Route path="/flocks" element={<FlocksPage />} />
+          <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/stores" element={<StoresPage />} />
           <Route path="/cages" element={<CagesPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/inventory" element={<InventoryPage />} />

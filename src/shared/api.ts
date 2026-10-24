@@ -1,3 +1,4 @@
+import type { PurchaseOrder, PurchaseOrderInput, ReceiptLineInput, StockCountInput, StockCountRow, StoreBalance, TaskEvent, TaskInput, TaskReportRow, TaskRow, TransferInput, Warehouse } from './stores'
 import type { FarmRow, FlockDetail, FlockInput, FlockSummary, HouseRow, ReminderDue, ReminderRow } from './flocks'
 import type { OrgSummary, Plan, PlatformMetrics, PlatformStatus, PlatformUser, SubscriptionChange } from './platform'
 import type {
@@ -66,6 +67,9 @@ export interface ItemInputDto {
   lowStockThreshold: number | null
   active: boolean
   notes: string | null
+  sku?: string | null
+  reorderLevel?: number | null
+  defaultSupplierId?: number | null
 }
 
 export interface SetupDto {
@@ -102,7 +106,11 @@ export interface ReceiptDto {
   invoiceNo: string | null
   vehicle: string | null
   notes: string | null
-  lines: { itemId: number; quantity: number; unitCost: number | null; batchNo: string | null; expiryDate: string | null }[]
+  warehouseId?: number | null
+  poId?: number | null
+  deliveryNote?: string | null
+  clientRef?: string | null
+  lines: (Partial<ReceiptLineInput> & { itemId: number; quantity: number; unitCost: number | null; batchNo: string | null; expiryDate: string | null })[]
 }
 
 export interface DispatchDto {
@@ -270,9 +278,9 @@ export interface Api {
   'inventory.items': { in: { category?: InventoryCategory }; out: InventoryItem[] }
   'inventory.createItem': { in: ItemInputDto; out: number }
   'inventory.updateItem': { in: { id: number; item: ItemInputDto }; out: void }
-  'inventory.balances': { in: { category?: InventoryCategory }; out: InventoryBalance[] }
-  'inventory.batches': { in: { itemId?: number; onlyInStock?: boolean }; out: InventoryBatch[] }
-  'inventory.txns': { in: { itemId?: number; category?: InventoryCategory; from?: string; to?: string; limit?: number }; out: InventoryTxn[] }
+  'inventory.balances': { in: { category?: InventoryCategory; warehouseId?: number | null }; out: InventoryBalance[] }
+  'inventory.batches': { in: { itemId?: number; onlyInStock?: boolean; warehouseId?: number | null }; out: InventoryBatch[] }
+  'inventory.txns': { in: { itemId?: number; category?: InventoryCategory; from?: string; to?: string; limit?: number; warehouseId?: number | null }; out: InventoryTxn[] }
   'inventory.record': {
     in: {
       itemId: number
@@ -286,6 +294,7 @@ export interface Api {
       reference: string | null
       notes: string | null
       cageId: number | null
+      warehouseId?: number | null
     }
     out: number
   }
@@ -309,7 +318,29 @@ export interface Api {
   'parties.saveSupplier': { in: PartyDto; out: number }
   'parties.saveCustomer': { in: PartyDto; out: number }
   'purchases.list': { in: { from: string; to: string }; out: GoodsReceipt[] }
-  'purchases.create': { in: ReceiptDto; out: { id: number; grnNo: string } }
+  'purchases.create': { in: ReceiptDto; out: { id: number; grnNo: string; status: 'submitted' | 'posted' } }
+  'purchases.approve': { in: { id: number }; out: void }
+  'purchases.reject': { in: { id: number; reason: string }; out: void }
+  'purchases.orders': { in: { openOnly?: boolean }; out: PurchaseOrder[] }
+  'purchases.createOrder': { in: PurchaseOrderInput; out: { id: number; poNo: string } }
+  'purchases.closeOrder': { in: { id: number; status: 'closed' | 'cancelled'; reason: string }; out: void }
+
+  // ---- Stores (warehouses), transfers and stock counts ----
+  'stores.list': { in: { includeInactive?: boolean }; out: Warehouse[] }
+  'stores.save': { in: { id: number | null; code: string; name: string; active: boolean; notes: string | null }; out: number }
+  'stores.balances': { in: { warehouseId?: number | null; category?: InventoryCategory }; out: StoreBalance[] }
+  'stores.transfer': { in: TransferInput; out: string }
+  'stores.count': { in: StockCountInput; out: number }
+  'stores.counts': { in: { from: string; to: string }; out: StockCountRow[] }
+
+  // ---- Tasks ----
+  'tasks.list': { in: { from: string; to: string; mineOnly?: boolean }; out: TaskRow[] }
+  'tasks.get': { in: { id: number }; out: TaskRow & { events: TaskEvent[] } }
+  'tasks.save': { in: TaskInput; out: number }
+  'tasks.action': { in: { id: number; action: 'start' | 'complete' | 'verify' | 'cancel' | 'comment' | 'stop_series'; note: string | null }; out: void }
+  'tasks.report': { in: { from: string; to: string; by: 'week' | 'month' }; out: TaskReportRow[] }
+  /** People and teams (roles) a task can be assigned to */
+  'tasks.assignees': { in: void; out: { users: { id: number; name: string }[]; roles: { id: number; name: string }[] } }
   'purchases.cancel': { in: { id: number; reason: string }; out: void }
   'purchases.series': { in: { from: string; to: string }; out: PurchasesDay[] }
   'sales.stock': { in: void; out: EggStock & { outstanding: number } }
@@ -464,6 +495,23 @@ export const API_KIND: Record<ApiMethod, 'read' | 'write'> = {
   'parties.saveCustomer': 'write',
   'purchases.list': 'read',
   'purchases.create': 'write',
+  'purchases.approve': 'write',
+  'purchases.reject': 'write',
+  'purchases.orders': 'read',
+  'purchases.createOrder': 'write',
+  'purchases.closeOrder': 'write',
+  'stores.list': 'read',
+  'stores.save': 'write',
+  'stores.balances': 'read',
+  'stores.transfer': 'write',
+  'stores.count': 'write',
+  'stores.counts': 'read',
+  'tasks.list': 'read',
+  'tasks.get': 'read',
+  'tasks.save': 'write',
+  'tasks.action': 'write',
+  'tasks.report': 'read',
+  'tasks.assignees': 'read',
   'purchases.cancel': 'write',
   'purchases.series': 'read',
   'sales.stock': 'read',

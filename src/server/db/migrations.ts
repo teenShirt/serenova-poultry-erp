@@ -725,8 +725,300 @@ CREATE TABLE flock_reminder_done (
          SELECT organization_id, role_id, 'farms.manage' FROM role_permissions WHERE permission = 'settings.manage'`
       )
     }
+  },
+  {
+    version: 9,
+    name: 'stores, purchase orders, GRN approval, stock counts, tasks',
+    up: async (db) => {
+      await db.exec(`
+-- Stores and warehouses. Each belongs to a farm (location); every farm has one main store.
+CREATE TABLE warehouses (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  farm_id INT NOT NULL,
+  code VARCHAR(40) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  is_main TINYINT NOT NULL DEFAULT 0 CHECK (is_main IN (0,1)),
+  active TINYINT NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  notes TEXT,
+  created_at VARCHAR(32) NOT NULL,
+  UNIQUE KEY ux_warehouses_code (organization_id, code),
+  UNIQUE KEY ux_warehouses_org_id (organization_id, id),
+  CONSTRAINT fk_warehouses_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_warehouses_farm FOREIGN KEY (organization_id, farm_id) REFERENCES farms(organization_id, id)
+) ${T};
+`)
+      // Every existing farm gets its main store; the existing stock history moves into it.
+      await ensureMainStores(db)
+      await db.exec(`
+ALTER TABLE inventory_transactions
+  ADD COLUMN warehouse_id INT NULL AFTER item_id,
+  ADD COLUMN transfer_ref VARCHAR(40) NULL,
+  ADD COLUMN counterpart_warehouse_id INT NULL;
+
+-- Records of a farm day go to that farm's main store; the rest to the main store of the organization's first farm.
+UPDATE inventory_transactions t JOIN farm_days d ON d.id = t.day_id
+  JOIN warehouses w ON w.farm_id = d.farm_id AND w.is_main = 1
+  SET t.warehouse_id = w.id;
+UPDATE inventory_transactions t
+  SET t.warehouse_id = (SELECT w.id FROM warehouses w JOIN farms f ON f.id = w.farm_id
+    WHERE w.organization_id = t.organization_id AND w.is_main = 1 ORDER BY f.id LIMIT 1)
+  WHERE t.warehouse_id IS NULL;
+
+ALTER TABLE inventory_transactions MODIFY warehouse_id INT NOT NULL,
+  ADD KEY ix_inv_store (warehouse_id, item_id),
+  ADD CONSTRAINT fk_inv_warehouse FOREIGN KEY (organization_id, warehouse_id) REFERENCES warehouses(organization_id, id),
+  ADD CONSTRAINT fk_inv_counterpart FOREIGN KEY (organization_id, counterpart_warehouse_id) REFERENCES warehouses(organization_id, id);
+`)
+      // The movement types now include transfers between stores, stock-count corrections and reversals.
+      const checks = (await db
+        .prepare(
+          `SELECT c.constraint_name AS n FROM information_schema.check_constraints c
+           JOIN information_schema.table_constraints t ON t.constraint_schema = c.constraint_schema AND t.constraint_name = c.constraint_name
+           WHERE c.constraint_schema = DATABASE() AND t.table_name = 'inventory_transactions' AND c.check_clause LIKE '%opening%'`
+        )
+        .all()) as { n: string }[]
+      for (const c of checks) await db.query(`ALTER TABLE inventory_transactions DROP CHECK \`${c.n}\``)
+      await db.query(
+        `ALTER TABLE inventory_transactions ADD CONSTRAINT ck_inv_type CHECK (type IN
+          ('opening','purchase','receipt','issue','usage','return','adjustment','wastage','expired','transfer_in','transfer_out','count','reversal'))`
+      )
+
+      await db.exec(`
+-- Purchase orders: what was ordered from a supplier, for which store.
+CREATE TABLE purchase_orders (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  po_no VARCHAR(32) NOT NULL,
+  order_date DATE NOT NULL,
+  expected_date DATE,
+  supplier_id INT NOT NULL,
+  warehouse_id INT NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed','cancelled')),
+  notes TEXT,
+  created_by INT,
+  created_at VARCHAR(32) NOT NULL,
+  closed_by INT,
+  closed_at VARCHAR(32),
+  close_reason TEXT,
+  UNIQUE KEY ux_po_no (organization_id, po_no),
+  UNIQUE KEY ux_purchase_orders_org_id (organization_id, id),
+  CONSTRAINT fk_po_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_po_supplier FOREIGN KEY (organization_id, supplier_id) REFERENCES suppliers(organization_id, id),
+  CONSTRAINT fk_po_warehouse FOREIGN KEY (organization_id, warehouse_id) REFERENCES warehouses(organization_id, id),
+  CONSTRAINT fk_po_created_by FOREIGN KEY (organization_id, created_by) REFERENCES users(organization_id, id),
+  CONSTRAINT fk_po_closed_by FOREIGN KEY (organization_id, closed_by) REFERENCES users(organization_id, id)
+) ${T};
+
+CREATE TABLE purchase_order_lines (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  po_id INT NOT NULL,
+  item_id INT NOT NULL,
+  quantity DECIMAL(16,3) NOT NULL CHECK (quantity > 0),
+  unit_cost DECIMAL(16,4) CHECK (unit_cost IS NULL OR unit_cost >= 0),
+  UNIQUE KEY ux_purchase_order_lines_org_id (organization_id, id),
+  CONSTRAINT fk_pol_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_pol_po FOREIGN KEY (organization_id, po_id) REFERENCES purchase_orders(organization_id, id),
+  CONSTRAINT fk_pol_item FOREIGN KEY (organization_id, item_id) REFERENCES inventory_items(organization_id, id)
+) ${T};
+
+-- Goods received notes: store, purchase order, approval and cancellation (never deleted).
+ALTER TABLE goods_receipts
+  ADD COLUMN warehouse_id INT NULL AFTER supplier_id,
+  ADD COLUMN po_id INT NULL AFTER warehouse_id,
+  ADD COLUMN delivery_note VARCHAR(255) NULL AFTER invoice_no,
+  ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'posted' CHECK (status IN ('submitted','posted','rejected','cancelled')),
+  ADD COLUMN client_ref VARCHAR(64) NULL,
+  ADD COLUMN approved_by INT NULL,
+  ADD COLUMN approved_at VARCHAR(32) NULL,
+  ADD COLUMN cancelled_by INT NULL,
+  ADD COLUMN cancelled_at VARCHAR(32) NULL,
+  ADD COLUMN cancel_reason TEXT NULL;
+
+UPDATE goods_receipts g
+  SET g.warehouse_id = (SELECT w.id FROM warehouses w JOIN farms f ON f.id = w.farm_id
+    WHERE w.organization_id = g.organization_id AND w.is_main = 1 ORDER BY f.id LIMIT 1);
+
+ALTER TABLE goods_receipts MODIFY warehouse_id INT NOT NULL,
+  ADD UNIQUE KEY ux_grn_client_ref (organization_id, client_ref),
+  ADD CONSTRAINT fk_grn_warehouse FOREIGN KEY (organization_id, warehouse_id) REFERENCES warehouses(organization_id, id),
+  ADD CONSTRAINT fk_grn_po FOREIGN KEY (organization_id, po_id) REFERENCES purchase_orders(organization_id, id),
+  ADD CONSTRAINT fk_grn_approved_by FOREIGN KEY (organization_id, approved_by) REFERENCES users(organization_id, id),
+  ADD CONSTRAINT fk_grn_cancelled_by FOREIGN KEY (organization_id, cancelled_by) REFERENCES users(organization_id, id);
+
+-- quantity = delivered; rejected and damaged are not taken into stock; ordered comes from the purchase order.
+ALTER TABLE goods_receipt_lines
+  ADD COLUMN po_line_id INT NULL AFTER receipt_id,
+  ADD COLUMN ordered_qty DECIMAL(16,3) NULL,
+  ADD COLUMN rejected_qty DECIMAL(16,3) NOT NULL DEFAULT 0 CHECK (rejected_qty >= 0),
+  ADD COLUMN damaged_qty DECIMAL(16,3) NOT NULL DEFAULT 0 CHECK (damaged_qty >= 0),
+  ADD COLUMN reject_reason TEXT NULL,
+  ADD CONSTRAINT fk_grn_lines_po_line FOREIGN KEY (organization_id, po_line_id) REFERENCES purchase_order_lines(organization_id, id);
+
+-- Stock counts: counted quantities per item (and batch) in one store; differences are posted as 'count' movements.
+CREATE TABLE stock_counts (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  warehouse_id INT NOT NULL,
+  count_date DATE NOT NULL,
+  notes TEXT,
+  counted_by INT,
+  created_at VARCHAR(32) NOT NULL,
+  UNIQUE KEY ux_stock_counts_org_id (organization_id, id),
+  CONSTRAINT fk_counts_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_counts_warehouse FOREIGN KEY (organization_id, warehouse_id) REFERENCES warehouses(organization_id, id),
+  CONSTRAINT fk_counts_user FOREIGN KEY (organization_id, counted_by) REFERENCES users(organization_id, id)
+) ${T};
+
+CREATE TABLE stock_count_lines (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  count_id INT NOT NULL,
+  item_id INT NOT NULL,
+  batch_id INT,
+  system_qty DECIMAL(16,3) NOT NULL,
+  counted_qty DECIMAL(16,3) NOT NULL CHECK (counted_qty >= 0),
+  UNIQUE KEY ux_stock_count_lines_org_id (organization_id, id),
+  CONSTRAINT fk_count_lines_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_count_lines_count FOREIGN KEY (organization_id, count_id) REFERENCES stock_counts(organization_id, id),
+  CONSTRAINT fk_count_lines_item FOREIGN KEY (organization_id, item_id) REFERENCES inventory_items(organization_id, id),
+  CONSTRAINT fk_count_lines_batch FOREIGN KEY (organization_id, batch_id) REFERENCES inventory_batches(organization_id, id)
+) ${T};
+
+-- Recurring tasks: a definition from which one task per occurrence is made.
+CREATE TABLE task_series (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  farm_id INT,
+  house_id INT,
+  title VARCHAR(200) NOT NULL,
+  category VARCHAR(32) NOT NULL,
+  priority VARCHAR(8) NOT NULL CHECK (priority IN ('low','normal','high','urgent')),
+  instructions TEXT,
+  completion_criteria TEXT,
+  assignee_user_id INT,
+  assignee_role_id INT,
+  recurrence VARCHAR(8) NOT NULL CHECK (recurrence IN ('daily','weekly','monthly')),
+  start_date DATE NOT NULL,
+  until_date DATE,
+  active TINYINT NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  created_by INT,
+  created_at VARCHAR(32) NOT NULL,
+  UNIQUE KEY ux_task_series_org_id (organization_id, id),
+  CONSTRAINT fk_series_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_series_farm FOREIGN KEY (organization_id, farm_id) REFERENCES farms(organization_id, id),
+  CONSTRAINT fk_series_house FOREIGN KEY (organization_id, house_id) REFERENCES houses(organization_id, id),
+  CONSTRAINT fk_series_user FOREIGN KEY (organization_id, assignee_user_id) REFERENCES users(organization_id, id),
+  CONSTRAINT fk_series_role FOREIGN KEY (organization_id, assignee_role_id) REFERENCES roles(organization_id, id),
+  CONSTRAINT fk_series_created_by FOREIGN KEY (organization_id, created_by) REFERENCES users(organization_id, id)
+) ${T};
+
+CREATE TABLE tasks (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  series_id INT,
+  farm_id INT,
+  house_id INT,
+  title VARCHAR(200) NOT NULL,
+  category VARCHAR(32) NOT NULL,
+  priority VARCHAR(8) NOT NULL CHECK (priority IN ('low','normal','high','urgent')),
+  instructions TEXT,
+  completion_criteria TEXT,
+  assignee_user_id INT,
+  assignee_role_id INT,
+  start_date DATE NOT NULL,
+  due_date DATE NOT NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','in_progress','completed','verified','cancelled')),
+  created_by INT,
+  created_at VARCHAR(32) NOT NULL,
+  completed_by INT,
+  completed_at VARCHAR(32),
+  verified_by INT,
+  verified_at VARCHAR(32),
+  CHECK (due_date >= start_date),
+  UNIQUE KEY ux_tasks_occurrence (series_id, due_date),
+  UNIQUE KEY ux_tasks_org_id (organization_id, id),
+  KEY ix_tasks_due (organization_id, due_date),
+  CONSTRAINT fk_tasks_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_tasks_series FOREIGN KEY (organization_id, series_id) REFERENCES task_series(organization_id, id),
+  CONSTRAINT fk_tasks_farm FOREIGN KEY (organization_id, farm_id) REFERENCES farms(organization_id, id),
+  CONSTRAINT fk_tasks_house FOREIGN KEY (organization_id, house_id) REFERENCES houses(organization_id, id),
+  CONSTRAINT fk_tasks_user FOREIGN KEY (organization_id, assignee_user_id) REFERENCES users(organization_id, id),
+  CONSTRAINT fk_tasks_role FOREIGN KEY (organization_id, assignee_role_id) REFERENCES roles(organization_id, id),
+  CONSTRAINT fk_tasks_created_by FOREIGN KEY (organization_id, created_by) REFERENCES users(organization_id, id),
+  CONSTRAINT fk_tasks_completed_by FOREIGN KEY (organization_id, completed_by) REFERENCES users(organization_id, id),
+  CONSTRAINT fk_tasks_verified_by FOREIGN KEY (organization_id, verified_by) REFERENCES users(organization_id, id)
+) ${T};
+
+-- Who created, assigned, started, completed, verified or cancelled each task, and notes.
+CREATE TABLE task_events (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  task_id INT NOT NULL,
+  at VARCHAR(32) NOT NULL,
+  user_id INT,
+  action VARCHAR(24) NOT NULL,
+  note TEXT,
+  KEY ix_task_events_task (task_id),
+  CONSTRAINT fk_task_events_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_task_events_task FOREIGN KEY (organization_id, task_id) REFERENCES tasks(organization_id, id),
+  CONSTRAINT fk_task_events_user FOREIGN KEY (organization_id, user_id) REFERENCES users(organization_id, id)
+) ${T};
+`)
+      // Item catalogue: SKU, reorder level, default supplier, and more categories.
+      const itemChecks = (await db
+        .prepare(
+          `SELECT c.constraint_name AS n FROM information_schema.check_constraints c
+           JOIN information_schema.table_constraints t ON t.constraint_schema = c.constraint_schema AND t.constraint_name = c.constraint_name
+           WHERE c.constraint_schema = DATABASE() AND t.table_name = 'inventory_items' AND c.check_clause LIKE '%medicine%'`
+        )
+        .all()) as { n: string }[]
+      for (const c of itemChecks) await db.query(`ALTER TABLE inventory_items DROP CHECK \`${c.n}\``)
+      await db.exec(`
+ALTER TABLE inventory_items
+  ADD COLUMN sku VARCHAR(64) NULL AFTER category,
+  ADD COLUMN reorder_level DECIMAL(16,3) NULL CHECK (reorder_level IS NULL OR reorder_level >= 0) AFTER low_stock_threshold,
+  ADD COLUMN default_supplier_id INT NULL AFTER reorder_level,
+  ADD UNIQUE KEY ux_items_sku (organization_id, sku),
+  ADD CONSTRAINT ck_items_category CHECK (category IN ('feed','medicine','cleaning','packaging','spare_part','equipment','supply')),
+  ADD CONSTRAINT fk_items_supplier FOREIGN KEY (organization_id, default_supplier_id) REFERENCES suppliers(organization_id, id);
+`)
+      // Who could record purchases may also raise purchase orders and approve receipts; who manages users, tasks.
+      for (const [perm, from] of [
+        ['purchases.approve', 'purchases.cancel'],
+        ['stores.manage', 'inventory.manage_items'],
+        ['inventory.transfer', 'inventory.adjust'],
+        ['tasks.manage', 'users.manage']
+      ]) {
+        await db.query(
+          `INSERT INTO role_permissions (organization_id, role_id, permission)
+           SELECT organization_id, role_id, ? FROM role_permissions WHERE permission = ?`,
+          [perm, from]
+        )
+      }
+    }
   }
 ]
+
+/** Gives every farm (of one organization, or all) without a main store its main store. */
+export async function ensureMainStores(db: DB, orgId?: number) {
+  const farms = (await db
+    .prepare(
+      `SELECT f.id, f.organization_id AS org, f.code, f.name,
+         (SELECT COUNT(*) FROM farms f2 WHERE f2.organization_id = f.organization_id AND f2.id < f.id) AS earlier
+       FROM farms f WHERE ${orgId === undefined ? '1 = 1' : 'f.organization_id = ?'}
+         AND NOT EXISTS (SELECT 1 FROM warehouses w WHERE w.farm_id = f.id AND w.is_main = 1)`
+    )
+    .all(...(orgId === undefined ? [] : [orgId]))) as { id: number; org: number; code: string; name: string; earlier: number }[]
+  for (const f of farms) {
+    let code = f.earlier === 0 ? 'MAIN' : `MAIN-${f.code}`.slice(0, 40)
+    for (let i = 2; await db.prepare('SELECT 1 AS x FROM warehouses WHERE organization_id = ? AND code = ?').get(f.org, code); i++) code = `MAIN-${f.id}-${i}`
+    await db
+      .prepare('INSERT INTO warehouses (organization_id, farm_id, code, name, is_main, created_at) VALUES (?, ?, ?, ?, 1, ?)')
+      .run(f.org, f.id, code, f.earlier === 0 ? 'Main Store' : `${f.name} — Main Store`, new Date().toISOString())
+  }
+}
 
 /** Exact decimal types (migration 8): quantities and readings to 3 places, prices to 4, amounts of money to 2. */
 const QTY = 'DECIMAL(16,3)'
@@ -760,6 +1052,7 @@ export const PLATFORM_TABLES = ['platform_users', 'plans', 'subscriptions', 'pla
 export const DATA_TABLES = [
   'organizations',
   'farms',
+  'warehouses',
   'app_settings',
   'roles',
   'role_permissions',
@@ -789,11 +1082,18 @@ export const DATA_TABLES = [
   'backup_runs',
   'suppliers',
   'customers',
+  'purchase_orders',
+  'purchase_order_lines',
   'goods_receipts',
   'goods_receipt_lines',
   'egg_dispatches',
   'customer_payments',
-  'egg_store_adjustments'
+  'egg_store_adjustments',
+  'stock_counts',
+  'stock_count_lines',
+  'task_series',
+  'tasks',
+  'task_events'
 ] as const
 
 export async function currentSchemaVersion(db: DB): Promise<number> {

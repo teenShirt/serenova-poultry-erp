@@ -60,6 +60,24 @@ signed-in user's organization, and MySQL itself rejects a record that points at 
   skipped (with a reason). The system never suggests treatments or doses.
 - Quantities, meter readings and money are stored as exact decimals (3 places for quantities, 2 for amounts).
 
+## Stores, purchasing and tasks
+
+- **Stores (warehouses):** stock is held per store. Every farm has a main store (the feed and medicine recorded on the
+  daily screens come out of it); more stores can be added within the plan's limit (*Stores*). Stock moves between
+  stores by **transfer** (a matched pair of movements), and a **stock count** posts the difference from the recorded
+  stock as a correction. Stock never goes below zero in any store. Stock is valued at the average purchase cost.
+- **Purchase orders** record what was ordered; **goods received notes** are recorded against them (or without one).
+  A delivery records delivered, rejected and damaged quantities (rejects need a reason); only what was accepted is added
+  to stock, and nothing more than is still outstanding on the order. If *Settings* requires approval, a note waits until
+  someone with *Approve goods received notes* approves it (not the person who recorded it, unless an administrator).
+  Each form carries a one-time key, so sending it twice records the delivery once.
+- Nothing already recorded is changed: a cancelled receipt stays in the history and its stock is taken out by reversing
+  movements.
+- **Tasks:** one-time or recurring (daily, weekly, monthly), assigned to a person or a team (a role), with priority,
+  instructions and "done when" criteria. Assignees start and complete them; task managers create, verify and cancel
+  them. Every step is in the task's history; overdue tasks show on the dashboard; *Tasks → Completion report* shows
+  on-time and late completion by week or month. Attachments are not supported yet.
+
 ## Plans, subscriptions and the Super Admin console
 
 Every organization has one subscription to a **plan**. The three plans created by the database upgrade are:
@@ -151,7 +169,7 @@ npm run create-super-admin -- <email> "<name>"   # a platform administrator for 
 ## Tests
 
 ```sh
-npm test         # 117 tests; a temporary MySQL 8.4 server is downloaded once and started automatically
+npm test         # 126 tests; a temporary MySQL 8.4 server is downloaded once and started automatically
 npm run typecheck
 npm run lint     # includes checks that every database call is awaited
 ```

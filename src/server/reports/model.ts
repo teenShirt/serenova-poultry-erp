@@ -84,7 +84,7 @@ export async function dayReport(ctx: Ctx, date: string, kind: 'day_open' | 'day_
       rows: ov.cages.map((c) => [c.name, c.carried, c.adjustment || null, c.opening, c.adjustmentReason ?? '']),
       totals: [t('common.total'), ov.cages.reduce((a, c) => a + c.carried, 0), null, ov.totals.opening, '']
     })
-    const inv = (await balances(ctx, undefined, addDays(date, -1))).filter((b) => b.active)
+    const inv = (await balances(ctx, undefined, addDays(date, -1), { farmId: ctx.farm })).filter((b) => b.active)
     sections.push({
       kind: 'table',
       heading: t('day.inventoryCarried'),
@@ -216,7 +216,7 @@ export async function dayReport(ctx: Ctx, date: string, kind: 'day_open' | 'day_
       rows: treatments.map((x) => [x.cageName ?? t('common.farm'), x.itemName, x.batchNo ?? '', `${n(x.quantity, 2)} ${x.unit}`, x.reason, x.prescribedBy ?? ''])
     })
   }
-  const inv = (await balances(ctx, undefined, date)).filter((b) => b.active)
+  const inv = (await balances(ctx, undefined, date, { farmId: ctx.farm })).filter((b) => b.active)
   sections.push({
     kind: 'table',
     heading: t('report.inventory'),

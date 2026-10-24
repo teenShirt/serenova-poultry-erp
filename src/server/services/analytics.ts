@@ -112,7 +112,7 @@ export async function cageComparison(ctx: Ctx, from: string, to: string): Promis
 export async function dashboard(ctx: Ctx, date: string, isDemo: boolean, backupWarning: string | null): Promise<DashboardData> {
   const settings = await getSettings(ctx)
   const today = await getOverview(ctx, date)
-  const inv = await balances(ctx)
+  const inv = await balances(ctx, undefined, undefined, { farmId: ctx.farm })
   const lowStock = inv.filter((b) => b.active && b.isLow)
   const expiring = (await listBatches(ctx, { onlyInStock: true })).filter(
     (b) => b.daysToExpiry !== null && b.daysToExpiry <= settings.medicineExpiryWarnDays

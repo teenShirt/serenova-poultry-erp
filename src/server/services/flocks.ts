@@ -15,6 +15,7 @@ import {
 import type { DailySeriesPoint } from '@shared/types'
 import type { Ctx } from '../context'
 import { AppError, assert } from '../errors'
+import { ensureMainStores } from '../db/migrations'
 import { dailySeries } from './analytics'
 import { audit } from './audit'
 import { farmToday, latestDay } from './days'
@@ -69,6 +70,8 @@ export async function saveFarm(ctx: Ctx, f: { id: number | null; name: string; l
         .prepare('INSERT INTO farms (organization_id, code, name, location, created_at) VALUES (?, ?, ?, ?, ?)')
         .run(ctx.org, code, name, f.location?.trim() || null, ctx.now().toISOString())
     ).lastInsertRowid
+    // Every farm has a main store, from which its daily feed and medicine are taken.
+    await ensureMainStores(ctx.db, ctx.org)
     await audit(ctx, { action: 'create', entity: 'farm', entityId: id, details: { name, location: f.location } })
     return id
   })()

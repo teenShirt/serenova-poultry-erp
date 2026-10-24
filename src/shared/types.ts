@@ -63,7 +63,7 @@ export type EggSession = (typeof EGG_SESSIONS)[number]
 export const FLOCK_TYPES = ['death', 'removal', 'addition', 'transfer_in', 'transfer_out'] as const
 export type FlockType = (typeof FLOCK_TYPES)[number]
 
-export const INVENTORY_CATEGORIES = ['feed', 'medicine', 'supply'] as const
+export const INVENTORY_CATEGORIES = ['feed', 'medicine', 'cleaning', 'packaging', 'spare_part', 'equipment', 'supply'] as const
 export type InventoryCategory = (typeof INVENTORY_CATEGORIES)[number]
 
 export const TXN_TYPES = [
@@ -75,7 +75,11 @@ export const TXN_TYPES = [
   'return',
   'adjustment',
   'wastage',
-  'expired'
+  'expired',
+  'transfer_in',
+  'transfer_out',
+  'count',
+  'reversal'
 ] as const
 export type TxnType = (typeof TXN_TYPES)[number]
 
@@ -105,6 +109,8 @@ export interface FarmSettings {
   currency: string
   /** Production stages by flock age (completed weeks) */
   productionStages: ProductionStage[]
+  /** Goods received notes wait for approval before their stock is posted */
+  grnApprovalRequired: boolean
   setupComplete: boolean
 }
 
@@ -282,6 +288,9 @@ export interface InventoryItem {
   lowStockThreshold: number | null
   active: boolean
   notes: string | null
+  sku: string | null
+  reorderLevel: number | null
+  defaultSupplierId: number | null
 }
 
 export interface InventoryBalance extends InventoryItem {
@@ -317,6 +326,8 @@ export interface InventoryTxn {
   sourceType: string | null
   recordedBy: string | null
   createdAt: string
+  warehouseName: string
+  counterpartWarehouse: string | null
 }
 
 export interface Treatment {
@@ -470,8 +481,13 @@ export interface GoodsReceiptLine {
   unit: string
   batchNo: string | null
   expiryDate: string | null
+  /** Delivered */
   quantity: number
   unitCost: number | null
+  orderedQty: number | null
+  rejectedQty: number
+  damagedQty: number
+  rejectReason: string | null
 }
 
 export interface GoodsReceipt {
@@ -487,6 +503,16 @@ export interface GoodsReceipt {
   lines: GoodsReceiptLine[]
   recordedBy: string | null
   createdAt: string
+  deliveryNote: string | null
+  status: 'submitted' | 'posted' | 'rejected' | 'cancelled'
+  warehouseId: number
+  warehouseName: string
+  poId: number | null
+  poNo: string | null
+  approvedBy: string | null
+  approvedAt: string | null
+  cancelledBy: string | null
+  cancelReason: string | null
 }
 
 export interface EggDispatch {

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Boxes, Pencil, Plus, Repeat } from 'lucide-react'
 import type { ItemInputDto } from '@shared/api'
 import { addDays } from '@shared/dates'
-import type { InventoryBalance, InventoryCategory, TxnType } from '@shared/types'
+import { INVENTORY_CATEGORIES, type InventoryBalance, type InventoryCategory, type TxnType } from '@shared/types'
 import { call } from '../lib/api'
 import { useApp, useLoad } from '../lib/app'
 import { Card, Empty, Field, Modal, Notice, NumInput, PageHeader, Seg, Tabs, nz } from '../components/ui'
@@ -37,12 +37,7 @@ export function InventoryPage() {
           <Seg
             value={category}
             onChange={setCategory}
-            options={[
-              { value: 'all', label: t('common.all') },
-              { value: 'feed', label: t('inv.cat.feed') },
-              { value: 'medicine', label: t('inv.cat.medicine') },
-              { value: 'supply', label: t('inv.cat.supply') }
-            ]}
+            options={[{ value: 'all' as const, label: t('common.all') }, ...INVENTORY_CATEGORIES.map((c) => ({ value: c, label: t('inv.cat.' + c) }))]}
           />
           <span className="muted small grow">{t('inv.allHistory')}</span>
         </div>
@@ -314,7 +309,12 @@ function RecordTxn({ items, initial, onClose }: { items: InventoryBalance[]; ini
 
 function ItemForm({ item, onClose }: { item: InventoryBalance | null; onClose: () => void }) {
   const { t, toast, fail, status } = useApp()
-  const [f, setF] = useState<ItemInputDto>(item ? { category: item.category, name: item.name, unit: item.unit, lowStockThreshold: item.lowStockThreshold, active: item.active, notes: item.notes } : { category: 'feed', name: '', unit: 'kg', lowStockThreshold: null, active: true, notes: null })
+  const [f, setF] = useState<ItemInputDto>(
+    item
+      ? { category: item.category, name: item.name, unit: item.unit, lowStockThreshold: item.lowStockThreshold, active: item.active, notes: item.notes, sku: item.sku, reorderLevel: item.reorderLevel, defaultSupplierId: item.defaultSupplierId }
+      : { category: 'feed', name: '', unit: 'kg', lowStockThreshold: null, active: true, notes: null, sku: null, reorderLevel: null, defaultSupplierId: null }
+  )
+  const { data: suppliers } = useLoad(() => call('parties.list', { kind: 'supplier' }), [])
   const units = f.category === 'medicine' ? status.settings.medicineUnits : f.category === 'feed' ? ['kg'] : ['pcs', 'kg', 'L', 'boxes']
   return (
     <Modal
@@ -347,10 +347,15 @@ function ItemForm({ item, onClose }: { item: InventoryBalance | null; onClose: (
       <div className="form-grid">
         <Field label={t('inv.category')}>
           <select className="select" value={f.category} disabled={!!item} onChange={(e) => setF({ ...f, category: e.target.value as InventoryCategory, unit: e.target.value === 'feed' ? 'kg' : e.target.value === 'medicine' ? 'ml' : 'pcs' })}>
-            <option value="feed">{t('inv.cat.feed')}</option>
-            <option value="medicine">{t('inv.cat.medicine')}</option>
-            <option value="supply">{t('inv.cat.supply')}</option>
+            {INVENTORY_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {t('inv.cat.' + c)}
+              </option>
+            ))}
           </select>
+        </Field>
+        <Field label={t('inv.sku')}>
+          <input className="input" value={f.sku ?? ''} maxLength={64} onChange={(e) => setF({ ...f, sku: nz(e.target.value) })} />
         </Field>
         <Field label={t('common.name')} required>
           <input className="input" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
@@ -365,6 +370,21 @@ function ItemForm({ item, onClose }: { item: InventoryBalance | null; onClose: (
         </Field>
         <Field label={t('inv.lowThreshold')}>
           <NumInput decimals value={f.lowStockThreshold} onChange={(v) => setF({ ...f, lowStockThreshold: v })} />
+        </Field>
+        <Field label={t('inv.reorderLevel')} hint={t('inv.reorderHint')}>
+          <NumInput decimals value={f.reorderLevel ?? null} onChange={(v) => setF({ ...f, reorderLevel: v })} />
+        </Field>
+        <Field label={t('inv.defaultSupplier')}>
+          <select className="select" value={f.defaultSupplierId ?? ''} onChange={(e) => setF({ ...f, defaultSupplierId: e.target.value ? Number(e.target.value) : null })}>
+            <option value="">—</option>
+            {suppliers
+              ?.filter((s) => s.active)
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+          </select>
         </Field>
         <label className="check">
           <input type="checkbox" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} />

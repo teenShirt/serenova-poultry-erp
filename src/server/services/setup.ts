@@ -5,9 +5,10 @@ import { assert } from '../errors'
 import { audit } from './audit'
 import { createUserRaw, toSessionUser } from './auth'
 import { ensureRoles } from './roles'
+import { ensureMainStores } from '../db/migrations'
 import { createSubscription, DEFAULT_TRIAL } from './subscriptions'
 import { insertCageRaw } from './cages'
-import { getOrCreateBatch, insertItemRaw } from './inventory'
+import { getOrCreateBatch, insertItemRaw, mainStore } from './inventory'
 import { saveSettings } from './settings'
 
 export interface SetupInput {
@@ -114,6 +115,8 @@ export async function createOrganization(
         notes: null
       })
     }
+    await ensureMainStores(anon.db, org)
+    const store = await mainStore(ctx)
     // Opening balances are dated the day before the first business date so they carry into that day.
     const openingDate = addDays(s.startDate, -1)
     for (const inv of s.inventory) {
@@ -129,10 +132,10 @@ export async function createOrganization(
         const batchId = inv.batchNo ? await getOrCreateBatch(actor, itemId, inv.batchNo, inv.expiryDate) : null
         await ctx.db
           .prepare(
-            `INSERT INTO inventory_transactions (organization_id, item_id, batch_id, txn_date, type, quantity, notes, recorded_by, created_at)
-             VALUES (?, ?, ?, ?, 'opening', ?, 'Opening balance (setup)', ?, ?)`
+            `INSERT INTO inventory_transactions (organization_id, item_id, warehouse_id, batch_id, txn_date, type, quantity, notes, recorded_by, created_at)
+             VALUES (?, ?, ?, ?, ?, 'opening', ?, 'Opening balance (setup)', ?, ?)`
           )
-          .run(org, itemId, batchId, openingDate, inv.openingBalance, adminId, at)
+          .run(org, itemId, store, batchId, openingDate, inv.openingBalance, adminId, at)
       }
     }
     await audit(actor, { action: 'complete_setup', entity: 'settings', details: { farm: name, cages: s.cages.length } })

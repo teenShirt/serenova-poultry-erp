@@ -36,6 +36,9 @@ import * as sales from './services/sales'
 import { flowSummary, purchasesSeries } from './services/supply'
 import * as adminSvc from './services/admin'
 import * as flocks from './services/flocks'
+import * as stores from './services/stores'
+import * as tasks from './services/tasks'
+import { approveReceipt, closeOrder, createOrder, listOrders, rejectReceipt } from './services/purchases'
 import { assertModule, assertWritable, getEntitlements, today } from './services/subscriptions'
 import type { RestoreTokens } from './uploads'
 
@@ -338,7 +341,7 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     'inventory.items': ({ category }, ctx) => inventory.listItems(ctx, category),
     'inventory.createItem': (i, ctx) => inventory.createItem(ctx, i),
     'inventory.updateItem': ({ id, item }, ctx) => inventory.updateItem(ctx, id, item),
-    'inventory.balances': ({ category }, ctx) => inventory.balances(ctx, category),
+    'inventory.balances': ({ category, warehouseId }, ctx) => inventory.balances(ctx, category, undefined, warehouseId ? { warehouseId } : undefined),
     'inventory.batches': (f, ctx) => inventory.listBatches(ctx, f),
     'inventory.txns': (f, ctx) => inventory.listTxns(ctx, f),
     'inventory.record': (t, ctx) => inventory.recordTxn(ctx, t),
@@ -347,6 +350,8 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
       const d = await analytics.dashboard(ctx, date, ctx.mode === 'demo', (await status(ctx)).backupWarning)
       const pending = hasPermission(ctx.user, 'users.manage') ? await auth.countPendingSignups(ctx) : 0
       if (pending > 0) d.alerts.unshift({ code: 'pending_signups', severity: 'info', params: { count: pending } })
+      const overdue = await tasks.myOverdueCount(ctx)
+      if (overdue > 0) d.alerts.push({ code: 'tasks_overdue', severity: 'warning', params: { count: overdue } })
       // Age reminders the organization set up (its own programme; never suggested by the system).
       for (const r of await flocks.remindersFor(ctx, await flocks.listFlocks(ctx, false), 0)) {
         if (r.state === 'due' || r.state === 'overdue') {
@@ -390,6 +395,32 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     'purchases.list': ({ from, to }, ctx) => listReceipts(ctx, from, to),
     'purchases.create': (r, ctx) => createReceipt(ctx, r),
     'purchases.cancel': ({ id, reason }, ctx) => cancelReceipt(ctx, id, reason),
+    'purchases.approve': ({ id }, ctx) => approveReceipt(ctx, id),
+    'purchases.reject': ({ id, reason }, ctx) => rejectReceipt(ctx, id, reason),
+    'purchases.orders': ({ openOnly }, ctx) => listOrders(ctx, { openOnly }),
+    'purchases.createOrder': (o, ctx) => createOrder(ctx, o),
+    'purchases.closeOrder': ({ id, status, reason }, ctx) => closeOrder(ctx, id, status, reason),
+    'stores.list': ({ includeInactive }, ctx) => stores.listWarehouses(ctx, includeInactive ?? true),
+    'stores.save': (w, ctx) => stores.saveWarehouse(ctx, w),
+    'stores.balances': (f, ctx) => stores.storeBalances(ctx, f),
+    'stores.transfer': (t, ctx) => stores.transferStock(ctx, t),
+    'stores.count': (c, ctx) => stores.countStock(ctx, c),
+    'stores.counts': ({ from, to }, ctx) => {
+      validatePeriod(from, to)
+      return stores.listCounts(ctx, from, to)
+    },
+    'tasks.list': ({ from, to, mineOnly }, ctx) => {
+      validatePeriod(from, to)
+      return tasks.listTasks(ctx, { from, to, mineOnly })
+    },
+    'tasks.get': ({ id }, ctx) => tasks.getTask(ctx, id),
+    'tasks.save': (t, ctx) => tasks.saveTask(ctx, t),
+    'tasks.action': ({ id, action, note }, ctx) => tasks.taskAction(ctx, id, action, note),
+    'tasks.assignees': (_, ctx) => tasks.assignees(ctx),
+    'tasks.report': ({ from, to, by }, ctx) => {
+      validatePeriod(from, to)
+      return tasks.taskReport(ctx, from, to, by)
+    },
     'purchases.series': ({ from, to }, ctx) => purchasesSeries(ctx, from, to),
     'sales.stock': async (_, ctx) => ({ ...(await sales.eggStock(ctx)), outstanding: await sales.outstandingTotal(ctx) }),
     'sales.list': (f, ctx) => sales.listDispatches(ctx, f),

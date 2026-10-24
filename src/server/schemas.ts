@@ -1,9 +1,10 @@
 import { z } from 'zod'
 import { isIsoDate } from '@shared/dates'
-import { EGG_SESSIONS, INVENTORY_CATEGORIES, TXN_TYPES } from '@shared/types'
+import { EGG_SESSIONS, INVENTORY_CATEGORIES } from '@shared/types'
 import type { ApiMethod } from '@shared/api'
 import { PERMISSIONS } from '@shared/permissions'
 import { MODULES, SUBSCRIPTION_STATUSES } from '@shared/platform'
+import { MANUAL_TXN_TYPES, TASK_CATEGORIES, TASK_PRIORITIES } from '@shared/stores'
 
 /** Input schemas for every API method. Unknown keys are stripped; wrong types are rejected. */
 const date = z.string().refine(isIsoDate, 'date')
@@ -44,7 +45,10 @@ const itemInput = z.object({
   unit: text(20),
   lowStockThreshold: qty.nullable(),
   active: z.boolean(),
-  notes: optText()
+  notes: optText(),
+  sku: optText(64).optional(),
+  reorderLevel: qty.nullable().optional(),
+  defaultSupplierId: id.nullable().optional()
 })
 
 const settingsPatch = z
@@ -68,6 +72,7 @@ const settingsPatch = z
     allowSignup: z.boolean(),
     autoCheckUpdates: z.boolean(),
     currency: text(10),
+    grnApprovalRequired: z.boolean(),
     productionStages: z.array(z.object({ name: text(60).min(1), fromWeek: z.number().int().min(0).max(200) })).max(20)
   })
   .partial()
@@ -256,12 +261,12 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
   'inventory.items': z.object({ category: category.optional() }),
   'inventory.createItem': itemInput,
   'inventory.updateItem': z.object({ id, item: itemInput }),
-  'inventory.balances': z.object({ category: category.optional() }),
-  'inventory.batches': z.object({ itemId: id.optional(), onlyInStock: z.boolean().optional() }),
-  'inventory.txns': z.object({ itemId: id.optional(), category: category.optional(), from: date.optional(), to: date.optional(), limit: z.number().int().min(1).max(5000).optional() }),
+  'inventory.balances': z.object({ category: category.optional(), warehouseId: id.nullable().optional() }),
+  'inventory.batches': z.object({ itemId: id.optional(), onlyInStock: z.boolean().optional(), warehouseId: id.nullable().optional() }),
+  'inventory.txns': z.object({ itemId: id.optional(), category: category.optional(), from: date.optional(), to: date.optional(), limit: z.number().int().min(1).max(5000).optional(), warehouseId: id.nullable().optional() }),
   'inventory.record': z.object({
     itemId: id,
-    type: z.enum(TXN_TYPES),
+    type: z.enum(MANUAL_TXN_TYPES),
     quantity: z.number().finite().min(-100_000_000).max(100_000_000),
     date,
     batchNo: optText(60),
@@ -270,7 +275,8 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
     supplier: optText(100),
     reference: optText(100),
     notes: optText(),
-    cageId: id.nullable()
+    cageId: id.nullable(),
+    warehouseId: id.nullable().optional()
   }),
 
   'analytics.dashboard': z.object({ date }),
@@ -296,12 +302,78 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
     invoiceNo: optText(60),
     vehicle: optText(40),
     notes: optText(),
+    warehouseId: id.nullable().optional(),
+    poId: id.nullable().optional(),
+    deliveryNote: optText(100).optional(),
+    clientRef: optText(64).optional(),
     lines: z
-      .array(z.object({ itemId: id, quantity: qty, unitCost: qty.nullable(), batchNo: optText(60), expiryDate: date.nullable() }))
+      .array(
+        z.object({
+          itemId: id,
+          quantity: qty,
+          unitCost: qty.nullable(),
+          batchNo: optText(60),
+          expiryDate: date.nullable(),
+          poLineId: id.nullable().optional(),
+          rejectedQty: qty.optional(),
+          damagedQty: qty.optional(),
+          rejectReason: optText().optional()
+        })
+      )
       .min(1)
       .max(50)
   }),
   'purchases.cancel': withReason,
+  'purchases.approve': z.object({ id }),
+  'purchases.reject': withReason,
+  'purchases.orders': z.object({ openOnly: z.boolean().optional() }),
+  'purchases.createOrder': z.object({
+    orderDate: date,
+    expectedDate: date.nullable(),
+    supplierId: id,
+    warehouseId: id,
+    notes: optText(),
+    lines: z.array(z.object({ itemId: id, quantity: qty, unitCost: qty.nullable() })).min(1).max(50)
+  }),
+  'purchases.closeOrder': z.object({ id, status: z.enum(['closed', 'cancelled']), reason: text(500) }),
+  'stores.list': z.object({ includeInactive: z.boolean().optional() }),
+  'stores.save': z.object({ id: id.nullable(), code: text(40), name: text(100), active: z.boolean(), notes: optText() }),
+  'stores.balances': z.object({ warehouseId: id.nullable().optional(), category: category.optional() }),
+  'stores.transfer': z.object({
+    date,
+    fromWarehouseId: id,
+    toWarehouseId: id,
+    notes: optText(),
+    lines: z.array(z.object({ itemId: id, batchNo: optText(60), quantity: qty })).min(1).max(50)
+  }),
+  'stores.count': z.object({
+    warehouseId: id,
+    date,
+    notes: optText(),
+    lines: z.array(z.object({ itemId: id, batchId: id.nullable(), countedQty: qty })).min(1).max(500)
+  }),
+  'stores.counts': z.object({ from: date, to: date }),
+  'tasks.list': z.object({ from: date, to: date, mineOnly: z.boolean().optional() }),
+  'tasks.get': z.object({ id }),
+  'tasks.save': z.object({
+    id: id.nullable(),
+    title: text(200),
+    category: z.enum(TASK_CATEGORIES),
+    priority: z.enum(TASK_PRIORITIES),
+    instructions: optText(4000),
+    completionCriteria: optText(2000),
+    farmId: id.nullable(),
+    houseId: id.nullable(),
+    assigneeUserId: id.nullable(),
+    assigneeRoleId: id.nullable(),
+    startDate: date,
+    dueDate: date,
+    recurrence: z.enum(['none', 'daily', 'weekly', 'monthly']),
+    untilDate: date.nullable()
+  }),
+  'tasks.action': z.object({ id, action: z.enum(['start', 'complete', 'verify', 'cancel', 'comment', 'stop_series']), note: optText(2000) }),
+  'tasks.assignees': none,
+  'tasks.report': z.object({ from: date, to: date, by: z.enum(['week', 'month']) }),
   'purchases.series': z.object({ from: date, to: date }),
   'sales.stock': none,
   'sales.list': z.object({ from: date, to: date, customerId: id.nullable().optional(), unpaidOnly: z.boolean().optional() }),

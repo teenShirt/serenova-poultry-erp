@@ -180,7 +180,7 @@ export async function previewStartDay(ctx: Ctx, date: string): Promise<StartDayP
     gapDays,
     laterDayExists: !!later,
     cages,
-    inventory: await balances(ctx, undefined, addDays(date, -1)),
+    inventory: await balances(ctx, undefined, addDays(date, -1), { farmId: ctx.farm }),
     warnings
   }
 }
@@ -420,7 +420,7 @@ async function computeIssues(
     .get(ctx.org, day.id)) as { tin: number; tout: number }
   if (t.tin !== t.tout) add('transfer_mismatch', 'error', null, { in: t.tin, out: t.tout }, false)
 
-  for (const b of await balances(ctx, undefined, day.business_date)) {
+  for (const b of await balances(ctx, undefined, day.business_date, { farmId: ctx.farm })) {
     if (b.balance < 0) add('negative_stock', 'error', null, { item: b.name, balance: b.balance, unit: b.unit }, true, String(b.id))
   }
 
@@ -519,7 +519,7 @@ async function writeSnapshot(ctx: Ctx, dayId: number, date: string, kind: 'open'
          FROM cage_days cd JOIN cages c ON c.id = cd.cage_id WHERE cd.organization_id = ? AND cd.day_id = ? ORDER BY c.sort_order, c.code`
       )
       .all(ctx.org, dayId),
-    inventory: (await balances(ctx, undefined, kind === 'open' ? addDays(date, -1) : date)).map((b) => ({
+    inventory: (await balances(ctx, undefined, kind === 'open' ? addDays(date, -1) : date, { farmId: ctx.farm })).map((b) => ({
       id: b.id,
       name: b.name,
       unit: b.unit,

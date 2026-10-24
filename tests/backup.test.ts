@@ -133,10 +133,16 @@ describe('organization backup and restore', () => {
     s.pragma('application_id = 0x50464d31')
     s.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT, applied_at TEXT)')
     s.prepare("INSERT INTO schema_migrations VALUES (3, 'desktop', 'x')").run()
+    // Only the desktop edition's tables and columns (organizations, farms, roles, flocks, stores and tasks came later).
+    const later = ['organizations', 'farms', 'roles', 'role_permissions', 'houses', 'flocks', 'flock_placements', 'flock_reminders', 'flock_reminder_done',
+      'warehouses', 'purchase_orders', 'purchase_order_lines', 'stock_counts', 'stock_count_lines', 'task_series', 'tasks', 'task_events']
+    const laterColumns = ['organization_id', 'farm_id', 'email', 'role_id', 'house_id', 'warehouse_id', 'counterpart_warehouse_id', 'transfer_ref', 'po_id',
+      'po_line_id', 'status', 'client_ref', 'approved_by', 'approved_at', 'cancelled_by', 'cancelled_at', 'cancel_reason', 'delivery_note', 'ordered_qty',
+      'rejected_qty', 'damaged_qty', 'reject_reason', 'sku', 'reorder_level', 'default_supplier_id']
     for (const t of DATA_TABLES) {
-      if (t === 'organizations' || t === 'farms') continue
+      if (later.includes(t)) continue
       const { columns, rows } = data.tables[t]
-      const keep = columns.map((c, i) => [c, i] as const).filter(([c]) => !['organization_id', 'farm_id', 'email'].includes(c))
+      const keep = columns.map((c, i) => [c, i] as const).filter(([c]) => !laterColumns.includes(c) || (c === 'status' && t !== 'goods_receipts'))
       s.exec(`CREATE TABLE ${t} (${keep.map(([c]) => `"${c}"`).join(', ')})`)
       const ins = s.prepare(`INSERT INTO ${t} VALUES (${keep.map(() => '?').join(', ')})`)
       for (const r of rows) ins.run(...keep.map(([, i]) => r[i]))

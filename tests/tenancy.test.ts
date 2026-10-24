@@ -17,6 +17,10 @@ import { createReceipt } from '../src/server/services/purchases'
 import { adjustEggStore, createDispatch } from '../src/server/services/sales'
 import { updateUser } from '../src/server/services/auth'
 import { placeFlock, saveFlock, saveHouse, saveReminder } from '../src/server/services/flocks'
+import { mainStore } from '../src/server/services/inventory'
+import { createOrder } from '../src/server/services/purchases'
+import { countStock, saveWarehouse } from '../src/server/services/stores'
+import { saveTask } from '../src/server/services/tasks'
 import { RestoreTokens } from '../src/server/uploads'
 import { makeFarm, NOW } from './helpers'
 
@@ -57,9 +61,16 @@ async function twoOrganizations() {
   await placeFlock(a.admin, flk, [cage], '2026-03-01')
   const bFlock = await saveFlock(b.admin, { ...flockInput, code: 'B-Flock' })
   const reminder = await saveReminder(a.admin, { id: null, atWeek: 22, title: 'A reminder', instructions: null, active: true })
+  const aMain = await mainStore(a.admin)
+  const bMain = await mainStore(b.admin)
+  const aStore = await saveWarehouse(a.admin, { id: null, code: 'ACOLD', name: 'A Cold Room', active: true, notes: null })
+  const po = await createOrder(a.admin, { orderDate: D, expectedDate: null, supplierId: supplier, warehouseId: aMain, notes: null, lines: [{ itemId: a.feedId, quantity: 10, unitCost: 1 }] })
+  await countStock(a.admin, { warehouseId: aMain, date: D, notes: 'A count', lines: [{ itemId: a.feedId, batchId: null, countedQty: 4900 }] })
+  const taskBase = { category: 'cleaning' as const, priority: 'normal' as const, instructions: null, completionCriteria: null, houseId: null, startDate: D, dueDate: D, recurrence: 'none' as const, untilDate: null }
+  const task = await saveTask(a.admin, { ...taskBase, id: null, title: 'A task', farmId: a.farm, assigneeUserId: a.worker.user!.id, assigneeRoleId: null })
   const ids = {
     cage, egg, feed, water, move, batch, treatment, health, supplier, customer, grn: grn.id, dispatch: dispatch.id, admin: a.admin.user!.id, worker: a.worker.user!.id,
-    house, flock: flk, bFlock, reminder, flockInput
+    house, flock: flk, bFlock, reminder, flockInput, aMain, bMain, aStore, po: po.id, task, taskBase
   }
   return { a, b, ids }
 }
@@ -131,12 +142,32 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       ['flocks.series', { id: ids.flock, from: D, to: D }],
       ['flocks.saveReminder', { id: ids.reminder, atWeek: 1, title: 'Taken over', instructions: null, active: false }],
       ['flocks.markReminder', { flockId: ids.flock, reminderId: ids.reminder, outcome: 'done', note: null }],
-      ['flocks.markReminder', { flockId: ids.bFlock, reminderId: ids.reminder, outcome: 'done', note: null }]
+      ['flocks.markReminder', { flockId: ids.bFlock, reminderId: ids.reminder, outcome: 'done', note: null }],
+      ['stores.save', { id: ids.aStore, code: 'X', name: 'Taken over', active: false, notes: null }],
+      ['stores.balances', { warehouseId: ids.aMain }],
+      ['stores.transfer', { date: D, fromWarehouseId: ids.aMain, toWarehouseId: ids.bMain, notes: null, lines: [{ itemId: b.feedId, batchNo: null, quantity: 1 }] }],
+      ['stores.transfer', { date: D, fromWarehouseId: ids.bMain, toWarehouseId: ids.aStore, notes: null, lines: [{ itemId: b.feedId, batchNo: null, quantity: 1 }] }],
+      ['stores.count', { warehouseId: ids.aMain, date: D, notes: null, lines: [{ itemId: b.feedId, batchId: null, countedQty: 1 }] }],
+      ['inventory.record', { itemId: b.feedId, type: 'issue', quantity: 1, date: D, batchNo: null, expiryDate: null, unitCost: null, supplier: null, reference: null, notes: null, cageId: null, warehouseId: ids.aMain }],
+      ['purchases.createOrder', { orderDate: D, expectedDate: null, supplierId: ids.supplier, warehouseId: ids.bMain, notes: null, lines: [{ itemId: b.feedId, quantity: 1, unitCost: null }] }],
+      ['purchases.createOrder', { orderDate: D, expectedDate: null, supplierId: ids.supplier, warehouseId: ids.aMain, notes: null, lines: [{ itemId: b.feedId, quantity: 1, unitCost: null }] }],
+      ['purchases.closeOrder', { id: ids.po, status: 'cancelled', reason: 'Taken over' }],
+      ['purchases.create', { date: D, supplierId: null, invoiceNo: null, vehicle: null, notes: null, poId: ids.po, lines: [{ itemId: b.feedId, quantity: 1, unitCost: null, batchNo: null, expiryDate: null }] }],
+      ['purchases.create', { date: D, supplierId: null, invoiceNo: null, vehicle: null, notes: null, warehouseId: ids.aMain, lines: [{ itemId: b.feedId, quantity: 1, unitCost: null, batchNo: null, expiryDate: null }] }],
+      ['purchases.approve', { id: ids.grn }],
+      ['purchases.reject', { id: ids.grn, reason: 'Taken over' }],
+      ['tasks.get', { id: ids.task }],
+      ['tasks.action', { id: ids.task, action: 'cancel', note: 'Taken over' }],
+      ['tasks.save', { ...ids.taskBase, id: ids.task, title: 'Taken over', farmId: null, assigneeUserId: null, assigneeRoleId: null }],
+      ['tasks.save', { ...ids.taskBase, id: null, title: 'Spy', farmId: null, assigneeUserId: ids.worker, assigneeRoleId: null }],
+      ['tasks.save', { ...ids.taskBase, id: null, title: 'Spy', farmId: a.farm, assigneeUserId: null, assigneeRoleId: null }],
+      ['tasks.save', { ...ids.taskBase, id: null, title: 'Spy', farmId: null, houseId: ids.house, assigneeUserId: null, assigneeRoleId: null }],
+      ['tasks.save', { ...ids.taskBase, id: null, title: 'Spy', farmId: null, assigneeUserId: null, assigneeRoleId: a.roles.worker }]
     ]
     for (const [method, input] of attacks) {
       const r = await call(b.admin, method, input)
       // Refused because the record is not B's (not for some unrelated reason such as invalid input).
-      expect(r.ok ? 'accepted' : r.code, `${method} ${JSON.stringify(input)}`).toMatch(/^(not_found|cage_not_found|cage_not_in_day|item_not_found|issue_not_confirmable|role_not_found|house_not_found|farm_not_found|flock_not_found)$/)
+      expect(r.ok ? 'accepted' : r.code, `${method} ${JSON.stringify(input)}`).toMatch(/^(not_found|cage_not_found|cage_not_in_day|item_not_found|issue_not_confirmable|role_not_found|house_not_found|farm_not_found|flock_not_found|store_not_found|task_not_found)$/)
     }
     // Organization A's records are exactly as they were.
     const after = await dumpDatabase(a.db, { orgId: a.org })
@@ -168,10 +199,17 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       ['houses.list', undefined],
       ['flocks.list', {}],
       ['flocks.reminders', undefined],
-      ['flocks.dueReminders', undefined]
+      ['flocks.dueReminders', undefined],
+      ['stores.list', {}],
+      ['stores.balances', {}],
+      ['stores.counts', range],
+      ['purchases.orders', {}],
+      ['tasks.list', range],
+      ['tasks.assignees', undefined],
+      ['inventory.txns', {}]
     ] as [ApiMethod, unknown][]) {
       const text = await json(method, input)
-      for (const secret of ['a.farm', 'A Mill', 'A Buyer', 'Farm A', 'A-Flock', 'A House', 'A reminder']) expect(text, `${method} shows ${secret}`).not.toContain(secret)
+      for (const secret of ['a.farm', 'A Mill', 'A Buyer', 'Farm A', 'A-Flock', 'A House', 'A reminder', 'A Cold Room', 'A task', 'A count']) expect(text, `${method} shows ${secret}`).not.toContain(secret)
     }
     // Asking for A's records by id gives nothing.
     expect(await data('eggs.list', { date: D, cageId: ids.cage })).toEqual([])
@@ -221,7 +259,7 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       'days.saveComment', 'days.close', 'days.startAmendment', 'days.finishAmendment', 'days.amendments', 'water.list',
       'inventory.createItem', 'analytics.dashboard', 'analytics.comparison', 'reports.print', 'duties.mine', 'purchases.series',
       'sales.adjust', 'sales.adjustments', 'sales.series', 'supply.flow', 'admin.checkDb', 'admin.optimize', 'admin.activity',
-      'backup.list', 'backup.create', 'backup.restore'
+      'backup.list', 'backup.create', 'backup.restore', 'tasks.report'
     ]
     const covered: ApiMethod[] = [
       'users.list', 'users.update', 'users.resetPassword', 'users.approve', 'users.reject', 'users.newRecoveryCode', 'users.setCages', 'users.create', 'roles.save', 'roles.archive',
@@ -234,7 +272,9 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       'purchases.list', 'purchases.create', 'purchases.cancel', 'sales.stock', 'sales.list', 'sales.dispatch', 'sales.addPayment',
       'sales.cancel', 'admin.dbInfo', 'farms.list', 'farms.save', 'farms.setStatus', 'farms.switch', 'houses.list', 'houses.save', 'flocks.list', 'flocks.get',
       'flocks.save', 'flocks.place', 'flocks.endPlacement', 'flocks.close', 'flocks.series', 'flocks.reminders', 'flocks.saveReminder', 'flocks.dueReminders',
-      'flocks.markReminder'
+      'flocks.markReminder', 'stores.list', 'stores.save', 'stores.balances', 'stores.transfer', 'stores.count', 'stores.counts', 'purchases.orders',
+      'purchases.createOrder', 'purchases.closeOrder', 'purchases.approve', 'purchases.reject', 'tasks.list', 'tasks.get', 'tasks.save', 'tasks.action',
+      'tasks.assignees'
     ]
     // The console's platform.* requests are only for platform administrators (tests/subscriptions.test.ts).
     const all = (Object.keys(API_KIND) as ApiMethod[]).filter((m) => !m.startsWith('platform.'))

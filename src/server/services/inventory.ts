@@ -7,18 +7,44 @@ import { audit } from './audit'
 import { getSettings } from './settings'
 import { requirePermission } from './roles'
 
-const itemCols = `id, category, name, unit, low_stock_threshold AS lowStockThreshold, active, notes`
+const itemCols = `id, category, name, unit, low_stock_threshold AS lowStockThreshold, active, notes, sku, reorder_level AS reorderLevel,
+  default_supplier_id AS defaultSupplierId`
 
 function toItem(r: Record<string, unknown>): InventoryItem {
   return { ...(r as unknown as InventoryItem), active: !!r.active }
 }
 
-export const INCREASING: TxnType[] = ['opening', 'purchase', 'receipt', 'return']
-export const DECREASING: TxnType[] = ['issue', 'usage', 'wastage', 'expired']
+export const INCREASING: TxnType[] = ['opening', 'purchase', 'receipt', 'return', 'transfer_in']
+export const DECREASING: TxnType[] = ['issue', 'usage', 'wastage', 'expired', 'transfer_out']
 
 type OrgCtx = Pick<Ctx, 'db' | 'org'>
 
-/** The organization's store items. (Stock is held per organization; stores and warehouses come later.) */
+/** Movement types made by transfers, stock counts and reversals, never entered directly. */
+const SYSTEM_TYPES: TxnType[] = ['transfer_in', 'transfer_out', 'count', 'reversal']
+
+/** The main store of the context's farm: daily feed and medicine records draw from it. */
+export async function mainStore(ctx: Pick<Ctx, 'db' | 'org' | 'farm'>): Promise<number> {
+  const r = (await ctx.db
+    .prepare('SELECT id FROM warehouses WHERE organization_id = ? AND farm_id = ? AND is_main = 1 ORDER BY id LIMIT 1')
+    .get(ctx.org, ctx.farm)) as { id: number } | undefined
+  assert(r, 'store_not_found')
+  return r.id
+}
+
+/**
+ * A store of the organization. Stock is moved in and out of the stores of the farm being worked on
+ * (`ofFarm`); transfers may send stock to a store of another farm of the organization.
+ */
+export async function getStore(ctx: Pick<Ctx, 'db' | 'org' | 'farm'>, id: number, opts: { ofFarm?: boolean; active?: boolean } = { ofFarm: true, active: true }) {
+  const r = (await ctx.db.prepare('SELECT id, farm_id, name, active FROM warehouses WHERE id = ? AND organization_id = ?').get(id, ctx.org)) as
+    | { id: number; farm_id: number; name: string; active: number }
+    | undefined
+  assert(r && (!opts.ofFarm || r.farm_id === ctx.farm), 'store_not_found')
+  if (opts.active) assert(r.active, 'store_inactive', { store: r.name })
+  return r
+}
+
+/** The organization's store items. Stock is held per store (warehouse); see balances. */
 export async function listItems(ctx: OrgCtx, category?: InventoryCategory): Promise<InventoryItem[]> {
   const rows = (await ctx.db
     .prepare(`SELECT ${itemCols} FROM inventory_items WHERE organization_id = ? ${category ? 'AND category = ?' : ''} ORDER BY category, name`)
@@ -42,6 +68,17 @@ export interface ItemInput {
   lowStockThreshold: number | null
   active: boolean
   notes: string | null
+  sku?: string | null
+  reorderLevel?: number | null
+  defaultSupplierId?: number | null
+}
+
+async function checkItemExtras(ctx: OrgCtx, i: ItemInput, id: number | null) {
+  if (i.sku?.trim()) {
+    const dup = await ctx.db.prepare('SELECT 1 AS x FROM inventory_items WHERE organization_id = ? AND sku = ? AND NOT (id <=> ?)').get(ctx.org, i.sku.trim(), id)
+    assert(!dup, 'sku_taken')
+  }
+  if (i.defaultSupplierId) assert(await ctx.db.prepare('SELECT 1 AS x FROM suppliers WHERE id = ? AND organization_id = ?').get(i.defaultSupplierId, ctx.org), 'not_found')
 }
 
 export async function insertItemRaw(ctx: Ctx, i: ItemInput): Promise<number> {
@@ -50,12 +87,13 @@ export async function insertItemRaw(ctx: Ctx, i: ItemInput): Promise<number> {
   assert(i.unit.trim(), 'required_field', { field: 'unit' })
   const dup = await ctx.db.prepare('SELECT 1 AS x FROM inventory_items WHERE organization_id = ? AND category = ? AND name = ?').get(ctx.org, i.category, name)
   assert(!dup, 'item_name_taken')
+  await checkItemExtras(ctx, i, null)
   const info = await ctx.db
     .prepare(
-      `INSERT INTO inventory_items (organization_id, category, name, unit, low_stock_threshold, active, notes, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO inventory_items (organization_id, category, sku, name, unit, low_stock_threshold, reorder_level, default_supplier_id, active, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(ctx.org, i.category, name, i.unit.trim(), i.lowStockThreshold, i.active ? 1 : 0, i.notes, ctx.now().toISOString())
+    .run(ctx.org, i.category, i.sku?.trim() || null, name, i.unit.trim(), i.lowStockThreshold, i.reorderLevel ?? null, i.defaultSupplierId ?? null, i.active ? 1 : 0, i.notes, ctx.now().toISOString())
   const id = Number(info.lastInsertRowid)
   await audit(ctx, { action: 'create', entity: 'inventory_item', entityId: id, details: i })
   return id
@@ -75,40 +113,62 @@ export async function updateItem(ctx: Ctx, id: number, i: ItemInput) {
       .prepare('SELECT 1 AS x FROM inventory_items WHERE organization_id = ? AND category = ? AND name = ? AND id <> ?')
       .get(ctx.org, i.category, i.name.trim(), id)
     assert(!dup, 'item_name_taken')
+    await checkItemExtras(ctx, i, id)
+    // Fields left out keep their value.
+    const sku = i.sku === undefined ? before.sku : i.sku?.trim() || null
+    const reorder = i.reorderLevel === undefined ? before.reorderLevel : i.reorderLevel
+    const supplier = i.defaultSupplierId === undefined ? before.defaultSupplierId : i.defaultSupplierId
     await ctx.db
-      .prepare('UPDATE inventory_items SET name = ?, unit = ?, low_stock_threshold = ?, active = ?, notes = ? WHERE id = ? AND organization_id = ?')
-      .run(i.name.trim(), i.unit.trim(), i.lowStockThreshold, i.active ? 1 : 0, i.notes, id, ctx.org)
+      .prepare('UPDATE inventory_items SET name = ?, unit = ?, low_stock_threshold = ?, active = ?, notes = ?, sku = ?, reorder_level = ?, default_supplier_id = ? WHERE id = ? AND organization_id = ?')
+      .run(i.name.trim(), i.unit.trim(), i.lowStockThreshold, i.active ? 1 : 0, i.notes, sku, reorder, supplier, id, ctx.org)
     await audit(ctx, { action: 'update', entity: 'inventory_item', entityId: id, details: { before, after: i } })
   })()
 }
 
-export async function itemBalance(ctx: OrgCtx, itemId: number, asOf?: string): Promise<number> {
+/** Which stock to count: one store, the stores of one farm, or (neither) the whole organization. */
+export interface StockScope {
+  warehouseId?: number | null
+  farmId?: number | null
+}
+
+function scopeSql(scope: StockScope | undefined, alias = 't'): { sql: string; args: unknown[] } {
+  if (scope?.warehouseId) return { sql: `AND ${alias}.warehouse_id = ?`, args: [scope.warehouseId] }
+  if (scope?.farmId) return { sql: `AND ${alias}.warehouse_id IN (SELECT w.id FROM warehouses w WHERE w.farm_id = ?)`, args: [scope.farmId] }
+  return { sql: '', args: [] }
+}
+
+export async function itemBalance(ctx: OrgCtx, itemId: number, asOf?: string, scope?: StockScope): Promise<number> {
+  const s = scopeSql(scope)
   const r = (await ctx.db
     .prepare(
-      `SELECT COALESCE(SUM(quantity), 0) AS b FROM inventory_transactions WHERE organization_id = ? AND item_id = ? ${asOf ? 'AND txn_date <= ?' : ''}`
+      `SELECT COALESCE(SUM(quantity), 0) AS b FROM inventory_transactions t WHERE organization_id = ? AND item_id = ? ${asOf ? 'AND txn_date <= ?' : ''} ${s.sql}`
     )
-    .get(...(asOf ? [ctx.org, itemId, asOf] : [ctx.org, itemId]))) as { b: number }
+    .get(...(asOf ? [ctx.org, itemId, asOf] : [ctx.org, itemId]), ...s.args)) as { b: number }
   return round(r.b, 3)
 }
 
-export async function batchBalance(ctx: OrgCtx, batchId: number): Promise<number> {
+export async function batchBalance(ctx: OrgCtx, batchId: number, scope?: StockScope): Promise<number> {
+  const s = scopeSql(scope)
   const r = (await ctx.db
-    .prepare('SELECT COALESCE(SUM(quantity), 0) AS b FROM inventory_transactions WHERE organization_id = ? AND batch_id = ?')
-    .get(ctx.org, batchId)) as { b: number }
+    .prepare(`SELECT COALESCE(SUM(quantity), 0) AS b FROM inventory_transactions t WHERE organization_id = ? AND batch_id = ? ${s.sql}`)
+    .get(ctx.org, batchId, ...s.args)) as { b: number }
   return round(r.b, 3)
 }
 
-/** Balances per item, optionally as of the end of a business date. */
-export async function balances(ctx: OrgCtx, category?: InventoryCategory, asOf?: string): Promise<InventoryBalance[]> {
+/** Balances per item, optionally as of the end of a business date, for the organization, a farm's stores or one store. */
+export async function balances(ctx: OrgCtx, category?: InventoryCategory, asOf?: string, scope?: StockScope): Promise<InventoryBalance[]> {
+  const s = scopeSql(scope)
   const args: unknown[] = []
   if (asOf) args.push(asOf)
+  args.push(...s.args)
   args.push(ctx.org)
   if (category) args.push(category)
   const rows = (await ctx.db
     .prepare(
-      `SELECT i.id, i.category, i.name, i.unit, i.low_stock_threshold AS lowStockThreshold, i.active, i.notes,
+      `SELECT i.id, i.category, i.name, i.unit, i.low_stock_threshold AS lowStockThreshold, i.active, i.notes, i.sku,
+         i.reorder_level AS reorderLevel, i.default_supplier_id AS defaultSupplierId,
          COALESCE((SELECT SUM(t.quantity) FROM inventory_transactions t WHERE t.item_id = i.id
-           ${asOf ? 'AND t.txn_date <= ?' : ''}), 0) AS balance
+           ${asOf ? 'AND t.txn_date <= ?' : ''} ${s.sql}), 0) AS balance
        FROM inventory_items i WHERE i.organization_id = ? ${category ? 'AND i.category = ?' : ''}
        ORDER BY i.category, i.name`
     )
@@ -120,17 +180,18 @@ export async function balances(ctx: OrgCtx, category?: InventoryCategory, asOf?:
   })
 }
 
-export async function listBatches(ctx: OrgCtx, opts: { itemId?: number; onlyInStock?: boolean } = {}): Promise<InventoryBatch[]> {
+export async function listBatches(ctx: OrgCtx, opts: { itemId?: number; onlyInStock?: boolean; warehouseId?: number | null } = {}): Promise<InventoryBatch[]> {
   const today = todayInTimezone((await getSettings(ctx)).timezone)
+  const s = scopeSql({ warehouseId: opts.warehouseId })
   const rows = (await ctx.db
     .prepare(
       `SELECT b.id, b.item_id AS itemId, i.name AS itemName, i.unit, b.batch_no AS batchNo, b.expiry_date AS expiryDate,
-         COALESCE((SELECT SUM(t.quantity) FROM inventory_transactions t WHERE t.batch_id = b.id), 0) AS balance
+         COALESCE((SELECT SUM(t.quantity) FROM inventory_transactions t WHERE t.batch_id = b.id ${s.sql}), 0) AS balance
        FROM inventory_batches b JOIN inventory_items i ON i.id = b.item_id
        WHERE b.organization_id = ? ${opts.itemId ? 'AND b.item_id = ?' : ''}
        ORDER BY b.expiry_date IS NULL, b.expiry_date, b.batch_no`
     )
-    .all(...(opts.itemId ? [ctx.org, opts.itemId] : [ctx.org]))) as (InventoryBatch & { balance: number })[]
+    .all(...s.args, ...(opts.itemId ? [ctx.org, opts.itemId] : [ctx.org]))) as (InventoryBatch & { balance: number })[]
   return rows
     .map((r) => ({
       ...r,
@@ -177,12 +238,13 @@ export async function assertDateWritable(ctx: Ctx, date: string) {
   }
 }
 
-export async function assertNotNegative(ctx: OrgCtx, itemId: number, batchId: number | null) {
+/** Stock never goes below zero in any store (for the item, and for the batch). */
+export async function assertNotNegative(ctx: OrgCtx, itemId: number, batchId: number | null, warehouseId: number) {
   const item = await getItem(ctx, itemId)
-  const bal = await itemBalance(ctx, itemId)
+  const bal = await itemBalance(ctx, itemId, undefined, { warehouseId })
   assert(bal >= -1e-9, 'insufficient_stock', { item: item.name, balance: round(bal, 3), unit: item.unit })
   if (batchId) {
-    const bb = await batchBalance(ctx, batchId)
+    const bb = await batchBalance(ctx, batchId, { warehouseId })
     assert(bb >= -1e-9, 'insufficient_batch_stock', { item: item.name, balance: round(bb, 3), unit: item.unit })
   }
 }
@@ -207,6 +269,8 @@ export interface TxnInput {
   reference: string | null
   notes: string | null
   cageId: number | null
+  /** A store of the farm being worked on (default: its main store) */
+  warehouseId?: number | null
 }
 
 /** Records a manual stock movement. Balances are never stored: they are always the sum of transactions. */
@@ -214,6 +278,7 @@ export async function recordTxn(ctx: Ctx, t: TxnInput): Promise<number> {
   requireUser(ctx)
   assert(isIsoDate(t.date), 'invalid_date')
   assert(t.quantity !== 0 && Number.isFinite(t.quantity), 'quantity_required')
+  assert(!SYSTEM_TYPES.includes(t.type), 'invalid_input', { field: 'type' })
   if (t.type === 'adjustment' || t.type === 'opening') {
     requirePermission(ctx, 'inventory.adjust')
     assert(t.notes && t.notes.trim().length >= 3, 'reason_required')
@@ -224,6 +289,7 @@ export async function recordTxn(ctx: Ctx, t: TxnInput): Promise<number> {
     await assertDateWritable(ctx, t.date)
     const item = await getItem(ctx, t.itemId)
     await assertOwnCage(ctx, t.cageId)
+    const store = t.warehouseId ? (await getStore(ctx, t.warehouseId)).id : await mainStore(ctx)
     if (item.category === 'medicine' && (t.type === 'purchase' || t.type === 'receipt')) {
       assert(t.batchNo && t.batchNo.trim(), 'batch_required')
     }
@@ -232,12 +298,12 @@ export async function recordTxn(ctx: Ctx, t: TxnInput): Promise<number> {
     const dayId = await dayIdFor(ctx, t.date)
     const info = await ctx.db
       .prepare(
-        `INSERT INTO inventory_transactions (organization_id, item_id, batch_id, txn_date, day_id, cage_id, type, quantity, unit_cost,
+        `INSERT INTO inventory_transactions (organization_id, item_id, warehouse_id, batch_id, txn_date, day_id, cage_id, type, quantity, unit_cost,
            supplier, reference, notes, recorded_by, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(ctx.org, t.itemId, batchId, t.date, dayId, t.cageId, t.type, signed, t.unitCost, t.supplier, t.reference, t.notes, ctx.user!.id, ctx.now().toISOString())
-    if (signed < 0) await assertNotNegative(ctx, t.itemId, batchId)
+      .run(ctx.org, t.itemId, store, batchId, t.date, dayId, t.cageId, t.type, signed, t.unitCost, t.supplier, t.reference, t.notes, ctx.user!.id, ctx.now().toISOString())
+    if (signed < 0) await assertNotNegative(ctx, t.itemId, batchId, store)
     const id = Number(info.lastInsertRowid)
     await audit(ctx, {
       action: 'stock_' + t.type,
@@ -270,8 +336,10 @@ export async function syncLinkedTxn(
   }
 ) {
   const existing = (await ctx.db
-    .prepare('SELECT id, quantity, item_id, batch_id FROM inventory_transactions WHERE organization_id = ? AND source_type = ? AND source_id = ? AND type = ?')
-    .get(ctx.org, link.sourceType, link.sourceId, link.type)) as { id: number; quantity: number; item_id: number; batch_id: number | null } | undefined
+    .prepare('SELECT id, quantity, item_id, batch_id, warehouse_id FROM inventory_transactions WHERE organization_id = ? AND source_type = ? AND source_id = ? AND type = ?')
+    .get(ctx.org, link.sourceType, link.sourceId, link.type)) as { id: number; quantity: number; item_id: number; batch_id: number | null; warehouse_id: number } | undefined
+  // Daily records draw from the farm's main store (an existing movement stays in its store).
+  const store = existing?.warehouse_id ?? (await mainStore(ctx))
   const qty = round(link.signedQuantity, 3)
   if (qty === 0) {
     if (existing) await ctx.db.prepare('DELETE FROM inventory_transactions WHERE id = ?').run(existing.id)
@@ -282,18 +350,25 @@ export async function syncLinkedTxn(
   } else {
     await ctx.db
       .prepare(
-        `INSERT INTO inventory_transactions (organization_id, item_id, batch_id, txn_date, day_id, cage_id, type, quantity, source_type,
-           source_id, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO inventory_transactions (organization_id, item_id, warehouse_id, batch_id, txn_date, day_id, cage_id, type, quantity, source_type,
+           source_id, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(ctx.org, link.itemId, link.batchId, link.date, link.dayId, link.cageId, link.type, qty, link.sourceType, link.sourceId, ctx.user?.id ?? null, ctx.now().toISOString())
+      .run(ctx.org, link.itemId, store, link.batchId, link.date, link.dayId, link.cageId, link.type, qty, link.sourceType, link.sourceId, ctx.user?.id ?? null, ctx.now().toISOString())
   }
-  if (qty < 0 || (existing && existing.quantity > 0)) await assertNotNegative(ctx, link.itemId, link.batchId)
-  if (existing && existing.item_id !== link.itemId) await assertNotNegative(ctx, existing.item_id, existing.batch_id)
+  if (qty < 0 || (existing && existing.quantity > 0)) await assertNotNegative(ctx, link.itemId, link.batchId, store)
+  if (existing && existing.item_id !== link.itemId) await assertNotNegative(ctx, existing.item_id, existing.batch_id, store)
 }
 
-export async function listTxns(ctx: OrgCtx, f: { itemId?: number; category?: InventoryCategory; from?: string; to?: string; limit?: number }): Promise<InventoryTxn[]> {
+export async function listTxns(
+  ctx: OrgCtx,
+  f: { itemId?: number; category?: InventoryCategory; from?: string; to?: string; limit?: number; warehouseId?: number | null }
+): Promise<InventoryTxn[]> {
   const where: string[] = ['t.organization_id = ?']
   const args: unknown[] = [ctx.org]
+  if (f.warehouseId) {
+    where.push('t.warehouse_id = ?')
+    args.push(f.warehouseId)
+  }
   if (f.itemId) {
     where.push('t.item_id = ?')
     args.push(f.itemId)
@@ -315,8 +390,10 @@ export async function listTxns(ctx: OrgCtx, f: { itemId?: number; category?: Inv
     .prepare(
       `SELECT t.id, t.item_id AS itemId, i.name AS itemName, i.unit, b.batch_no AS batchNo, t.txn_date AS txnDate,
          c.name AS cageName, t.type, t.quantity, t.unit_cost AS unitCost, t.supplier, t.reference, t.notes,
-         t.source_type AS sourceType, u.display_name AS recordedBy, t.created_at AS createdAt
+         t.source_type AS sourceType, u.display_name AS recordedBy, t.created_at AS createdAt, w.name AS warehouseName, cw.name AS counterpartWarehouse
        FROM inventory_transactions t
+       JOIN warehouses w ON w.id = t.warehouse_id
+       LEFT JOIN warehouses cw ON cw.id = t.counterpart_warehouse_id
        JOIN inventory_items i ON i.id = t.item_id
        LEFT JOIN inventory_batches b ON b.id = t.batch_id
        LEFT JOIN cages c ON c.id = t.cage_id

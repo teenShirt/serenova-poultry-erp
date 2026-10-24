@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: FarmSettings = {
   autoCheckUpdates: true,
   currency: 'Rs.',
   productionStages: DEFAULT_STAGES,
+  grnApprovalRequired: false,
   setupComplete: false
 }
 

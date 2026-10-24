@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import type { BackupFileCheck, BackupInfo } from '@shared/types'
 import type { DB } from '../db/connection'
-import { DATA_TABLES, latestSchemaVersion, PLATFORM_TABLES } from '../db/migrations'
+import { DATA_TABLES, latestSchemaVersion, PLATFORM_TABLES, ensureMainStores } from '../db/migrations'
 import { ensureRoles } from './roles'
 
 export const BACKUP_EXT = '.pfmbackup'
@@ -310,11 +310,20 @@ const AUDIT_ENTITY: Record<string, string> = {
   farm: 'farms',
   house: 'houses',
   flock: 'flocks',
-  flock_reminder: 'flock_reminders'
+  flock_reminder: 'flock_reminders',
+  warehouse: 'warehouses',
+  purchase_order: 'purchase_orders',
+  task: 'tasks',
+  task_series: 'task_series'
 }
 
 /** Which table a stock transaction's source_id refers to. */
-const TXN_SOURCE: Record<string, string> = { feed_record: 'feed_records', treatment: 'medicine_treatments', grn_line: 'goods_receipt_lines' }
+const TXN_SOURCE: Record<string, string> = {
+  feed_record: 'feed_records',
+  treatment: 'medicine_treatments',
+  grn_line: 'goods_receipt_lines',
+  stock_count_line: 'stock_count_lines'
+}
 
 export interface RestoreOptions {
   /** Email addresses for accounts that have none (desktop backups), by username. */
@@ -362,11 +371,23 @@ export async function restoreOrganization(db: DB, orgId: number, data: BackupDat
         : ((await db.prepare("SELECT id FROM farms WHERE organization_id = ? AND status = 'active' ORDER BY id LIMIT 1").get(orgId)) as { id: number } | undefined)?.id
       if (!hasFarms && !farm) throw new Error('no_farm')
 
+      // Backups from before stores existed: each farm gets its main store, and the stock goes to the first farm's.
+      const hasStores = !!data.tables['warehouses']?.rows.length
+      let firstStore: number | null = null
       for (const t of tables) {
         const src = data.tables[t]
+        if (t === 'warehouses' && !hasStores) {
+          await ensureMainStores(db, orgId)
+          firstStore = (
+            (await db
+              .prepare('SELECT w.id FROM warehouses w JOIN farms f ON f.id = w.farm_id WHERE w.organization_id = ? AND w.is_main = 1 ORDER BY f.id LIMIT 1')
+              .get(orgId)) as { id: number }
+          ).id
+        }
         if (!src?.rows.length) continue
         const extra: Record<string, unknown> = { organization_id: orgId }
         if (!hasFarms && (t === 'cages' || t === 'farm_days')) extra.farm_id = farm
+        if ((t === 'inventory_transactions' || t === 'goods_receipts') && !src.columns.includes('warehouse_id')) extra.warehouse_id = firstStore
         await insertRows(
           db,
           t,
