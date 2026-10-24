@@ -89,6 +89,16 @@ npm run lint     # includes checks that every database call is awaited
 To use an existing MySQL server for the tests instead, set `TEST_DB_HOST`, `TEST_DB_PORT`, `TEST_DB_USER` and
 `TEST_DB_PASSWORD`. Each test creates and removes its own database.
 
+## Branches and releases
+
+| Branch | Purpose |
+|---|---|
+| `test` | All development. Every push runs CI (typecheck, lint, tests on MySQL 8.4, build, dependency audit). |
+| `main` | Stable code only. It receives changes from `test` once CI has passed on `test`; never commit to it directly. |
+
+Releasing a change: push to `test` → CI passes → merge `test` into `main` (fast-forward) → CI runs again on `main`.
+Production deployments will be made from `main` only (see the roadmap: staging and approved deployments come later).
+
 ## Project layout
 
 ```
