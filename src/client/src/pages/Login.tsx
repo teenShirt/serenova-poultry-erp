@@ -29,7 +29,15 @@ export function LoginPage() {
         </div>
         {status.isDemo && <Notice tone="bad">{t('app.demoBanner')}</Notice>}
         <LanguageSwitch />
-        {mode === 'login' && <LoginForm message={message} onMode={(m) => { setMessage(null); setMode(m) }} />}
+        {mode === 'login' && (
+          <LoginForm
+            message={message}
+            onMode={(m) => {
+              setMessage(null)
+              setMode(m)
+            }}
+          />
+        )}
         {mode === 'signup' && <SignupForm onDone={back} />}
         {mode === 'reset' && <ResetForm onDone={back} />}
       </div>
@@ -137,19 +145,40 @@ function SignupForm({ onDone }: { onDone: (msg: string | null) => void }) {
         <div className="muted small">{t('auth.signupHint')}</div>
       </div>
       <Field label={t('auth.orgCode')} required hint={t('auth.orgCodeHint')}>
-        <input className="input" autoFocus value={organizationCode} onChange={(e) => setOrganizationCode(e.target.value.toLowerCase())} maxLength={40} autoCapitalize="none" />
+        <input
+          className="input"
+          autoFocus
+          value={organizationCode}
+          onChange={(e) => setOrganizationCode(e.target.value.toLowerCase())}
+          maxLength={40}
+          autoCapitalize="none"
+        />
       </Field>
       <Field label={t('setup.displayName')} required>
         <input className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={80} />
       </Field>
       <Field label={t('auth.email')} required>
-        <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" inputMode="email" maxLength={255} />
+        <input
+          className="input"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="username"
+          inputMode="email"
+          maxLength={255}
+        />
       </Field>
       <Field label={t('auth.password')} required hint={t('err.password_too_short')}>
         <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
       </Field>
       <Field label={t('auth.confirmPassword')} required>
-        <input className={`input ${mismatch ? 'invalid' : ''}`} type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+        <input
+          className={`input ${mismatch ? 'invalid' : ''}`}
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          autoComplete="new-password"
+        />
       </Field>
       {mismatch && <Notice tone="warn">{t('auth.passwordMismatch')}</Notice>}
       {error && <Notice tone="bad">{error}</Notice>}
@@ -213,7 +242,13 @@ function ResetForm({ onDone }: { onDone: (msg: string | null) => void }) {
         <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
       </Field>
       <Field label={t('auth.confirmPassword')} required>
-        <input className={`input ${mismatch ? 'invalid' : ''}`} type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+        <input
+          className={`input ${mismatch ? 'invalid' : ''}`}
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          autoComplete="new-password"
+        />
       </Field>
       {mismatch && <Notice tone="warn">{t('auth.passwordMismatch')}</Notice>}
       {error && <Notice tone="bad">{error}</Notice>}

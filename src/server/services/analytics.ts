@@ -146,7 +146,10 @@ export async function dashboard(ctx: Ctx, date: string, isDemo: boolean, backupW
     date,
     today,
     inventory: {
-      feedKg: round(inv.filter((b) => b.category === 'feed').reduce((s, b) => s + b.balance, 0), 2),
+      feedKg: round(
+        inv.filter((b) => b.category === 'feed').reduce((s, b) => s + b.balance, 0),
+        2
+      ),
       medicineItems: inv.filter((b) => b.category === 'medicine' && b.balance > 0).length,
       lowStock,
       expiring

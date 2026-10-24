@@ -13,7 +13,10 @@ export function InventoryPage() {
   const [category, setCategory] = useState<InventoryCategory | 'all'>('all')
   const cat = category === 'all' ? undefined : category
   const { data: items } = useLoad(() => call('inventory.balances', { category: cat }), [category])
-  const { data: txns } = useLoad(() => call('inventory.txns', { category: cat, from: addDays(workDate, -89), to: status.today, limit: 1000 }), [category, workDate])
+  const { data: txns } = useLoad(
+    () => call('inventory.txns', { category: cat, from: addDays(workDate, -89), to: status.today, limit: 1000 }),
+    [category, workDate]
+  )
   const { data: batches } = useLoad(() => call('inventory.batches', {}), [])
   const [record, setRecord] = useState<InventoryBalance | 'any' | null>(null)
   const [editing, setEditing] = useState<InventoryBalance | 'new' | null>(null)
@@ -81,7 +84,15 @@ export function InventoryPage() {
                         <td>{i.unit}</td>
                         <td className="num">{i.lowStockThreshold === null ? '—' : num(i.lowStockThreshold, 2)}</td>
                         <td>
-                          {!i.active ? <span className="badge">{t('common.inactive')}</span> : i.balance < 0 ? <span className="badge bad">{'< 0'}</span> : i.isLow ? <span className="badge warn">{t('inv.low')}</span> : <span className="badge good">OK</span>}
+                          {!i.active ? (
+                            <span className="badge">{t('common.inactive')}</span>
+                          ) : i.balance < 0 ? (
+                            <span className="badge bad">{'< 0'}</span>
+                          ) : i.isLow ? (
+                            <span className="badge warn">{t('inv.low')}</span>
+                          ) : (
+                            <span className="badge good">OK</span>
+                          )}
                         </td>
                         <td className="nowrap">
                           <button className="btn sm" onClick={() => setRecord(i)}>
@@ -116,7 +127,9 @@ export function InventoryPage() {
                       <th className="num">{t('common.quantity')}</th>
                       <th>{t('inv.batchNo')}</th>
                       <th>{t('common.cage')}</th>
-                      <th>{t('inv.supplier')} / {t('inv.reference')}</th>
+                      <th>
+                        {t('inv.supplier')} / {t('inv.reference')}
+                      </th>
                       <th>{t('common.notes')}</th>
                       <th>{t('common.recordedBy')}</th>
                     </tr>
@@ -169,7 +182,9 @@ export function InventoryPage() {
                         <td>{b.itemName}</td>
                         <td>{b.batchNo}</td>
                         <td>{b.expiryDate ? date(b.expiryDate) : '—'}</td>
-                        <td className="num">{b.daysToExpiry === null ? '—' : b.daysToExpiry < 0 ? <span className="badge bad">{t('inv.expired')}</span> : b.daysToExpiry}</td>
+                        <td className="num">
+                          {b.daysToExpiry === null ? '—' : b.daysToExpiry < 0 ? <span className="badge bad">{t('inv.expired')}</span> : b.daysToExpiry}
+                        </td>
                         <td className="num">
                           {num(b.balance, 2)} {b.unit}
                         </td>
@@ -228,7 +243,19 @@ function RecordTxn({ items, initial, onClose }: { items: InventoryBalance[]; ini
             disabled={!ok}
             onClick={async () => {
               try {
-                await call('inventory.record', { itemId: itemId!, type, quantity: quantity!, date: txDate, batchNo: nz(batchNo), expiryDate: expiry || null, unitCost, supplier: nz(supplier), reference: nz(reference), notes: nz(notes), cageId: null })
+                await call('inventory.record', {
+                  itemId: itemId!,
+                  type,
+                  quantity: quantity!,
+                  date: txDate,
+                  batchNo: nz(batchNo),
+                  expiryDate: expiry || null,
+                  unitCost,
+                  supplier: nz(supplier),
+                  reference: nz(reference),
+                  notes: nz(notes),
+                  cageId: null
+                })
                 toast('success', t('common.saved'))
                 onClose()
               } catch (e) {
@@ -311,7 +338,17 @@ function ItemForm({ item, onClose }: { item: InventoryBalance | null; onClose: (
   const { t, toast, fail, status } = useApp()
   const [f, setF] = useState<ItemInputDto>(
     item
-      ? { category: item.category, name: item.name, unit: item.unit, lowStockThreshold: item.lowStockThreshold, active: item.active, notes: item.notes, sku: item.sku, reorderLevel: item.reorderLevel, defaultSupplierId: item.defaultSupplierId }
+      ? {
+          category: item.category,
+          name: item.name,
+          unit: item.unit,
+          lowStockThreshold: item.lowStockThreshold,
+          active: item.active,
+          notes: item.notes,
+          sku: item.sku,
+          reorderLevel: item.reorderLevel,
+          defaultSupplierId: item.defaultSupplierId
+        }
       : { category: 'feed', name: '', unit: 'kg', lowStockThreshold: null, active: true, notes: null, sku: null, reorderLevel: null, defaultSupplierId: null }
   )
   const { data: suppliers } = useLoad(() => call('parties.list', { kind: 'supplier' }), [])
@@ -346,7 +383,18 @@ function ItemForm({ item, onClose }: { item: InventoryBalance | null; onClose: (
     >
       <div className="form-grid">
         <Field label={t('inv.category')}>
-          <select className="select" value={f.category} disabled={!!item} onChange={(e) => setF({ ...f, category: e.target.value as InventoryCategory, unit: e.target.value === 'feed' ? 'kg' : e.target.value === 'medicine' ? 'ml' : 'pcs' })}>
+          <select
+            className="select"
+            value={f.category}
+            disabled={!!item}
+            onChange={(e) =>
+              setF({
+                ...f,
+                category: e.target.value as InventoryCategory,
+                unit: e.target.value === 'feed' ? 'kg' : e.target.value === 'medicine' ? 'ml' : 'pcs'
+              })
+            }
+          >
             {INVENTORY_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {t('inv.cat.' + c)}
@@ -375,7 +423,11 @@ function ItemForm({ item, onClose }: { item: InventoryBalance | null; onClose: (
           <NumInput decimals value={f.reorderLevel ?? null} onChange={(v) => setF({ ...f, reorderLevel: v })} />
         </Field>
         <Field label={t('inv.defaultSupplier')}>
-          <select className="select" value={f.defaultSupplierId ?? ''} onChange={(e) => setF({ ...f, defaultSupplierId: e.target.value ? Number(e.target.value) : null })}>
+          <select
+            className="select"
+            value={f.defaultSupplierId ?? ''}
+            onChange={(e) => setF({ ...f, defaultSupplierId: e.target.value ? Number(e.target.value) : null })}
+          >
             <option value="">—</option>
             {suppliers
               ?.filter((s) => s.active)

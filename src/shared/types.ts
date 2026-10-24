@@ -576,7 +576,18 @@ export interface FlowSummary {
   from: string
   to: string
   feed: { openingKg: number; receivedKg: number; issuedKg: number; consumedKg: number | null; closingKg: number; purchaseCost: number }
-  eggs: { collected: number; good: number; cracked: number; rejected: number; dispatchedGood: number; dispatchedCracked: number; openingGood: number; closingGood: number; openingCracked: number; closingCracked: number }
+  eggs: {
+    collected: number
+    good: number
+    cracked: number
+    rejected: number
+    dispatchedGood: number
+    dispatchedCracked: number
+    openingGood: number
+    closingGood: number
+    openingCracked: number
+    closingCracked: number
+  }
   money: { sales: number; received: number; outstanding: number; purchases: number }
   hens: { opening: number | null; closing: number | null; deaths: number }
   topCustomers: { name: string; eggs: number; amount: number }[]

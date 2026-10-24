@@ -30,7 +30,9 @@ export function parseCages(json: string | null): number[] | null {
 }
 
 async function cageName(ctx: Ctx, id: number) {
-  return ((await ctx.db.prepare('SELECT name FROM cages WHERE id = ? AND organization_id = ?').get(id, ctx.org)) as { name: string } | undefined)?.name ?? String(id)
+  return (
+    ((await ctx.db.prepare('SELECT name FROM cages WHERE id = ? AND organization_id = ?').get(id, ctx.org)) as { name: string } | undefined)?.name ?? String(id)
+  )
 }
 
 async function assertCage(ctx: Ctx, cages: number[] | null, cageId: unknown) {
@@ -57,7 +59,9 @@ export async function checkAccess(ctx: Ctx, method: ApiMethod, input: unknown) {
   if (method === 'medicine.addTreatment' && (i.cageId === null || i.cageId === undefined)) throw new AppError('cage_not_assigned', { cage: '—' })
   const table = DELETE_TABLES[method]
   if (table && typeof i.id === 'number') {
-    const row = (await ctx.db.prepare(`SELECT cage_id FROM ${table} WHERE id = ? AND organization_id = ?`).get(i.id, ctx.org)) as { cage_id: number | null } | undefined
+    const row = (await ctx.db.prepare(`SELECT cage_id FROM ${table} WHERE id = ? AND organization_id = ?`).get(i.id, ctx.org)) as
+      | { cage_id: number | null }
+      | undefined
     if (row) await assertCage(ctx, cages, row.cage_id)
   }
 }
@@ -75,7 +79,12 @@ export async function setUserCages(ctx: Ctx, id: number, cages: number[] | null)
     }
     const next = cages === null ? null : [...new Set(cages)]
     await ctx.db.prepare('UPDATE users SET assigned_cages = ? WHERE id = ?').run(next === null ? null : JSON.stringify(next), id)
-    await audit(ctx, { action: 'set_cages', entity: 'user', entityId: id, details: { username: row.username, before: parseCages(row.assigned_cages), after: next } })
+    await audit(ctx, {
+      action: 'set_cages',
+      entity: 'user',
+      entityId: id,
+      details: { username: row.username, before: parseCages(row.assigned_cages), after: next }
+    })
   })()
 }
 

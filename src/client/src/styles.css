@@ -982,7 +982,9 @@ table.data .input {
   height: 100%;
   border: 0;
   background: #fff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(16, 40, 26, 0.18);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.08),
+    0 12px 32px rgba(16, 40, 26, 0.18);
 }
 .preview-loading {
   display: grid;

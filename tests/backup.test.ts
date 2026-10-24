@@ -74,7 +74,11 @@ describe('organization backup and restore', () => {
 
     // Change the data after the backup, then restore.
     await addMovement(f.worker, { date: '2026-03-09', cageId: f.cageIds[0], type: 'death', quantity: 100, reason: null, notes: null })
-    await f.db.prepare("INSERT INTO sessions (id, user_id, organization_id, mode, created_at, last_seen_at, expires_at) VALUES (REPEAT('a', 64), 1, ?, 'farm', 'x', 'x', 'x')").run(f.org)
+    await f.db
+      .prepare(
+        "INSERT INTO sessions (id, user_id, organization_id, mode, created_at, last_seen_at, expires_at) VALUES (REPEAT('a', 64), 1, ?, 'farm', 'x', 'x', 'x')"
+      )
+      .run(f.org)
     await restoreOrganization(f.db, f.org, check.data!)
     const admin = await signedIn(f.db, 'admin@test.farm', 'secret123')
     expect((await getOverview(admin, '2026-03-09')).cages[0].closing).toBe(993)
@@ -134,11 +138,52 @@ describe('organization backup and restore', () => {
     s.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT, applied_at TEXT)')
     s.prepare("INSERT INTO schema_migrations VALUES (3, 'desktop', 'x')").run()
     // Only the desktop edition's tables and columns (organizations, farms, roles, flocks, stores and tasks came later).
-    const later = ['organizations', 'farms', 'roles', 'role_permissions', 'houses', 'flocks', 'flock_placements', 'flock_reminders', 'flock_reminder_done',
-      'warehouses', 'purchase_orders', 'purchase_order_lines', 'stock_counts', 'stock_count_lines', 'task_series', 'tasks', 'task_events']
-    const laterColumns = ['organization_id', 'farm_id', 'email', 'role_id', 'house_id', 'warehouse_id', 'counterpart_warehouse_id', 'transfer_ref', 'po_id',
-      'po_line_id', 'status', 'client_ref', 'approved_by', 'approved_at', 'cancelled_by', 'cancelled_at', 'cancel_reason', 'delivery_note', 'ordered_qty',
-      'rejected_qty', 'damaged_qty', 'reject_reason', 'sku', 'reorder_level', 'default_supplier_id']
+    const later = [
+      'organizations',
+      'farms',
+      'roles',
+      'role_permissions',
+      'houses',
+      'flocks',
+      'flock_placements',
+      'flock_reminders',
+      'flock_reminder_done',
+      'warehouses',
+      'purchase_orders',
+      'purchase_order_lines',
+      'stock_counts',
+      'stock_count_lines',
+      'task_series',
+      'tasks',
+      'task_events'
+    ]
+    const laterColumns = [
+      'organization_id',
+      'farm_id',
+      'email',
+      'role_id',
+      'house_id',
+      'warehouse_id',
+      'counterpart_warehouse_id',
+      'transfer_ref',
+      'po_id',
+      'po_line_id',
+      'status',
+      'client_ref',
+      'approved_by',
+      'approved_at',
+      'cancelled_by',
+      'cancelled_at',
+      'cancel_reason',
+      'delivery_note',
+      'ordered_qty',
+      'rejected_qty',
+      'damaged_qty',
+      'reject_reason',
+      'sku',
+      'reorder_level',
+      'default_supplier_id'
+    ]
     for (const t of DATA_TABLES) {
       if (later.includes(t)) continue
       const { columns, rows } = data.tables[t]
@@ -171,7 +216,7 @@ describe('organization backup and restore', () => {
     expect(await inspectBackup(other)).toMatchObject({ ok: false, error: 'not_a_farm_backup' })
   })
 
-  it("retention removes only the oldest automatic backups, per organization", () => {
+  it('retention removes only the oldest automatic backups, per organization', () => {
     const names = [
       'PoultryFarm-hill-20260101-010000-auto.pfmbackup',
       'PoultryFarm-hill-20260102-010000-auto.pfmbackup',
@@ -193,7 +238,19 @@ describe('simultaneous requests', () => {
     // 5000 kg in store; each request takes 3000 kg. Only one may succeed.
     const take = (ctx: typeof f.admin) =>
       ctx.db.withWriteLock(() =>
-        recordTxn(ctx, { itemId: f.feedId, type: 'issue', quantity: 3000, date: '2026-03-09', batchNo: null, expiryDate: null, unitCost: null, supplier: null, reference: null, notes: null, cageId: null })
+        recordTxn(ctx, {
+          itemId: f.feedId,
+          type: 'issue',
+          quantity: 3000,
+          date: '2026-03-09',
+          batchNo: null,
+          expiryDate: null,
+          unitCost: null,
+          supplier: null,
+          reference: null,
+          notes: null,
+          cageId: null
+        })
       )
     const results = await Promise.allSettled([take(f.admin), take(other)])
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)

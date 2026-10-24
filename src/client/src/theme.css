@@ -534,7 +534,9 @@ table.mini td:first-child {
   place-items: center;
   color: var(--brand);
   box-shadow: var(--shadow);
-  transition: transform 0.12s, box-shadow 0.12s;
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s;
 }
 .quick-tile:hover .quick-icon {
   transform: translateY(-2px);

@@ -48,11 +48,37 @@ export function SalesPage() {
       </PageHeader>
       <div className="stack">
         <div className="grid stats">
-          <Kpi icon={<Egg size={18} />} label={t('sal.stockGood')} value={num(stock?.good)} sub={t('sal.trays', { trays: num(Math.floor((stock?.good ?? 0) / TRAY)), loose: (stock?.good ?? 0) % TRAY })} trend={series?.map((d) => d.stockGood)} color={SERIES.blue} tone={stock && stock.good < 0 ? 'bad' : undefined} />
-          <Kpi icon={<Egg size={18} />} label={t('sal.stockCracked')} value={num(stock?.cracked)} trend={series?.map((d) => d.stockCracked)} color={SERIES.orange} />
-          <Kpi icon={<Truck size={18} />} label={t('sal.sold')} value={num(sold)} sub={t('common.last' + days)} trend={series?.map((d) => d.dispatchedGood + d.dispatchedCracked)} color={SERIES.aqua} />
+          <Kpi
+            icon={<Egg size={18} />}
+            label={t('sal.stockGood')}
+            value={num(stock?.good)}
+            sub={t('sal.trays', { trays: num(Math.floor((stock?.good ?? 0) / TRAY)), loose: (stock?.good ?? 0) % TRAY })}
+            trend={series?.map((d) => d.stockGood)}
+            color={SERIES.blue}
+            tone={stock && stock.good < 0 ? 'bad' : undefined}
+          />
+          <Kpi
+            icon={<Egg size={18} />}
+            label={t('sal.stockCracked')}
+            value={num(stock?.cracked)}
+            trend={series?.map((d) => d.stockCracked)}
+            color={SERIES.orange}
+          />
+          <Kpi
+            icon={<Truck size={18} />}
+            label={t('sal.sold')}
+            value={num(sold)}
+            sub={t('common.last' + days)}
+            trend={series?.map((d) => d.dispatchedGood + d.dispatchedCracked)}
+            color={SERIES.aqua}
+          />
           <Kpi icon={<Banknote size={18} />} label={t('sal.revenue')} value={money(revenue)} trend={series?.map((d) => d.revenue)} color={SERIES.aqua} />
-          <Kpi icon={<Banknote size={18} />} label={t('sal.outstanding')} value={money(stock?.outstanding)} tone={stock && stock.outstanding > 0 ? 'warn' : undefined} />
+          <Kpi
+            icon={<Banknote size={18} />}
+            label={t('sal.outstanding')}
+            value={money(stock?.outstanding)}
+            tone={stock && stock.outstanding > 0 ? 'warn' : undefined}
+          />
         </div>
         <div className="grid cols-2">
           <TimeChart
@@ -133,7 +159,9 @@ export function SalesPage() {
                           <strong>{money(d.balance)}</strong>
                         </td>
                         <td>
-                          <span className={`badge ${d.paymentStatus === 'paid' ? 'good' : d.paymentStatus === 'partial' ? 'warn' : 'bad'}`}>{t('sal.status.' + d.paymentStatus)}</span>
+                          <span className={`badge ${d.paymentStatus === 'paid' ? 'good' : d.paymentStatus === 'partial' ? 'warn' : 'bad'}`}>
+                            {t('sal.status.' + d.paymentStatus)}
+                          </span>
                         </td>
                         <td className="nowrap">
                           {d.balance > 0 && (
@@ -264,7 +292,13 @@ function DispatchDialog({ stock, onClose }: { stock: { good: number; cracked: nu
             onClick={async () => {
               setBusy(true)
               try {
-                const r = await call('sales.dispatch', { ...f, invoiceNo: nz(f.invoiceNo ?? ''), vehicle: nz(f.vehicle ?? ''), driver: nz(f.driver ?? ''), notes: nz(f.notes ?? '') })
+                const r = await call('sales.dispatch', {
+                  ...f,
+                  invoiceNo: nz(f.invoiceNo ?? ''),
+                  vehicle: nz(f.vehicle ?? ''),
+                  driver: nz(f.driver ?? ''),
+                  notes: nz(f.notes ?? '')
+                })
                 toast('success', t('sal.saved', { no: r.dispatchNo }))
                 onClose()
               } catch (e) {
@@ -350,7 +384,11 @@ function DispatchDialog({ stock, onClose }: { stock: { good: number; cracked: nu
             <NumInput decimals value={f.amountPaid || null} invalid={f.amountPaid > amount + 0.005} onChange={(v) => set({ amountPaid: v ?? 0 })} />
           </Field>
           <Field label={t('sal.method')}>
-            <Seg value={f.paymentMethod} onChange={(m) => set({ paymentMethod: m })} options={(['cash', 'bank', 'cheque', 'other'] as const).map((m) => ({ value: m, label: t('sal.method.' + m) }))} />
+            <Seg
+              value={f.paymentMethod}
+              onChange={(m) => set({ paymentMethod: m })}
+              options={(['cash', 'bank', 'cheque', 'other'] as const).map((m) => ({ value: m, label: t('sal.method.' + m) }))}
+            />
           </Field>
           <Field label={t('pur.invoice')}>
             <input className="input" value={f.invoiceNo ?? ''} onChange={(e) => set({ invoiceNo: e.target.value })} />
@@ -430,7 +468,11 @@ function PaymentDialog({ dispatch, onClose }: { dispatch: EggDispatch; onClose: 
           </Field>
         </div>
         <Field label={t('sal.method')}>
-          <Seg value={method} onChange={setMethod} options={(['cash', 'bank', 'cheque', 'other'] as const).map((m) => ({ value: m, label: t('sal.method.' + m) }))} />
+          <Seg
+            value={method}
+            onChange={setMethod}
+            options={(['cash', 'bank', 'cheque', 'other'] as const).map((m) => ({ value: m, label: t('sal.method.' + m) }))}
+          />
         </Field>
         <Field label={t('inv.reference')}>
           <input className="input" value={reference} onChange={(e) => setReference(e.target.value)} />
@@ -476,7 +518,14 @@ function AdjustDialog({ onClose }: { onClose: () => void }) {
     >
       <div className="stack">
         <Notice tone="info">{t('sal.adjustHint')}</Notice>
-        <Seg value={grade} onChange={setGrade} options={[{ value: 'good', label: t('sal.grade.good') }, { value: 'cracked', label: t('sal.grade.cracked') }]} />
+        <Seg
+          value={grade}
+          onChange={setGrade}
+          options={[
+            { value: 'good', label: t('sal.grade.good') },
+            { value: 'cracked', label: t('sal.grade.cracked') }
+          ]}
+        />
         <div className="form-grid">
           <Field label={`${t('common.quantity')} (+ / −)`} required>
             <NumInput allowNegative value={quantity} onChange={setQuantity} />
@@ -568,7 +617,12 @@ export function PartyDialog({ kind, party, onClose }: { kind: 'supplier' | 'cust
             disabled={f.name.trim().length < 2}
             onClick={async () => {
               try {
-                const id = await call(kind === 'supplier' ? 'parties.saveSupplier' : 'parties.saveCustomer', { ...f, phone: nz(f.phone ?? ''), address: nz(f.address ?? ''), notes: nz(f.notes ?? '') })
+                const id = await call(kind === 'supplier' ? 'parties.saveSupplier' : 'parties.saveCustomer', {
+                  ...f,
+                  phone: nz(f.phone ?? ''),
+                  address: nz(f.address ?? ''),
+                  notes: nz(f.notes ?? '')
+                })
                 toast('success', t('common.saved'))
                 onClose(id)
               } catch (e) {

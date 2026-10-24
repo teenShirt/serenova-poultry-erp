@@ -57,10 +57,14 @@ function finalSchema() {
     try {
       const db = await DB.connect(pool, name)
       await migrate(db)
-      const names = (await db.prepare("SELECT table_name AS t FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'").all()) as { t: string }[]
+      const names = (await db
+        .prepare("SELECT table_name AS t FROM information_schema.tables WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'")
+        .all()) as { t: string }[]
       const tables: string[] = []
       for (const { t } of names) tables.push(((await db.query(`SHOW CREATE TABLE \`${t}\``)) as Record<string, string>[])[0]['Create Table'])
-      const versions = ((await db.prepare('SELECT version, name, applied_at FROM schema_migrations').all()) as { version: number; name: string; applied_at: string }[]).map((r) => [r.version, r.name, r.applied_at])
+      const versions = (
+        (await db.prepare('SELECT version, name, applied_at FROM schema_migrations').all()) as { version: number; name: string; applied_at: string }[]
+      ).map((r) => [r.version, r.name, r.applied_at])
       const seeds: { table: string; rows: Record<string, unknown>[] }[] = []
       for (const table of SEEDED) seeds.push({ table, rows: (await db.prepare(`SELECT * FROM \`${table}\` ORDER BY id`).all()) as Record<string, unknown>[] })
       db.release()
@@ -126,19 +130,27 @@ export async function makeFarm(opts: { db?: DB; name?: string; domain?: string; 
   const domain = opts.domain ?? 'test.farm'
   let now = NOW
   const anon: AnonCtx = { db, now: () => now }
-  const org = await createOrganization(anon, setupInput({ farmName: opts.name ?? 'Test Farm', admin: { email: `admin@${domain}`, displayName: 'Admin', password: 'secret123' } }), {
-    planCode: opts.plan ?? 'enterprise',
-    trialDays: opts.trialDays ?? 0
-  })
+  const org = await createOrganization(
+    anon,
+    setupInput({ farmName: opts.name ?? 'Test Farm', admin: { email: `admin@${domain}`, displayName: 'Admin', password: 'secret123' } }),
+    {
+      planCode: opts.plan ?? 'enterprise',
+      trialDays: opts.trialDays ?? 0
+    }
+  )
   const scope = { db, org: org.organizationId, farm: org.farmId, now: () => now }
   const adminCtx: Ctx = { ...scope, user: (await login(anon, `admin@${domain}`, 'secret123')).user }
-  const roleId = async (where: string) => ((await db.prepare(`SELECT id FROM roles WHERE organization_id = ? AND ${where}`).get(org.organizationId)) as { id: number }).id
+  const roleId = async (where: string) =>
+    ((await db.prepare(`SELECT id FROM roles WHERE organization_id = ? AND ${where}`).get(org.organizationId)) as { id: number }).id
   const roles = { admin: await roleId('is_admin = 1'), worker: await roleId("name = 'Farm Worker'") }
   await createUser(adminCtx, { email: `worker@${domain}`, displayName: 'Worker', password: 'worker123', roleId: roles.worker })
   const workerCtx: Ctx = { ...scope, user: (await login(anon, `worker@${domain}`, 'worker123')).user }
   const cageIds = ((await db.prepare('SELECT id FROM cages WHERE farm_id = ? ORDER BY sort_order').all(org.farmId)) as { id: number }[]).map((r) => r.id)
-  const feedId = ((await db.prepare("SELECT id FROM inventory_items WHERE organization_id = ? AND category='feed'").get(org.organizationId)) as { id: number }).id
-  const medId = ((await db.prepare("SELECT id FROM inventory_items WHERE organization_id = ? AND category='medicine'").get(org.organizationId)) as { id: number }).id
+  const feedId = ((await db.prepare("SELECT id FROM inventory_items WHERE organization_id = ? AND category='feed'").get(org.organizationId)) as { id: number })
+    .id
+  const medId = (
+    (await db.prepare("SELECT id FROM inventory_items WHERE organization_id = ? AND category='medicine'").get(org.organizationId)) as { id: number }
+  ).id
   return {
     db,
     anon,

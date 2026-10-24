@@ -40,11 +40,7 @@ export function round(value: number, digits = 2): number {
   return Math.round((value + Number.EPSILON) * f) / f
 }
 
-export function henDenominator(
-  method: ProductionDenominator | MortalityDenominator,
-  opening: number,
-  closing: number
-): number {
+export function henDenominator(method: ProductionDenominator | MortalityDenominator, opening: number, closing: number): number {
   if (method === 'opening') return opening
   if (method === 'closing') return closing
   return averageHens(opening, closing)
@@ -55,24 +51,14 @@ export function henDenominator(
  * Default denominator is the average of opening and closing live hens.
  * Returns null when there are no hens (production is undefined, not zero).
  */
-export function productionPercent(
-  totalEggs: number,
-  opening: number,
-  closing: number,
-  method: ProductionDenominator = 'average'
-): number | null {
+export function productionPercent(totalEggs: number, opening: number, closing: number, method: ProductionDenominator = 'average'): number | null {
   const d = henDenominator(method, opening, closing)
   if (!(d > 0)) return null
   return round((totalEggs / d) * 100, 2)
 }
 
 /** Mortality % = deaths / hens (default: opening hens) × 100. */
-export function mortalityPercent(
-  deaths: number,
-  opening: number,
-  closing: number,
-  method: MortalityDenominator = 'opening'
-): number | null {
+export function mortalityPercent(deaths: number, opening: number, closing: number, method: MortalityDenominator = 'opening'): number | null {
   const d = henDenominator(method, opening, closing)
   if (!(d > 0)) return null
   return round((deaths / d) * 100, 3)

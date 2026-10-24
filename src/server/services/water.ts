@@ -17,9 +17,12 @@ const toRecord = (r: Record<string, unknown>) => ({ ...(r as unknown as WaterRec
 export async function listWater(ctx: Ctx, date: string): Promise<WaterRecord[]> {
   const day = await getDay(ctx, date)
   if (!day) return []
-  return ((await ctx.db.prepare(`${select} WHERE w.organization_id = ? AND w.day_id = ? ORDER BY c.sort_order, c.code`).all(ctx.org, day.id)) as Record<string, unknown>[]).map(
-    toRecord
-  )
+  return (
+    (await ctx.db.prepare(`${select} WHERE w.organization_id = ? AND w.day_id = ? ORDER BY c.sort_order, c.code`).all(ctx.org, day.id)) as Record<
+      string,
+      unknown
+    >[]
+  ).map(toRecord)
 }
 
 /** Opening meter reading = the cage's most recent earlier closing reading. */
@@ -90,12 +93,14 @@ export async function saveWater(ctx: Ctx, w: WaterInput, expectedId: number | nu
     } else {
       assert(expectedId === null, 'record_changed')
       id = Number(
-        (await ctx.db
-          .prepare(
-            `INSERT INTO water_records (method, opening_reading, closing_reading, litres, meter_reset, correction_reason,
+        (
+          await ctx.db
+            .prepare(
+              `INSERT INTO water_records (method, opening_reading, closing_reading, litres, meter_reset, correction_reason,
                notes, recorded_by, organization_id, day_id, cage_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          )
-          .run(...vals, ctx.org, day.id, w.cageId, now, now)).lastInsertRowid
+            )
+            .run(...vals, ctx.org, day.id, w.cageId, now, now)
+        ).lastInsertRowid
       )
     }
     await audit(ctx, {
@@ -115,7 +120,9 @@ export async function deleteWater(ctx: Ctx, id: number, reason: string) {
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const row = (await ctx.db
-      .prepare('SELECT w.*, d.business_date FROM water_records w JOIN farm_days d ON d.id = w.day_id WHERE w.id = ? AND w.organization_id = ? AND d.farm_id = ?')
+      .prepare(
+        'SELECT w.*, d.business_date FROM water_records w JOIN farm_days d ON d.id = w.day_id WHERE w.id = ? AND w.organization_id = ? AND d.farm_id = ?'
+      )
       .get(id, ctx.org, ctx.farm)) as (Record<string, unknown> & { business_date: string; day_id: number }) | undefined
     assert(row, 'not_found')
     await requireWritableDay(ctx, row.business_date)

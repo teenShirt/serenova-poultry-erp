@@ -3,7 +3,17 @@ import type { InventoryCategory, TxnType } from './types'
 /** Stores, purchase orders, receipts, transfers and stock counts. Shared by the server and the browser. */
 
 /** Movement types a user records directly; transfers, counts and reversals have their own screens. */
-export const MANUAL_TXN_TYPES = ['opening', 'purchase', 'receipt', 'issue', 'usage', 'return', 'adjustment', 'wastage', 'expired'] as const satisfies readonly TxnType[]
+export const MANUAL_TXN_TYPES = [
+  'opening',
+  'purchase',
+  'receipt',
+  'issue',
+  'usage',
+  'return',
+  'adjustment',
+  'wastage',
+  'expired'
+] as const satisfies readonly TxnType[]
 
 export interface Warehouse {
   id: number

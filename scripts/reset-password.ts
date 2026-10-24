@@ -21,7 +21,16 @@ try {
         `SELECT u.id, u.organization_id, o.code AS org, u.username, u.email, u.display_name, u.role, u.active
          FROM users u JOIN organizations o ON o.id = u.organization_id ORDER BY o.code, u.username`
       )
-      .all()) as { id: number; organization_id: number; org: string; username: string; email: string | null; display_name: string; role: string; active: number }[]
+      .all()) as {
+      id: number
+      organization_id: number
+      org: string
+      username: string
+      email: string | null
+      display_name: string
+      role: string
+      active: number
+    }[]
     const email = process.argv.slice(2).find((a) => !a.startsWith('--'))
     if (process.argv.includes('--list') || !email) {
       for (const u of users) {
@@ -43,7 +52,10 @@ try {
         .prepare('UPDATE users SET password_hash = ?, recovery_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?')
         .run(hashPassword(password), hashPassword(normalizeRecoveryCode(code)), user.id)
       await db.prepare('DELETE FROM sessions WHERE user_id = ? AND organization_id = ?').run(user.id, user.organization_id)
-      await audit({ db, org: user.organization_id, user: null, now: () => new Date() }, { action: 'support_password_reset', entity: 'user', entityId: user.id, details: { email: user.email } })
+      await audit(
+        { db, org: user.organization_id, user: null, now: () => new Date() },
+        { action: 'support_password_reset', entity: 'user', entityId: user.id, details: { email: user.email } }
+      )
     })()
     console.log(`Password changed for ${user.email}. New recovery code (write it down): ${code}`)
   })

@@ -1,12 +1,4 @@
-import {
-  averageHens,
-  closingHens,
-  emptyMovements,
-  feedConsumption,
-  mortalityPercent,
-  productionPercent,
-  round
-} from '@shared/calc'
+import { averageHens, closingHens, emptyMovements, feedConsumption, mortalityPercent, productionPercent, round } from '@shared/calc'
 import type { CageDaySummary, DayStatus, EggSession, FarmSettings, MovementTotals } from '@shared/types'
 import type { Ctx } from '../context'
 
@@ -71,8 +63,10 @@ export async function loadCageDayStats(
 
   const moves = new Map<string, MovementTotals>()
   for (const m of (await db
-    .prepare(`SELECT x.day_id, x.cage_id, x.type, SUM(x.quantity) AS q FROM flock_movements x ${rangeJoin}
-              GROUP BY x.day_id, x.cage_id, x.type`)
+    .prepare(
+      `SELECT x.day_id, x.cage_id, x.type, SUM(x.quantity) AS q FROM flock_movements x ${rangeJoin}
+              GROUP BY x.day_id, x.cage_id, x.type`
+    )
     .all(...params)) as { day_id: number; cage_id: number; type: string; q: number }[]) {
     const k = key(m.day_id, m.cage_id)
     const t = moves.get(k) ?? emptyMovements()
@@ -129,9 +123,11 @@ export async function loadCageDayStats(
   }
 
   const water = new Map<string, number | null>()
-  for (const w of (await db
-    .prepare(`SELECT x.day_id, x.cage_id, x.litres FROM water_records x ${rangeJoin}`)
-    .all(...params)) as { day_id: number; cage_id: number; litres: number | null }[]) {
+  for (const w of (await db.prepare(`SELECT x.day_id, x.cage_id, x.litres FROM water_records x ${rangeJoin}`).all(...params)) as {
+    day_id: number
+    cage_id: number
+    litres: number | null
+  }[]) {
     water.set(key(w.day_id, w.cage_id), w.litres)
   }
 
@@ -195,10 +191,7 @@ export interface FarmDayStat {
 }
 
 /** Sums cage rows into farm totals. Unknown (null) cage values stay unknown unless at least one cage reported. */
-export function sumCages(
-  rows: CageDaySummary[],
-  settings: Pick<FarmSettings, 'productionDenominator' | 'mortalityDenominator'>
-) {
+export function sumCages(rows: CageDaySummary[], settings: Pick<FarmSettings, 'productionDenominator' | 'mortalityDenominator'>) {
   const movements = emptyMovements()
   let opening = 0
   let closing = 0

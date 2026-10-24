@@ -99,7 +99,12 @@ export async function dayReport(ctx: Ctx, date: string, kind: 'day_open' | 'day_
       items: pending.length ? pending.map((i) => issueText(lang, i, cageName(i.cageId))) : [t('common.none')],
       tone: 'info'
     })
-    if (ov.previousDay) sections.push({ kind: 'note', tone: ov.previousDay.status === 'closed' ? 'info' : 'warn', text: t('day.previousDay', { date: ov.previousDay.date, status: t('status.' + ov.previousDay.status) }) })
+    if (ov.previousDay)
+      sections.push({
+        kind: 'note',
+        tone: ov.previousDay.status === 'closed' ? 'info' : 'warn',
+        text: t('day.previousDay', { date: ov.previousDay.date, status: t('status.' + ov.previousDay.status) })
+      })
     return {
       title: t('report.openTitle'),
       farmName,
@@ -119,7 +124,10 @@ export async function dayReport(ctx: Ctx, date: string, kind: 'day_open' | 'day_
     pairs: [
       [t('dash.openingHens'), n(tot.opening)],
       [t('col.closing'), n(tot.closing)],
-      [t('rep.totalEggs'), `${n(tot.eggs.collected)} (${t('col.good')} ${n(tot.eggs.good)} · ${t('col.damaged')} ${n(tot.eggs.damaged)} · ${t('col.rejected')} ${n(tot.eggs.rejected)})`],
+      [
+        t('rep.totalEggs'),
+        `${n(tot.eggs.collected)} (${t('col.good')} ${n(tot.eggs.good)} · ${t('col.damaged')} ${n(tot.eggs.damaged)} · ${t('col.rejected')} ${n(tot.eggs.rejected)})`
+      ],
       [t('dash.production'), tot.productionPct === null ? '—' : `${n(tot.productionPct, 2)}%`],
       [t('rep.totalFeed'), tot.feedKg === null ? t('common.unknown') : `${n(tot.feedKg, 1)} kg${tot.feedIsEstimate ? ` (${t('common.estimate')})` : ''}`],
       [t('rep.totalWater'), tot.waterLitres === null ? t('common.unknown') : `${n(tot.waterLitres, 0)} L`],
@@ -213,7 +221,14 @@ export async function dayReport(ctx: Ctx, date: string, kind: 'day_open' | 'day_
       heading: t('report.treatments'),
       columns: [t('common.cage'), t('med.medicine'), t('med.batch'), t('common.quantity'), t('med.reasonForUse'), t('med.prescribedBy')],
       numeric: [false, false, false, true, false, false],
-      rows: treatments.map((x) => [x.cageName ?? t('common.farm'), x.itemName, x.batchNo ?? '', `${n(x.quantity, 2)} ${x.unit}`, x.reason, x.prescribedBy ?? ''])
+      rows: treatments.map((x) => [
+        x.cageName ?? t('common.farm'),
+        x.itemName,
+        x.batchNo ?? '',
+        `${n(x.quantity, 2)} ${x.unit}`,
+        x.reason,
+        x.prescribedBy ?? ''
+      ])
     })
   }
   const inv = (await balances(ctx, undefined, date, { farmId: ctx.farm })).filter((b) => b.active)
@@ -226,9 +241,21 @@ export async function dayReport(ctx: Ctx, date: string, kind: 'day_open' | 'day_
   })
   const confirmed = ov.issues.filter((i) => i.confirmation)
   const missing = ov.issues.filter((i) => ['missing_eggs', 'missing_feed', 'missing_water', 'water_incomplete', 'feed_estimated'].includes(i.code))
-  const alerts = ov.issues.filter((i) => ['high_mortality', 'production_drop', 'water_change', 'negative_stock', 'expired_medicine_used', 'opening_corrected'].includes(i.code))
-  sections.push({ kind: 'list', heading: t('report.alerts'), items: alerts.length ? alerts.map((i) => issueText(lang, i, cageName(i.cageId))) : [t('common.none')], tone: 'warn' })
-  sections.push({ kind: 'list', heading: t('report.estimates'), items: missing.length ? missing.map((i) => issueText(lang, i, cageName(i.cageId))) : [t('common.none')], tone: 'info' })
+  const alerts = ov.issues.filter((i) =>
+    ['high_mortality', 'production_drop', 'water_change', 'negative_stock', 'expired_medicine_used', 'opening_corrected'].includes(i.code)
+  )
+  sections.push({
+    kind: 'list',
+    heading: t('report.alerts'),
+    items: alerts.length ? alerts.map((i) => issueText(lang, i, cageName(i.cageId))) : [t('common.none')],
+    tone: 'warn'
+  })
+  sections.push({
+    kind: 'list',
+    heading: t('report.estimates'),
+    items: missing.length ? missing.map((i) => issueText(lang, i, cageName(i.cageId))) : [t('common.none')],
+    tone: 'info'
+  })
   sections.push({
     kind: 'list',
     heading: t('report.confirmed'),
@@ -283,8 +310,24 @@ export async function periodReport(ctx: Ctx, from: string, to: string, lang: Lan
         [t('rep.daysClosed'), `${recorded.filter((p) => p.status === 'closed').length} / ${series.length}`],
         [t('rep.totalEggs'), n(sum((p) => p.eggs))],
         [t('rep.avgProduction'), prod.length ? `${n(prod.reduce((a, b) => a + b, 0) / prod.length, 2)}%` : '—'],
-        [t('rep.totalFeed'), sum((p) => p.feedKg) === null ? '—' : `${n(sum((p) => p.feedKg), 1)} kg`],
-        [t('rep.totalWater'), sum((p) => p.waterLitres) === null ? '—' : `${n(sum((p) => p.waterLitres), 0)} L`],
+        [
+          t('rep.totalFeed'),
+          sum((p) => p.feedKg) === null
+            ? '—'
+            : `${n(
+                sum((p) => p.feedKg),
+                1
+              )} kg`
+        ],
+        [
+          t('rep.totalWater'),
+          sum((p) => p.waterLitres) === null
+            ? '—'
+            : `${n(
+                sum((p) => p.waterLitres),
+                0
+              )} L`
+        ],
         [t('rep.totalDeaths'), n(sum((p) => p.deaths))],
         [t('col.closing'), recorded.length ? n(recorded[recorded.length - 1].closing) : '—']
       ]
@@ -294,14 +337,61 @@ export async function periodReport(ctx: Ctx, from: string, to: string, lang: Lan
   sections.push({
     kind: 'table',
     heading: t('report.daily'),
-    columns: [t('common.date'), t('common.status'), t('col.opening'), t('col.closing'), t('col.good'), t('col.damaged'), t('col.rejected'), t('col.eggs'), t('col.production'), t('col.feed'), t('col.feedPerHen'), t('col.water'), t('col.deaths')],
+    columns: [
+      t('common.date'),
+      t('common.status'),
+      t('col.opening'),
+      t('col.closing'),
+      t('col.good'),
+      t('col.damaged'),
+      t('col.rejected'),
+      t('col.eggs'),
+      t('col.production'),
+      t('col.feed'),
+      t('col.feedPerHen'),
+      t('col.water'),
+      t('col.deaths')
+    ],
     numeric: [false, false, ...Array(11).fill(true)],
     rows: series.map((p) =>
       p.status === 'not_started'
         ? [p.date, t('status.not_started'), null, null, null, null, null, null, null, null, null, null, null]
-        : [p.date, t('status.' + p.status), p.opening, p.closing, p.good, p.damaged, p.rejected, p.eggs, p.productionPct === null ? null : n(p.productionPct, 2), p.feedKg === null ? null : n(p.feedKg, 1), p.feedPerHenG, p.waterLitres, p.deaths]
+        : [
+            p.date,
+            t('status.' + p.status),
+            p.opening,
+            p.closing,
+            p.good,
+            p.damaged,
+            p.rejected,
+            p.eggs,
+            p.productionPct === null ? null : n(p.productionPct, 2),
+            p.feedKg === null ? null : n(p.feedKg, 1),
+            p.feedPerHenG,
+            p.waterLitres,
+            p.deaths
+          ]
     ),
-    totals: [t('common.total'), '', null, null, sum((p) => p.good), sum((p) => p.damaged), sum((p) => p.rejected), sum((p) => p.eggs), null, sum((p) => p.feedKg) === null ? null : n(sum((p) => p.feedKg), 1), null, sum((p) => p.waterLitres), sum((p) => p.deaths)]
+    totals: [
+      t('common.total'),
+      '',
+      null,
+      null,
+      sum((p) => p.good),
+      sum((p) => p.damaged),
+      sum((p) => p.rejected),
+      sum((p) => p.eggs),
+      null,
+      sum((p) => p.feedKg) === null
+        ? null
+        : n(
+            sum((p) => p.feedKg),
+            1
+          ),
+      null,
+      sum((p) => p.waterLitres),
+      sum((p) => p.deaths)
+    ]
   })
   // Stores and sales: feed in and out of the store, eggs in and out of the egg store, money.
   const flow = await flowSummary(ctx, from, to)
@@ -342,9 +432,31 @@ export async function periodReport(ctx: Ctx, from: string, to: string, lang: Lan
   sections.push({
     kind: 'table',
     heading: t('rep.compare'),
-    columns: [t('common.cage'), t('col.eggs'), t('col.good'), t('col.damaged'), t('col.production'), t('col.feed'), t('col.water'), t('col.deaths'), t('col.mortality'), t('col.closing')],
+    columns: [
+      t('common.cage'),
+      t('col.eggs'),
+      t('col.good'),
+      t('col.damaged'),
+      t('col.production'),
+      t('col.feed'),
+      t('col.water'),
+      t('col.deaths'),
+      t('col.mortality'),
+      t('col.closing')
+    ],
     numeric: [false, ...Array(9).fill(true)],
-    rows: cmp.map((c) => [c.name, c.eggs, c.good, c.damaged, c.avgProductionPct === null ? null : n(c.avgProductionPct, 2), c.feedKg === null ? null : n(c.feedKg, 1), c.waterLitres, c.deaths, c.mortalityPct === null ? null : n(c.mortalityPct, 3), c.closingHens])
+    rows: cmp.map((c) => [
+      c.name,
+      c.eggs,
+      c.good,
+      c.damaged,
+      c.avgProductionPct === null ? null : n(c.avgProductionPct, 2),
+      c.feedKg === null ? null : n(c.feedKg, 1),
+      c.waterLitres,
+      c.deaths,
+      c.mortalityPct === null ? null : n(c.mortalityPct, 3),
+      c.closingHens
+    ])
   })
   sections.push({
     kind: 'note',

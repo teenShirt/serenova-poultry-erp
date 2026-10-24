@@ -11,7 +11,11 @@ export function BackupPage() {
   const [busy, setBusy] = useState(false)
   const [check, setCheck] = useState<(BackupFileCheck & { token: string }) | null>(null)
   const s = status.settings
-  const [auto, setAuto] = useState({ enabled: s.backupEnabled, interval: s.backupIntervalHours as number | null, retention: s.backupRetention as number | null })
+  const [auto, setAuto] = useState({
+    enabled: s.backupEnabled,
+    interval: s.backupIntervalHours as number | null,
+    retention: s.backupRetention as number | null
+  })
 
   if (status.isDemo) {
     return (
@@ -147,7 +151,15 @@ export function BackupPage() {
                     <tr key={r.id}>
                       <td className="nowrap">{dateTime(r.createdAt)}</td>
                       <td>{t('bak.kind.' + r.kind)}</td>
-                      <td>{r.status === 'ok' ? <span className="badge good">{t('bak.ok')}</span> : <span className="badge bad" title={r.message ?? ''}>{t('bak.failed')}</span>}</td>
+                      <td>
+                        {r.status === 'ok' ? (
+                          <span className="badge good">{t('bak.ok')}</span>
+                        ) : (
+                          <span className="badge bad" title={r.message ?? ''}>
+                            {t('bak.failed')}
+                          </span>
+                        )}
+                      </td>
                       <td className="num">{r.sizeBytes ? `${num(r.sizeBytes / 1024 / 1024, 2)} MB` : '—'}</td>
                       <td className="small muted">{r.path ?? r.message}</td>
                       {can('backup.restore') && (

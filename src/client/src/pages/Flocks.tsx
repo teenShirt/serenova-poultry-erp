@@ -117,7 +117,9 @@ function FlockList({ onOpen }: { onOpen: (id: number) => void }) {
                     <td className="num">{f.status === 'active' ? num(f.currentHens) : '—'}</td>
                     <td className="num">{num(f.deaths)}</td>
                     <td>{f.cages.map((c) => c.cageCode).join(', ') || '—'}</td>
-                    <td>{f.status === 'active' ? <span className="badge good">{t('common.active')}</span> : <span className="badge">{t('flk.closed')}</span>}</td>
+                    <td>
+                      {f.status === 'active' ? <span className="badge good">{t('common.active')}</span> : <span className="badge">{t('flk.closed')}</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -144,7 +146,17 @@ function FlockForm({ flock, onClose }: { flock: FlockSummary | null; onClose: ()
           initialCount: flock.initialCount,
           notes: flock.notes
         }
-      : { id: null, code: '', breed: null, source: 'purchased', hatchDate: null, arrivalDate: status.today, ageOnArrivalDays: null, initialCount: 0, notes: null }
+      : {
+          id: null,
+          code: '',
+          breed: null,
+          source: 'purchased',
+          hatchDate: null,
+          arrivalDate: status.today,
+          ageOnArrivalDays: null,
+          initialCount: 0,
+          notes: null
+        }
   )
   const [knownHatch, setKnownHatch] = useState(flock ? !flock.hatchDateEstimated : false)
   const [busy, setBusy] = useState(false)
@@ -205,10 +217,20 @@ function FlockForm({ flock, onClose }: { flock: FlockSummary | null; onClose: ()
         <div className="form-grid">
           {knownHatch ? (
             <Field label={t('flk.hatchDate')} required>
-              <input className="input" type="date" max={f.arrivalDate} value={f.hatchDate ?? ''} onChange={(e) => setF({ ...f, hatchDate: e.target.value || null })} />
+              <input
+                className="input"
+                type="date"
+                max={f.arrivalDate}
+                value={f.hatchDate ?? ''}
+                onChange={(e) => setF({ ...f, hatchDate: e.target.value || null })}
+              />
             </Field>
           ) : (
-            <Field label={t('flk.ageOnArrival')} required hint={f.ageOnArrivalDays !== null ? t('flk.hatchWouldBe', { date: addDays(f.arrivalDate, -f.ageOnArrivalDays) }) : t('flk.ageOnArrivalHint')}>
+            <Field
+              label={t('flk.ageOnArrival')}
+              required
+              hint={f.ageOnArrivalDays !== null ? t('flk.hatchWouldBe', { date: addDays(f.arrivalDate, -f.ageOnArrivalDays) }) : t('flk.ageOnArrivalHint')}
+            >
               <NumInput value={f.ageOnArrivalDays} onChange={(v) => setF({ ...f, ageOnArrivalDays: v })} />
             </Field>
           )}
@@ -254,7 +276,11 @@ function FlockView({ id, onClose, onEdit }: { id: number; onClose: () => void; o
           )}
         </div>
         <div className="grid stats">
-          <Stat label={t('flk.age')} value={t('flk.weeksShort', { n: f.age.weeks })} sub={`${ageText(t, f.age)}${f.hatchDateEstimated ? ' · ' + t('flk.estimated') : ''}`} />
+          <Stat
+            label={t('flk.age')}
+            value={t('flk.weeksShort', { n: f.age.weeks })}
+            sub={`${ageText(t, f.age)}${f.hatchDateEstimated ? ' · ' + t('flk.estimated') : ''}`}
+          />
           <Stat label={t('flk.stage')} value={stageName(f.stage)} sub={`${t('flk.hatchDate')}: ${date(f.hatchDate)}`} />
           <Stat label={t('flk.hensNow')} value={num(f.currentHens)} sub={t('flk.ofInitial', { n: num(f.initialCount) })} />
           <Stat label={t('flk.deaths')} value={num(f.deaths)} sub={f.initialCount > 0 ? `${num((f.deaths / f.initialCount) * 100, 2)}%` : undefined} />
@@ -305,10 +331,28 @@ function FlockView({ id, onClose, onEdit }: { id: number; onClose: () => void; o
         </div>
         {series && series.length > 0 ? (
           <div className="grid cols-2">
-            <TimeChart title={t('flk.chartProduction')} data={series} series={[{ key: 'productionPct', label: t('flk.productionPct'), color: SERIES.blue }]} unit="%" digits={1} />
+            <TimeChart
+              title={t('flk.chartProduction')}
+              data={series}
+              series={[{ key: 'productionPct', label: t('flk.productionPct'), color: SERIES.blue }]}
+              unit="%"
+              digits={1}
+            />
             <TimeChart title={t('flk.chartDeaths')} data={series} kind="bar" series={[{ key: 'deaths', label: t('flk.deaths'), color: SERIES.red }]} />
-            <TimeChart title={t('flk.chartFeed')} data={series} series={[{ key: 'feedPerHenG', label: t('flk.feedPerHen'), color: SERIES.orange }]} unit="g" digits={1} />
-            <TimeChart title={t('flk.chartWater')} data={series} series={[{ key: 'waterLitres', label: t('flk.water'), color: SERIES.aqua }]} unit="L" digits={1} />
+            <TimeChart
+              title={t('flk.chartFeed')}
+              data={series}
+              series={[{ key: 'feedPerHenG', label: t('flk.feedPerHen'), color: SERIES.orange }]}
+              unit="g"
+              digits={1}
+            />
+            <TimeChart
+              title={t('flk.chartWater')}
+              data={series}
+              series={[{ key: 'waterLitres', label: t('flk.water'), color: SERIES.aqua }]}
+              unit="L"
+              digits={1}
+            />
           </div>
         ) : (
           <Empty text={t('flk.noDays')} />
@@ -444,7 +488,12 @@ function PlaceDialog({ flock, onClose }: { flock: FlockDetail; onClose: () => vo
             const o = occupant(c.id)
             return (
               <label key={c.id} className="check">
-                <input type="checkbox" disabled={!!o} checked={chosen.includes(c.id)} onChange={(e) => setChosen(e.target.checked ? [...chosen, c.id] : chosen.filter((x) => x !== c.id))} />
+                <input
+                  type="checkbox"
+                  disabled={!!o}
+                  checked={chosen.includes(c.id)}
+                  onChange={(e) => setChosen(e.target.checked ? [...chosen, c.id] : chosen.filter((x) => x !== c.id))}
+                />
                 {c.code} — {c.name}
                 {o && <span className="muted small"> ({t('flk.occupiedBy', { flock: o.code })})</span>}
               </label>
@@ -487,7 +536,9 @@ function ReminderList({ items }: { items: ReminderDue[] }) {
               </td>
               <td>{date(r.dueOn)}</td>
               <td>
-                <span className={`badge ${r.state === 'overdue' ? 'bad' : r.state === 'due' ? 'warn' : r.state === 'done' ? 'good' : ''}`}>{t('flk.rstate.' + r.state)}</span>
+                <span className={`badge ${r.state === 'overdue' ? 'bad' : r.state === 'due' ? 'warn' : r.state === 'done' ? 'good' : ''}`}>
+                  {t('flk.rstate.' + r.state)}
+                </span>
                 {r.doneAt && (
                   <div className="muted small">
                     {r.doneBy ?? ''} · {dateTime(r.doneAt)}
@@ -511,7 +562,9 @@ function ReminderList({ items }: { items: ReminderDue[] }) {
           ))}
         </tbody>
       </table>
-      {skipping && <ReasonDialog title={`${t('flk.skip')}: ${skipping.title}`} onClose={() => setSkipping(null)} onSubmit={(note) => mark(skipping, 'skipped', note)} />}
+      {skipping && (
+        <ReasonDialog title={`${t('flk.skip')}: ${skipping.title}`} onClose={() => setSkipping(null)} onSubmit={(note) => mark(skipping, 'skipped', note)} />
+      )}
     </>
   )
 }

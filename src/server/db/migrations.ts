@@ -588,16 +588,13 @@ ALTER TABLE sessions ADD COLUMN platform_user_id INT NULL AFTER farm_id;
 `)
       const at = new Date().toISOString()
       const all = JSON.stringify(['purchasing', 'sales', 'advanced_reports', 'multi_farm', 'exports'])
-      await db.query(
-        'INSERT INTO plans (code, name, max_users, max_admins, max_roles, max_farms, max_warehouses, modules, created_at) VALUES ?',
+      await db.query('INSERT INTO plans (code, name, max_users, max_admins, max_roles, max_farms, max_warehouses, modules, created_at) VALUES ?', [
         [
-          [
-            ['starter', 'Starter', 5, 1, 3, 1, 1, '[]', at],
-            ['growth', 'Growth', 15, 2, 10, 3, 3, all, at],
-            ['enterprise', 'Enterprise', 50, 5, 30, 10, 10, all, at]
-          ]
+          ['starter', 'Starter', 5, 1, 3, 1, 1, '[]', at],
+          ['growth', 'Growth', 15, 2, 10, 3, 3, all, at],
+          ['enterprise', 'Enterprise', 50, 5, 30, 10, 10, all, at]
         ]
-      )
+      ])
       // Organizations from before subscriptions keep everything they have: Enterprise, no end date.
       const enterprise = ((await db.prepare("SELECT id FROM plans WHERE code = 'enterprise'").get()) as { id: number }).id
       const today = at.slice(0, 10)
@@ -1097,9 +1094,7 @@ export const DATA_TABLES = [
 ] as const
 
 export async function currentSchemaVersion(db: DB): Promise<number> {
-  const exists = await db
-    .prepare("SELECT 1 AS x FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'schema_migrations'")
-    .get()
+  const exists = await db.prepare("SELECT 1 AS x FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'schema_migrations'").get()
   if (!exists) return 0
   const row = (await db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get()) as { v: number | null }
   return row.v ?? 0
@@ -1137,9 +1132,7 @@ export async function migrate(
       if (m.version <= from || m.version > target) continue
       if (typeof m.up === 'string') await db.exec(m.up)
       else await m.up(db)
-      await db
-        .prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)')
-        .run(m.version, m.name, new Date().toISOString())
+      await db.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)').run(m.version, m.name, new Date().toISOString())
     }
     return { from, to: Math.max(from, target) }
   } finally {

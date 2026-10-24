@@ -65,27 +65,39 @@ describe('plan limits (enforced on the server)', () => {
       code: 'user_limit_reached',
       params: { limit: 5 }
     })
-    await expect(signup(f.anon, { organizationCode: f.orgCode, email: 'u7@test.farm', displayName: 'U7', password: 'secret123' })).rejects.toMatchObject({ code: 'user_limit_reached' })
+    await expect(signup(f.anon, { organizationCode: f.orgCode, email: 'u7@test.farm', displayName: 'U7', password: 'secret123' })).rejects.toMatchObject({
+      code: 'user_limit_reached'
+    })
     // A deactivated account frees its seat, and reactivating it needs one again.
     const u3 = (await f.db.prepare("SELECT id FROM users WHERE email = 'u3@test.farm'").get()) as { id: number }
     await updateUser(f.admin, { id: u3.id, email: 'u3@test.farm', displayName: 'U3', roleId: f.roles.worker, active: false })
     await createUser(f.admin, { email: 'u6@test.farm', displayName: 'U6', password: 'secret123', roleId: f.roles.worker })
-    await expect(updateUser(f.admin, { id: u3.id, email: 'u3@test.farm', displayName: 'U3', roleId: f.roles.worker, active: true })).rejects.toMatchObject({ code: 'user_limit_reached' })
+    await expect(updateUser(f.admin, { id: u3.id, email: 'u3@test.farm', displayName: 'U3', roleId: f.roles.worker, active: true })).rejects.toMatchObject({
+      code: 'user_limit_reached'
+    })
   })
 
   it('a Starter organization has one administrator, and limited custom roles', async () => {
     const f = await makeFarm({ plan: 'starter' })
     const call = api(f.db)
-    expect(await call(f.admin, 'users.create', { email: 'a2@test.farm', displayName: 'A2', password: 'secret123', roleId: f.roles.admin })).toMatchObject({ ok: false, code: 'admin_limit_reached' })
+    expect(await call(f.admin, 'users.create', { email: 'a2@test.farm', displayName: 'A2', password: 'secret123', roleId: f.roles.admin })).toMatchObject({
+      ok: false,
+      code: 'admin_limit_reached'
+    })
     const worker = f.worker.user!.id
-    expect(await call(f.admin, 'users.update', { id: worker, email: 'worker@test.farm', displayName: 'Worker', roleId: f.roles.admin, active: true })).toMatchObject({
+    expect(
+      await call(f.admin, 'users.update', { id: worker, email: 'worker@test.farm', displayName: 'Worker', roleId: f.roles.admin, active: true })
+    ).toMatchObject({
       ok: false,
       code: 'admin_limit_reached'
     })
     const limit = (await getEntitlements(f.db, f.org, TODAY)).limits.maxRoles
     let made = (await getEntitlements(f.db, f.org, TODAY)).usage.roles
     while (made < limit) await saveRole(f.admin, { id: null, name: `Role ${++made}`, description: null, permissions: ['eggs.record'] })
-    expect(await call(f.admin, 'roles.save', { id: null, name: 'One too many', description: null, permissions: [] })).toMatchObject({ ok: false, code: 'role_limit_reached' })
+    expect(await call(f.admin, 'roles.save', { id: null, name: 'One too many', description: null, permissions: [] })).toMatchObject({
+      ok: false,
+      code: 'role_limit_reached'
+    })
   })
 
   it("modules outside the plan are refused, the rest of the farm's work is not", async () => {
@@ -96,7 +108,22 @@ describe('plan limits (enforced on the server)', () => {
       code: 'module_not_in_plan',
       params: { module: 'purchasing' }
     })
-    expect(await call(f.admin, 'sales.dispatch', { date: D, customerId: 1, goodQty: 1, goodPrice: 1, crackedQty: 0, crackedPrice: 0, amountPaid: 0, paymentMethod: 'cash', invoiceNo: null, vehicle: null, driver: null, notes: null })).toMatchObject({ ok: false, code: 'module_not_in_plan' })
+    expect(
+      await call(f.admin, 'sales.dispatch', {
+        date: D,
+        customerId: 1,
+        goodQty: 1,
+        goodPrice: 1,
+        crackedQty: 0,
+        crackedPrice: 0,
+        amountPaid: 0,
+        paymentMethod: 'cash',
+        invoiceNo: null,
+        vehicle: null,
+        driver: null,
+        notes: null
+      })
+    ).toMatchObject({ ok: false, code: 'module_not_in_plan' })
     expect(await call(f.worker, 'days.start', { date: D, corrections: [], acknowledgeWarnings: true })).toMatchObject({ ok: true })
     expect(await call(f.admin, 'analytics.comparison', { from: D, to: D })).toMatchObject({ ok: true })
   })
@@ -112,8 +139,15 @@ describe('an expired subscription', () => {
     await f.db.prepare("UPDATE subscriptions SET ends_on = '2026-02-01', grace_days = 14 WHERE organization_id = ?").run(f.org)
 
     expect((await getEntitlements(f.db, f.org, TODAY)).effective).toBe('expired')
-    expect(await call(f.worker, 'eggs.save', { ...egg, cageId: f.cageIds[1] })).toMatchObject({ ok: false, code: 'subscription_read_only', params: { status: 'expired' } })
-    expect(await call(f.admin, 'users.create', { email: 'x@test.farm', displayName: 'X', password: 'secret123', roleId: f.roles.worker })).toMatchObject({ ok: false, code: 'subscription_read_only' })
+    expect(await call(f.worker, 'eggs.save', { ...egg, cageId: f.cageIds[1] })).toMatchObject({
+      ok: false,
+      code: 'subscription_read_only',
+      params: { status: 'expired' }
+    })
+    expect(await call(f.admin, 'users.create', { email: 'x@test.farm', displayName: 'X', password: 'secret123', roleId: f.roles.worker })).toMatchObject({
+      ok: false,
+      code: 'subscription_read_only'
+    })
     const list = await call(f.worker, 'eggs.list', { date: D })
     expect(list.ok && (list.data as unknown[]).length).toBe(1)
     const status = await call(f.admin, 'app.status', undefined)
@@ -141,8 +175,12 @@ describe('the Super Admin console', () => {
     const f = await makeFarm()
     await superAdmin(f.db)
     const con = consoleApi(f.db)
-    for (let i = 0; i < 5; i++) expect((await con(null, 'platform.login', { email: 'ops@serenova.test', password: 'wrong-password' })).res).toMatchObject({ code: 'invalid_login' })
-    expect((await con(null, 'platform.login', { email: 'ops@serenova.test', password: 'platform-secret-1' })).res).toMatchObject({ ok: false, code: 'account_locked' })
+    for (let i = 0; i < 5; i++)
+      expect((await con(null, 'platform.login', { email: 'ops@serenova.test', password: 'wrong-password' })).res).toMatchObject({ code: 'invalid_login' })
+    expect((await con(null, 'platform.login', { email: 'ops@serenova.test', password: 'platform-secret-1' })).res).toMatchObject({
+      ok: false,
+      code: 'account_locked'
+    })
   })
 
   it('creates an organization on a plan, changes its subscription, suspends it; every action is audited', async () => {
@@ -156,23 +194,40 @@ describe('the Super Admin console', () => {
     const plans = (await con(ops, 'platform.plans')).res as { ok: true; data: { id: number; code: string }[] }
     expect(plans.data.map((p) => p.code)).toEqual(['starter', 'growth', 'enterprise'])
     const growth = plans.data.find((p) => p.code === 'growth')!.id
-    const created = (await con(ops, 'platform.createOrganization', {
-      name: 'Madawala Test',
-      location: 'Madawala',
-      timezone: 'Asia/Colombo',
-      language: 'en',
-      adminEmail: 'owner@madawala.test',
-      adminName: 'Owner',
-      adminPassword: 'secret123',
-      planId: growth,
-      trialDays: 14
-    })).res as { ok: true; data: { id: number; code: string } }
+    const created = (
+      await con(ops, 'platform.createOrganization', {
+        name: 'Madawala Test',
+        location: 'Madawala',
+        timezone: 'Asia/Colombo',
+        language: 'en',
+        adminEmail: 'owner@madawala.test',
+        adminName: 'Owner',
+        adminPassword: 'secret123',
+        planId: growth,
+        trialDays: 14
+      })
+    ).res as { ok: true; data: { id: number; code: string } }
     expect(created.ok).toBe(true)
     const orgId = created.data.id
-    expect(await getEntitlements(f.db, orgId, TODAY)).toMatchObject({ planCode: 'growth', effective: 'trial', trialEndsOn: '2026-03-24', usage: { users: 1, admins: 1 } })
+    expect(await getEntitlements(f.db, orgId, TODAY)).toMatchObject({
+      planCode: 'growth',
+      effective: 'trial',
+      trialEndsOn: '2026-03-24',
+      usage: { users: 1, admins: 1 }
+    })
 
     // Per-customer limits: 4 users instead of Growth's 15.
-    const change = { organizationId: orgId, planId: growth, status: 'active', startsOn: TODAY, endsOn: '2027-03-09', trialEndsOn: null, graceDays: 14, overrides: { maxUsers: 4 }, note: 'Paid yearly' }
+    const change = {
+      organizationId: orgId,
+      planId: growth,
+      status: 'active',
+      startsOn: TODAY,
+      endsOn: '2027-03-09',
+      trialEndsOn: null,
+      graceDays: 14,
+      overrides: { maxUsers: 4 },
+      note: 'Paid yearly'
+    }
     expect((await con(ops, 'platform.setSubscription', change)).res).toMatchObject({ ok: true })
     expect(await getEntitlements(f.db, orgId, TODAY)).toMatchObject({ effective: 'active', limits: { maxUsers: 4, maxAdmins: 2 } })
     expect((await con(ops, 'platform.setSubscription', { ...change, note: '' })).res).toMatchObject({ ok: false, code: 'reason_required' })
@@ -180,7 +235,11 @@ describe('the Super Admin console', () => {
     // Suspending signs everyone out at once; the records stay.
     const owner = (await f.db.prepare("SELECT id FROM users WHERE email = 'owner@madawala.test'").get()) as { id: number }
     expect(await loadSessionUser({ db: f.db }, owner.id, orgId)).not.toBeNull()
-    await f.db.prepare("INSERT INTO sessions (id, user_id, organization_id, mode, created_at, last_seen_at, expires_at) VALUES ('s1', ?, ?, 'farm', ?, ?, '2099-01-01')").run(owner.id, orgId, TODAY, TODAY)
+    await f.db
+      .prepare(
+        "INSERT INTO sessions (id, user_id, organization_id, mode, created_at, last_seen_at, expires_at) VALUES ('s1', ?, ?, 'farm', ?, ?, '2099-01-01')"
+      )
+      .run(owner.id, orgId, TODAY, TODAY)
     expect((await con(ops, 'platform.setOrganizationStatus', { id: orgId, status: 'suspended', reason: 'Unpaid invoice' })).res).toMatchObject({ ok: true })
     expect(await loadSessionUser({ db: f.db }, owner.id, orgId)).toBeNull()
     expect(await f.db.prepare('SELECT 1 AS x FROM sessions WHERE organization_id = ?').get(orgId)).toBeUndefined()
@@ -201,7 +260,18 @@ describe('the Super Admin console', () => {
     const f = await makeFarm()
     const ops = await superAdmin(f.db)
     const con = consoleApi(f.db)
-    const plan = { id: null, code: 'growth', name: 'Copy', maxUsers: 10, maxAdmins: 2, maxRoles: 5, maxFarms: 2, maxWarehouses: 2, modules: ['sales'], active: true }
+    const plan = {
+      id: null,
+      code: 'growth',
+      name: 'Copy',
+      maxUsers: 10,
+      maxAdmins: 2,
+      maxRoles: 5,
+      maxFarms: 2,
+      maxWarehouses: 2,
+      modules: ['sales'],
+      active: true
+    }
     expect((await con(ops, 'platform.savePlan', plan)).res).toMatchObject({ ok: false, code: 'name_taken' })
     expect((await con(ops, 'platform.savePlan', { ...plan, code: 'small', maxAdmins: 20 })).res).toMatchObject({ ok: false, code: 'invalid_input' })
     expect((await con(ops, 'platform.savePlan', { ...plan, code: 'small', maxUsers: -1 })).res).toMatchObject({ ok: false, code: 'invalid_input' })

@@ -88,14 +88,31 @@ export async function saveFeed(ctx: Ctx, f: FeedInput, expectedId: number | null
     } else {
       assert(expectedId === null, 'record_changed')
       id = Number(
-        (await ctx.db
-          .prepare(
-            `INSERT INTO feed_records (organization_id, day_id, cage_id, item_id, batch_no, opening_stock, issued, returned, wasted,
+        (
+          await ctx.db
+            .prepare(
+              `INSERT INTO feed_records (organization_id, day_id, cage_id, item_id, batch_no, opening_stock, issued, returned, wasted,
                measured_consumption, closing_stock, notes, recorded_by, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          )
-          .run(ctx.org, day.id, f.cageId, f.itemId, f.batchNo, f.openingStock, f.issued, f.returned, f.wasted, f.measuredConsumption, f.closingStock, f.notes, user.id, now, now))
-          .lastInsertRowid
+            )
+            .run(
+              ctx.org,
+              day.id,
+              f.cageId,
+              f.itemId,
+              f.batchNo,
+              f.openingStock,
+              f.issued,
+              f.returned,
+              f.wasted,
+              f.measuredConsumption,
+              f.closingStock,
+              f.notes,
+              user.id,
+              now,
+              now
+            )
+        ).lastInsertRowid
       )
     }
     const link = { sourceType: 'feed_record', sourceId: id, itemId: f.itemId, batchId: null, date: f.date, dayId: day.id, cageId: f.cageId }

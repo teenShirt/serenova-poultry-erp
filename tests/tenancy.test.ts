@@ -43,19 +43,91 @@ async function twoOrganizations() {
   const b = await makeFarm({ db: a.db, name: 'Farm B', domain: 'b.farm' })
   for (const f of [a, b]) await startDay(f.worker, { date: D, corrections: [], acknowledgeWarnings: true })
   const cage = a.cageIds[0]
-  const egg = await saveEggs(a.worker, { date: D, cageId: cage, session: 'morning', collectedAt: '08:00', good: 800, damaged: 5, rejected: 0, notes: null }, null)
-  const feed = await saveFeed(a.worker, { date: D, cageId: cage, itemId: a.feedId, batchNo: null, openingStock: null, issued: 100, returned: 0, wasted: 0, measuredConsumption: null, closingStock: null, notes: null }, null)
-  const water = await saveWater(a.worker, { date: D, cageId: cage, method: 'meter', openingReading: 100, closingReading: 300, litres: null, meterReset: false, correctionReason: null, notes: null }, null)
+  const egg = await saveEggs(
+    a.worker,
+    { date: D, cageId: cage, session: 'morning', collectedAt: '08:00', good: 800, damaged: 5, rejected: 0, notes: null },
+    null
+  )
+  const feed = await saveFeed(
+    a.worker,
+    {
+      date: D,
+      cageId: cage,
+      itemId: a.feedId,
+      batchNo: null,
+      openingStock: null,
+      issued: 100,
+      returned: 0,
+      wasted: 0,
+      measuredConsumption: null,
+      closingStock: null,
+      notes: null
+    },
+    null
+  )
+  const water = await saveWater(
+    a.worker,
+    { date: D, cageId: cage, method: 'meter', openingReading: 100, closingReading: 300, litres: null, meterReset: false, correctionReason: null, notes: null },
+    null
+  )
   const move = await addMovement(a.worker, { date: D, cageId: cage, type: 'death', quantity: 2, reason: null, notes: null })
   const batch = (await listBatches(a.admin, { itemId: a.medId }))[0].id
-  const treatment = await addTreatment(a.worker, { date: D, cageId: cage, itemId: a.medId, batchId: batch, quantity: 10, administeredAt: null, reason: 'Vet instruction', prescribedBy: null, notes: null })
-  const health = await addHealthEvent(a.worker, { date: D, cageId: cage, eventTime: null, category: 'observation', severity: 'low', description: 'Quiet birds', actionTaken: null })
+  const treatment = await addTreatment(a.worker, {
+    date: D,
+    cageId: cage,
+    itemId: a.medId,
+    batchId: batch,
+    quantity: 10,
+    administeredAt: null,
+    reason: 'Vet instruction',
+    prescribedBy: null,
+    notes: null
+  })
+  const health = await addHealthEvent(a.worker, {
+    date: D,
+    cageId: cage,
+    eventTime: null,
+    category: 'observation',
+    severity: 'low',
+    description: 'Quiet birds',
+    actionTaken: null
+  })
   const supplier = await saveParty(a.admin, 'supplier', { id: null, name: 'A Mill', phone: null, address: null, notes: null, active: true })
   const customer = await saveParty(a.admin, 'customer', { id: null, name: 'A Buyer', phone: null, address: null, notes: null, active: true })
-  const grn = await createReceipt(a.admin, { date: D, supplierId: supplier, invoiceNo: null, vehicle: null, notes: null, lines: [{ itemId: a.feedId, quantity: 50, unitCost: 100, batchNo: null, expiryDate: null }] })
-  const dispatch = await createDispatch(a.admin, { date: D, customerId: customer, goodQty: 300, goodPrice: 40, crackedQty: 0, crackedPrice: 0, amountPaid: 0, paymentMethod: 'cash', invoiceNo: null, vehicle: null, driver: null, notes: null })
+  const grn = await createReceipt(a.admin, {
+    date: D,
+    supplierId: supplier,
+    invoiceNo: null,
+    vehicle: null,
+    notes: null,
+    lines: [{ itemId: a.feedId, quantity: 50, unitCost: 100, batchNo: null, expiryDate: null }]
+  })
+  const dispatch = await createDispatch(a.admin, {
+    date: D,
+    customerId: customer,
+    goodQty: 300,
+    goodPrice: 40,
+    crackedQty: 0,
+    crackedPrice: 0,
+    amountPaid: 0,
+    paymentMethod: 'cash',
+    invoiceNo: null,
+    vehicle: null,
+    driver: null,
+    notes: null
+  })
   await adjustEggStore(a.admin, { date: D, grade: 'good', quantity: -1, reason: 'Broken in store' })
-  const flockInput = { id: null, code: 'A-Flock', breed: 'Shaver', source: 'purchased' as const, hatchDate: '2025-10-01', arrivalDate: '2026-03-01', ageOnArrivalDays: null, initialCount: 1000, notes: null }
+  const flockInput = {
+    id: null,
+    code: 'A-Flock',
+    breed: 'Shaver',
+    source: 'purchased' as const,
+    hatchDate: '2025-10-01',
+    arrivalDate: '2026-03-01',
+    ageOnArrivalDays: null,
+    initialCount: 1000,
+    notes: null
+  }
   const house = await saveHouse(a.admin, { id: null, code: 'AH', name: 'A House', active: true, sortOrder: 1, notes: null })
   const flk = await saveFlock(a.admin, flockInput)
   await placeFlock(a.admin, flk, [cage], '2026-03-01')
@@ -64,13 +136,53 @@ async function twoOrganizations() {
   const aMain = await mainStore(a.admin)
   const bMain = await mainStore(b.admin)
   const aStore = await saveWarehouse(a.admin, { id: null, code: 'ACOLD', name: 'A Cold Room', active: true, notes: null })
-  const po = await createOrder(a.admin, { orderDate: D, expectedDate: null, supplierId: supplier, warehouseId: aMain, notes: null, lines: [{ itemId: a.feedId, quantity: 10, unitCost: 1 }] })
+  const po = await createOrder(a.admin, {
+    orderDate: D,
+    expectedDate: null,
+    supplierId: supplier,
+    warehouseId: aMain,
+    notes: null,
+    lines: [{ itemId: a.feedId, quantity: 10, unitCost: 1 }]
+  })
   await countStock(a.admin, { warehouseId: aMain, date: D, notes: 'A count', lines: [{ itemId: a.feedId, batchId: null, countedQty: 4900 }] })
-  const taskBase = { category: 'cleaning' as const, priority: 'normal' as const, instructions: null, completionCriteria: null, houseId: null, startDate: D, dueDate: D, recurrence: 'none' as const, untilDate: null }
+  const taskBase = {
+    category: 'cleaning' as const,
+    priority: 'normal' as const,
+    instructions: null,
+    completionCriteria: null,
+    houseId: null,
+    startDate: D,
+    dueDate: D,
+    recurrence: 'none' as const,
+    untilDate: null
+  }
   const task = await saveTask(a.admin, { ...taskBase, id: null, title: 'A task', farmId: a.farm, assigneeUserId: a.worker.user!.id, assigneeRoleId: null })
   const ids = {
-    cage, egg, feed, water, move, batch, treatment, health, supplier, customer, grn: grn.id, dispatch: dispatch.id, admin: a.admin.user!.id, worker: a.worker.user!.id,
-    house, flock: flk, bFlock, reminder, flockInput, aMain, bMain, aStore, po: po.id, task, taskBase
+    cage,
+    egg,
+    feed,
+    water,
+    move,
+    batch,
+    treatment,
+    health,
+    supplier,
+    customer,
+    grn: grn.id,
+    dispatch: dispatch.id,
+    admin: a.admin.user!.id,
+    worker: a.worker.user!.id,
+    house,
+    flock: flk,
+    bFlock,
+    reminder,
+    flockInput,
+    aMain,
+    bMain,
+    aStore,
+    po: po.id,
+    task,
+    taskBase
   }
   return { a, b, ids }
 }
@@ -107,25 +219,156 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       ['flock.transfer', { date: D, fromCageId: b.cageIds[0], toCageId: ids.cage, quantity: 1, reason: null, notes: null }],
       ['flock.transfer', { date: D, fromCageId: ids.cage, toCageId: b.cageIds[0], quantity: 1, reason: null, notes: null }],
       ['flock.delete', { id: ids.move, reason: 'Taken over' }],
-      ['feed.save', { expectedId: null, date: D, cageId: ids.cage, itemId: b.feedId, batchNo: null, openingStock: null, issued: 1, returned: 0, wasted: 0, measuredConsumption: null, closingStock: null, notes: null }],
-      ['feed.save', { expectedId: null, date: D, cageId: b.cageIds[0], itemId: a.feedId, batchNo: null, openingStock: null, issued: 1, returned: 0, wasted: 0, measuredConsumption: null, closingStock: null, notes: null }],
+      [
+        'feed.save',
+        {
+          expectedId: null,
+          date: D,
+          cageId: ids.cage,
+          itemId: b.feedId,
+          batchNo: null,
+          openingStock: null,
+          issued: 1,
+          returned: 0,
+          wasted: 0,
+          measuredConsumption: null,
+          closingStock: null,
+          notes: null
+        }
+      ],
+      [
+        'feed.save',
+        {
+          expectedId: null,
+          date: D,
+          cageId: b.cageIds[0],
+          itemId: a.feedId,
+          batchNo: null,
+          openingStock: null,
+          issued: 1,
+          returned: 0,
+          wasted: 0,
+          measuredConsumption: null,
+          closingStock: null,
+          notes: null
+        }
+      ],
       ['feed.delete', { id: ids.feed, reason: 'Taken over' }],
-      ['water.save', { expectedId: null, date: D, cageId: ids.cage, method: 'manual', openingReading: null, closingReading: null, litres: 1, meterReset: false, correctionReason: null, notes: null }],
+      [
+        'water.save',
+        {
+          expectedId: null,
+          date: D,
+          cageId: ids.cage,
+          method: 'manual',
+          openingReading: null,
+          closingReading: null,
+          litres: 1,
+          meterReset: false,
+          correctionReason: null,
+          notes: null
+        }
+      ],
       ['water.delete', { id: ids.water, reason: 'Taken over' }],
-      ['medicine.addTreatment', { date: D, cageId: b.cageIds[0], itemId: a.medId, batchId: ids.batch, quantity: 1, administeredAt: null, reason: 'Taken over', prescribedBy: null, notes: null }],
-      ['medicine.addTreatment', { date: D, cageId: ids.cage, itemId: b.medId, batchId: null, quantity: 1, administeredAt: null, reason: 'Taken over', prescribedBy: null, notes: null }],
+      [
+        'medicine.addTreatment',
+        {
+          date: D,
+          cageId: b.cageIds[0],
+          itemId: a.medId,
+          batchId: ids.batch,
+          quantity: 1,
+          administeredAt: null,
+          reason: 'Taken over',
+          prescribedBy: null,
+          notes: null
+        }
+      ],
+      [
+        'medicine.addTreatment',
+        { date: D, cageId: ids.cage, itemId: b.medId, batchId: null, quantity: 1, administeredAt: null, reason: 'Taken over', prescribedBy: null, notes: null }
+      ],
       ['medicine.deleteTreatment', { id: ids.treatment, reason: 'Taken over' }],
       ['medicine.addHealthEvent', { date: D, cageId: ids.cage, eventTime: null, category: 'x', severity: 'low', description: 'Taken over', actionTaken: null }],
       ['medicine.deleteHealthEvent', { id: ids.health, reason: 'Taken over' }],
-      ['inventory.updateItem', { id: a.feedId, item: { category: 'feed', name: 'Taken over', unit: 'kg', lowStockThreshold: null, active: false, notes: null } }],
-      ['inventory.record', { itemId: a.feedId, type: 'issue', quantity: 1, date: D, batchNo: null, expiryDate: null, unitCost: null, supplier: null, reference: null, notes: null, cageId: null }],
-      ['inventory.record', { itemId: b.feedId, type: 'issue', quantity: 1, date: D, batchNo: null, expiryDate: null, unitCost: null, supplier: null, reference: null, notes: null, cageId: ids.cage }],
+      [
+        'inventory.updateItem',
+        { id: a.feedId, item: { category: 'feed', name: 'Taken over', unit: 'kg', lowStockThreshold: null, active: false, notes: null } }
+      ],
+      [
+        'inventory.record',
+        {
+          itemId: a.feedId,
+          type: 'issue',
+          quantity: 1,
+          date: D,
+          batchNo: null,
+          expiryDate: null,
+          unitCost: null,
+          supplier: null,
+          reference: null,
+          notes: null,
+          cageId: null
+        }
+      ],
+      [
+        'inventory.record',
+        {
+          itemId: b.feedId,
+          type: 'issue',
+          quantity: 1,
+          date: D,
+          batchNo: null,
+          expiryDate: null,
+          unitCost: null,
+          supplier: null,
+          reference: null,
+          notes: null,
+          cageId: ids.cage
+        }
+      ],
       ['parties.saveSupplier', { id: ids.supplier, name: 'Taken over', phone: null, address: null, notes: null, active: false }],
       ['parties.saveCustomer', { id: ids.customer, name: 'Taken over', phone: null, address: null, notes: null, active: false }],
-      ['purchases.create', { date: D, supplierId: ids.supplier, invoiceNo: null, vehicle: null, notes: null, lines: [{ itemId: b.feedId, quantity: 1, unitCost: null, batchNo: null, expiryDate: null }] }],
-      ['purchases.create', { date: D, supplierId: null, invoiceNo: null, vehicle: null, notes: null, lines: [{ itemId: a.feedId, quantity: 1, unitCost: null, batchNo: null, expiryDate: null }] }],
+      [
+        'purchases.create',
+        {
+          date: D,
+          supplierId: ids.supplier,
+          invoiceNo: null,
+          vehicle: null,
+          notes: null,
+          lines: [{ itemId: b.feedId, quantity: 1, unitCost: null, batchNo: null, expiryDate: null }]
+        }
+      ],
+      [
+        'purchases.create',
+        {
+          date: D,
+          supplierId: null,
+          invoiceNo: null,
+          vehicle: null,
+          notes: null,
+          lines: [{ itemId: a.feedId, quantity: 1, unitCost: null, batchNo: null, expiryDate: null }]
+        }
+      ],
       ['purchases.cancel', { id: ids.grn, reason: 'Taken over' }],
-      ['sales.dispatch', { date: D, customerId: ids.customer, goodQty: 1, goodPrice: 1, crackedQty: 0, crackedPrice: 0, amountPaid: 0, paymentMethod: 'cash', invoiceNo: null, vehicle: null, driver: null, notes: null }],
+      [
+        'sales.dispatch',
+        {
+          date: D,
+          customerId: ids.customer,
+          goodQty: 1,
+          goodPrice: 1,
+          crackedQty: 0,
+          crackedPrice: 0,
+          amountPaid: 0,
+          paymentMethod: 'cash',
+          invoiceNo: null,
+          vehicle: null,
+          driver: null,
+          notes: null
+        }
+      ],
       ['sales.addPayment', { dispatchId: ids.dispatch, date: D, amount: 1, method: 'cash', reference: null }],
       ['sales.cancel', { id: ids.dispatch, reason: 'Taken over' }],
       ['houses.save', { id: ids.house, code: 'X', name: 'Taken over', active: false, sortOrder: 1, notes: null }],
@@ -145,15 +388,79 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       ['flocks.markReminder', { flockId: ids.bFlock, reminderId: ids.reminder, outcome: 'done', note: null }],
       ['stores.save', { id: ids.aStore, code: 'X', name: 'Taken over', active: false, notes: null }],
       ['stores.balances', { warehouseId: ids.aMain }],
-      ['stores.transfer', { date: D, fromWarehouseId: ids.aMain, toWarehouseId: ids.bMain, notes: null, lines: [{ itemId: b.feedId, batchNo: null, quantity: 1 }] }],
-      ['stores.transfer', { date: D, fromWarehouseId: ids.bMain, toWarehouseId: ids.aStore, notes: null, lines: [{ itemId: b.feedId, batchNo: null, quantity: 1 }] }],
+      [
+        'stores.transfer',
+        { date: D, fromWarehouseId: ids.aMain, toWarehouseId: ids.bMain, notes: null, lines: [{ itemId: b.feedId, batchNo: null, quantity: 1 }] }
+      ],
+      [
+        'stores.transfer',
+        { date: D, fromWarehouseId: ids.bMain, toWarehouseId: ids.aStore, notes: null, lines: [{ itemId: b.feedId, batchNo: null, quantity: 1 }] }
+      ],
       ['stores.count', { warehouseId: ids.aMain, date: D, notes: null, lines: [{ itemId: b.feedId, batchId: null, countedQty: 1 }] }],
-      ['inventory.record', { itemId: b.feedId, type: 'issue', quantity: 1, date: D, batchNo: null, expiryDate: null, unitCost: null, supplier: null, reference: null, notes: null, cageId: null, warehouseId: ids.aMain }],
-      ['purchases.createOrder', { orderDate: D, expectedDate: null, supplierId: ids.supplier, warehouseId: ids.bMain, notes: null, lines: [{ itemId: b.feedId, quantity: 1, unitCost: null }] }],
-      ['purchases.createOrder', { orderDate: D, expectedDate: null, supplierId: ids.supplier, warehouseId: ids.aMain, notes: null, lines: [{ itemId: b.feedId, quantity: 1, unitCost: null }] }],
+      [
+        'inventory.record',
+        {
+          itemId: b.feedId,
+          type: 'issue',
+          quantity: 1,
+          date: D,
+          batchNo: null,
+          expiryDate: null,
+          unitCost: null,
+          supplier: null,
+          reference: null,
+          notes: null,
+          cageId: null,
+          warehouseId: ids.aMain
+        }
+      ],
+      [
+        'purchases.createOrder',
+        {
+          orderDate: D,
+          expectedDate: null,
+          supplierId: ids.supplier,
+          warehouseId: ids.bMain,
+          notes: null,
+          lines: [{ itemId: b.feedId, quantity: 1, unitCost: null }]
+        }
+      ],
+      [
+        'purchases.createOrder',
+        {
+          orderDate: D,
+          expectedDate: null,
+          supplierId: ids.supplier,
+          warehouseId: ids.aMain,
+          notes: null,
+          lines: [{ itemId: b.feedId, quantity: 1, unitCost: null }]
+        }
+      ],
       ['purchases.closeOrder', { id: ids.po, status: 'cancelled', reason: 'Taken over' }],
-      ['purchases.create', { date: D, supplierId: null, invoiceNo: null, vehicle: null, notes: null, poId: ids.po, lines: [{ itemId: b.feedId, quantity: 1, unitCost: null, batchNo: null, expiryDate: null }] }],
-      ['purchases.create', { date: D, supplierId: null, invoiceNo: null, vehicle: null, notes: null, warehouseId: ids.aMain, lines: [{ itemId: b.feedId, quantity: 1, unitCost: null, batchNo: null, expiryDate: null }] }],
+      [
+        'purchases.create',
+        {
+          date: D,
+          supplierId: null,
+          invoiceNo: null,
+          vehicle: null,
+          notes: null,
+          poId: ids.po,
+          lines: [{ itemId: b.feedId, quantity: 1, unitCost: null, batchNo: null, expiryDate: null }]
+        }
+      ],
+      [
+        'purchases.create',
+        {
+          date: D,
+          supplierId: null,
+          invoiceNo: null,
+          vehicle: null,
+          notes: null,
+          warehouseId: ids.aMain,
+          lines: [{ itemId: b.feedId, quantity: 1, unitCost: null, batchNo: null, expiryDate: null }]
+        }
+      ],
       ['purchases.approve', { id: ids.grn }],
       ['purchases.reject', { id: ids.grn, reason: 'Taken over' }],
       ['tasks.get', { id: ids.task }],
@@ -167,7 +474,9 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
     for (const [method, input] of attacks) {
       const r = await call(b.admin, method, input)
       // Refused because the record is not B's (not for some unrelated reason such as invalid input).
-      expect(r.ok ? 'accepted' : r.code, `${method} ${JSON.stringify(input)}`).toMatch(/^(not_found|cage_not_found|cage_not_in_day|item_not_found|issue_not_confirmable|role_not_found|house_not_found|farm_not_found|flock_not_found|store_not_found|task_not_found)$/)
+      expect(r.ok ? 'accepted' : r.code, `${method} ${JSON.stringify(input)}`).toMatch(
+        /^(not_found|cage_not_found|cage_not_in_day|item_not_found|issue_not_confirmable|role_not_found|house_not_found|farm_not_found|flock_not_found|store_not_found|task_not_found)$/
+      )
     }
     // Organization A's records are exactly as they were.
     const after = await dumpDatabase(a.db, { orgId: a.org })
@@ -212,7 +521,8 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       ['overview.organization', range]
     ] as [ApiMethod, unknown][]) {
       const text = await json(method, input)
-      for (const secret of ['a.farm', 'A Mill', 'A Buyer', 'Farm A', 'A-Flock', 'A House', 'A reminder', 'A Cold Room', 'A task', 'A count']) expect(text, `${method} shows ${secret}`).not.toContain(secret)
+      for (const secret of ['a.farm', 'A Mill', 'A Buyer', 'Farm A', 'A-Flock', 'A House', 'A reminder', 'A Cold Room', 'A task', 'A count'])
+        expect(text, `${method} shows ${secret}`).not.toContain(secret)
     }
     // Asking for A's records by id gives nothing.
     expect(await data('eggs.list', { date: D, cageId: ids.cage })).toEqual([])
@@ -256,28 +566,146 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
     // Methods whose input names no record (they work on the signed-in organization and farm only),
     // and methods covered by the attack and visibility tests above.
     const noRecordIds: ApiMethod[] = [
-      'app.status', 'app.setLanguage', 'setup.complete', 'demo.enter', 'demo.exit', 'demo.reset', 'auth.login', 'auth.logout',
-      'auth.changePassword', 'auth.signup', 'auth.resetWithCode', 'auth.newRecoveryCode', 'roles.list', 'settings.get', 'settings.save',
-      'cages.create', 'days.preview', 'days.start', 'days.list', 'days.latest', 'days.revokeConfirmation',
-      'days.saveComment', 'days.close', 'days.startAmendment', 'days.finishAmendment', 'days.amendments', 'water.list',
-      'inventory.createItem', 'analytics.dashboard', 'analytics.comparison', 'reports.print', 'duties.mine', 'purchases.series',
-      'sales.adjust', 'sales.adjustments', 'sales.series', 'supply.flow', 'admin.checkDb', 'admin.optimize', 'admin.activity',
-      'backup.list', 'backup.create', 'backup.restore', 'tasks.report'
+      'app.status',
+      'app.setLanguage',
+      'setup.complete',
+      'demo.enter',
+      'demo.exit',
+      'demo.reset',
+      'auth.login',
+      'auth.logout',
+      'auth.changePassword',
+      'auth.signup',
+      'auth.resetWithCode',
+      'auth.newRecoveryCode',
+      'roles.list',
+      'settings.get',
+      'settings.save',
+      'cages.create',
+      'days.preview',
+      'days.start',
+      'days.list',
+      'days.latest',
+      'days.revokeConfirmation',
+      'days.saveComment',
+      'days.close',
+      'days.startAmendment',
+      'days.finishAmendment',
+      'days.amendments',
+      'water.list',
+      'inventory.createItem',
+      'analytics.dashboard',
+      'analytics.comparison',
+      'reports.print',
+      'duties.mine',
+      'purchases.series',
+      'sales.adjust',
+      'sales.adjustments',
+      'sales.series',
+      'supply.flow',
+      'admin.checkDb',
+      'admin.optimize',
+      'admin.activity',
+      'backup.list',
+      'backup.create',
+      'backup.restore',
+      'tasks.report'
     ]
     const covered: ApiMethod[] = [
-      'users.list', 'users.update', 'users.resetPassword', 'users.approve', 'users.reject', 'users.newRecoveryCode', 'users.setCages', 'users.create', 'roles.save', 'roles.archive',
-      'cages.list', 'cages.update', 'days.overview', 'days.correctOpening', 'days.confirmMortality', 'days.confirmIssue', 'eggs.list', 'eggs.save', 'eggs.delete',
-      'flock.list', 'flock.listRange', 'flock.add', 'flock.transfer', 'flock.delete', 'feed.list', 'feed.suggestOpening', 'feed.save',
-      'feed.delete', 'water.suggestOpening', 'water.save', 'water.delete', 'medicine.treatments', 'medicine.addTreatment',
-      'medicine.deleteTreatment', 'medicine.healthEvents', 'medicine.addHealthEvent', 'medicine.deleteHealthEvent', 'inventory.items',
-      'inventory.updateItem', 'inventory.balances', 'inventory.batches', 'inventory.txns', 'inventory.record', 'analytics.series',
-      'audit.list', 'reports.preview', 'reports.recent', 'parties.list', 'parties.saveSupplier', 'parties.saveCustomer',
-      'purchases.list', 'purchases.create', 'purchases.cancel', 'sales.stock', 'sales.list', 'sales.dispatch', 'sales.addPayment',
-      'sales.cancel', 'admin.dbInfo', 'farms.list', 'farms.save', 'farms.setStatus', 'farms.switch', 'houses.list', 'houses.save', 'flocks.list', 'flocks.get',
-      'flocks.save', 'flocks.place', 'flocks.endPlacement', 'flocks.close', 'flocks.series', 'flocks.reminders', 'flocks.saveReminder', 'flocks.dueReminders',
-      'flocks.markReminder', 'stores.list', 'stores.save', 'stores.balances', 'stores.transfer', 'stores.count', 'stores.counts', 'purchases.orders',
-      'purchases.createOrder', 'purchases.closeOrder', 'purchases.approve', 'purchases.reject', 'tasks.list', 'tasks.get', 'tasks.save', 'tasks.action',
-      'tasks.assignees', 'stores.movements', 'overview.organization'
+      'users.list',
+      'users.update',
+      'users.resetPassword',
+      'users.approve',
+      'users.reject',
+      'users.newRecoveryCode',
+      'users.setCages',
+      'users.create',
+      'roles.save',
+      'roles.archive',
+      'cages.list',
+      'cages.update',
+      'days.overview',
+      'days.correctOpening',
+      'days.confirmMortality',
+      'days.confirmIssue',
+      'eggs.list',
+      'eggs.save',
+      'eggs.delete',
+      'flock.list',
+      'flock.listRange',
+      'flock.add',
+      'flock.transfer',
+      'flock.delete',
+      'feed.list',
+      'feed.suggestOpening',
+      'feed.save',
+      'feed.delete',
+      'water.suggestOpening',
+      'water.save',
+      'water.delete',
+      'medicine.treatments',
+      'medicine.addTreatment',
+      'medicine.deleteTreatment',
+      'medicine.healthEvents',
+      'medicine.addHealthEvent',
+      'medicine.deleteHealthEvent',
+      'inventory.items',
+      'inventory.updateItem',
+      'inventory.balances',
+      'inventory.batches',
+      'inventory.txns',
+      'inventory.record',
+      'analytics.series',
+      'audit.list',
+      'reports.preview',
+      'reports.recent',
+      'parties.list',
+      'parties.saveSupplier',
+      'parties.saveCustomer',
+      'purchases.list',
+      'purchases.create',
+      'purchases.cancel',
+      'sales.stock',
+      'sales.list',
+      'sales.dispatch',
+      'sales.addPayment',
+      'sales.cancel',
+      'admin.dbInfo',
+      'farms.list',
+      'farms.save',
+      'farms.setStatus',
+      'farms.switch',
+      'houses.list',
+      'houses.save',
+      'flocks.list',
+      'flocks.get',
+      'flocks.save',
+      'flocks.place',
+      'flocks.endPlacement',
+      'flocks.close',
+      'flocks.series',
+      'flocks.reminders',
+      'flocks.saveReminder',
+      'flocks.dueReminders',
+      'flocks.markReminder',
+      'stores.list',
+      'stores.save',
+      'stores.balances',
+      'stores.transfer',
+      'stores.count',
+      'stores.counts',
+      'purchases.orders',
+      'purchases.createOrder',
+      'purchases.closeOrder',
+      'purchases.approve',
+      'purchases.reject',
+      'tasks.list',
+      'tasks.get',
+      'tasks.save',
+      'tasks.action',
+      'tasks.assignees',
+      'stores.movements',
+      'overview.organization'
     ]
     // The console's platform.* requests are only for platform administrators (tests/subscriptions.test.ts).
     const all = (Object.keys(API_KIND) as ApiMethod[]).filter((m) => !m.startsWith('platform.'))

@@ -308,7 +308,8 @@ export const en = {
   'feed.method.measured': 'Measured',
   'feed.method.stock_balance': 'Calculated from counts',
   'feed.method.estimate': 'Estimate',
-  'feed.methodHelp': 'If you weigh what the hens ate, enter it as measured. If you count the feed left at the cage, consumption = start + issued − returned − wasted − end. Otherwise it is estimated as issued − returned − wasted and marked as an estimate. Issued feed is not assumed to be eaten.',
+  'feed.methodHelp':
+    'If you weigh what the hens ate, enter it as measured. If you count the feed left at the cage, consumption = start + issued − returned − wasted − end. Otherwise it is estimated as issued − returned − wasted and marked as an estimate. Issued feed is not assumed to be eaten.',
   'feed.storeBalance': 'Store balance',
   'feed.perHen': 'Feed per hen',
   'feed.noFeedItems': 'No feed types exist. Add one in Inventory.',
@@ -511,7 +512,8 @@ export const en = {
   'set.about': 'About',
 
   'bak.title': 'Backup & restore',
-  'bak.intro': 'Backups are complete, verified copies of all farm records, kept on the server. Now and then, download a recent copy and keep it somewhere safe, away from the server.',
+  'bak.intro':
+    'Backups are complete, verified copies of all farm records, kept on the server. Now and then, download a recent copy and keep it somewhere safe, away from the server.',
   'bak.now': 'Back up now',
   'bak.auto': 'Automatic backups',
   'bak.autoEnabled': 'Make automatic backups',
@@ -585,7 +587,8 @@ export const en = {
   'err.item_not_medicine': 'Choose a medicine.',
   'err.feed_record_exists': 'A record for this feed type already exists for this cage today. Edit it instead.',
   'err.water_record_exists': 'A water record for this cage already exists today. Edit it instead.',
-  'err.meter_closing_below_opening': 'The end meter reading is lower than the start reading. If the meter was reset or replaced, an administrator must record a correction.',
+  'err.meter_closing_below_opening':
+    'The end meter reading is lower than the start reading. If the meter was reset or replaced, an administrator must record a correction.',
   'err.litres_required_after_reset': 'After a meter reset, enter the litres used manually.',
   'err.item_not_found': 'Item not found.',
   'err.item_name_taken': 'An item with this name already exists.',
@@ -613,13 +616,15 @@ export const en = {
   'auth.signupDone': 'Your request was sent. Ask an administrator to approve it, then sign in.',
   'auth.forgot': 'Forgot password?',
   'auth.resetTitle': 'Reset your password',
-  'auth.resetHint': 'Enter your user name and the recovery code you wrote down when your account was created. If you do not have it, ask an administrator to reset your password.',
+  'auth.resetHint':
+    'Enter your user name and the recovery code you wrote down when your account was created. If you do not have it, ask an administrator to reset your password.',
   'auth.recoveryCode': 'Recovery code',
   'auth.resetButton': 'Reset password',
   'auth.resetDone': 'Password changed. You can now sign in with your new password.',
   'auth.backToLogin': 'Back to sign in',
   'auth.yourCode': 'Your recovery code',
-  'auth.codeHint': 'Write this code down and keep it in a safe place. It is the only way to reset your password yourself if you forget it. It will not be shown again.',
+  'auth.codeHint':
+    'Write this code down and keep it in a safe place. It is the only way to reset your password yourself if you forget it. It will not be shown again.',
   'auth.codeReplaced': 'Your old recovery code no longer works. This is your new code.',
   'auth.codeSaved': 'I have written down the code',
   'auth.copy': 'Copy',
@@ -666,7 +671,8 @@ export const en = {
   'duty.title': 'Duties',
   'duty.mine': 'My duties today',
   'duty.progress': '{done} of {total} done',
-  'duty.hint': 'Choose the jobs this person may do and the cages they look after. They can still view all pages; they can only enter or change records for their own jobs and cages. Closing days, corrections and settings stay with administrators.',
+  'duty.hint':
+    'Choose the jobs this person may do and the cages they look after. They can still view all pages; they can only enter or change records for their own jobs and cages. Closing days, corrections and settings stay with administrators.',
   'duty.jobs': 'Jobs',
   'duty.cages': 'Cages this person looks after',
   'duty.allCages': 'All cages',
@@ -893,7 +899,8 @@ export const en = {
   'set.orgCode': 'Organization code',
   'set.orgCodeHint': 'Staff enter this code when they sign themselves up.',
   'set.noEmail': 'No email address: cannot sign in',
-  'bak.desktopImport': 'Backups from the desktop edition are moved in with the import command (npm run import-sqlite), which also gives each account an email address.',
+  'bak.desktopImport':
+    'Backups from the desktop edition are moved in with the import command (npm run import-sqlite), which also gives each account an email address.',
   'perm.day.start': 'Start the day',
   'perm.day.backfill': 'Start earlier (missed) days',
   'perm.day.correct_opening': 'Correct opening hen counts',
@@ -1147,7 +1154,8 @@ export const en = {
   'house.add': 'Add house',
   'house.hint': "Optional: group the cages of this farm into houses (sheds). Choose the house in each cage's details.",
   'stage.title': 'Production stages',
-  'stage.hint': "A flock is in a stage from the given age (completed weeks since hatching) until the next stage starts. These starting values are examples: adjust them to your breed's management guide.",
+  'stage.hint':
+    "A flock is in a stage from the given age (completed weeks since hatching) until the next stage starts. These starting values are examples: adjust them to your breed's management guide.",
   'stage.fromWeek': 'from week',
   'stage.add': 'Add stage',
   'stage.brooding': 'Brooding',
@@ -1160,7 +1168,8 @@ export const en = {
   'flk.new': 'New flock',
   'flk.none': 'No flocks recorded yet. Add a flock and place it in its cages to follow its age and performance.',
   'flk.showClosed': 'Show closed flocks',
-  'flk.ageRule': 'Age is counted from the hatch date (hatch day = day 0) in completed weeks. Figures are flock totals from the cages the flock occupies; birds are not tracked one by one.',
+  'flk.ageRule':
+    'Age is counted from the hatch date (hatch day = day 0) in completed weeks. Figures are flock totals from the cages the flock occupies; birds are not tracked one by one.',
   'flk.code': 'Flock / batch',
   'flk.codeHint': 'Your batch number or name, e.g. B-2026-01',
   'flk.breed': 'Breed',
@@ -1213,7 +1222,8 @@ export const en = {
   'flk.prescribedBy': 'Prescribed by',
   'flk.reminders': 'Age reminders',
   'flk.reminderSetup': 'Reminders by flock age',
-  'flk.remindersNotAdvice': "Reminders are your organization's own programme, entered by authorized staff (for example from your veterinarian). The system does not suggest treatments or doses.",
+  'flk.remindersNotAdvice':
+    "Reminders are your organization's own programme, entered by authorized staff (for example from your veterinarian). The system does not suggest treatments or doses.",
   'flk.remindersDue': 'Reminders due ({count}):',
   'flk.noReminders': 'No reminders for this flock.',
   'flk.noReminderSetup': 'No reminders set up.',
@@ -1340,7 +1350,8 @@ export const en = {
   'stores.counts': 'Stock counts',
   'stores.countsTitle': 'Stock counts (last 90 days)',
   'stores.noCounts': 'No stock counts yet.',
-  'stores.countHint': 'Enter what you counted for the items you counted. The difference from the recorded stock is posted as a stock-count correction; nothing already recorded is changed.',
+  'stores.countHint':
+    'Enter what you counted for the items you counted. The difference from the recorded stock is posted as a stock-count correction; nothing already recorded is changed.',
   'stores.systemQty': 'Recorded',
   'stores.countedQty': 'Counted',
   'stores.difference': 'Difference',
@@ -1467,7 +1478,8 @@ export const en = {
   'ov.def.culls': 'Culled / sold: birds removed from the cages (not deaths, not transfers between cages).',
   'ov.def.closedOnly': 'Only closed days are counted, so a day still being recorded never lowers a figure.',
   'ov.def.totals': 'Totals add the farms up; the rates are worked out again from the totals, not averaged.',
-  'ov.def.stock': "Stock alerts: items at or below their minimum or reorder level across the farm's stores; expiring: batches in stock within the warning period set in Settings.",
+  'ov.def.stock':
+    "Stock alerts: items at or below their minimum or reorder level across the farm's stores; expiring: batches in stock within the warning period set in Settings.",
   'ov.eggTrend': 'Eggs per day by farm',
   'ov.closedOnlyNote': 'Closed days only.',
   'ov.layingByFarm': 'Laying % by farm',
@@ -1500,7 +1512,7 @@ export const en = {
   'plat.h.backupFolder': '{mb} MB in {files} files',
   'plat.h.failedBackups': 'Failed backups (7 days)',
   'plat.h.jobFailures': 'Background job failures since the server started',
-  'plat.h.noJobFailures': 'None.',
+  'plat.h.noJobFailures': 'None.'
 } as const
 
 export type TranslationKey = keyof typeof en

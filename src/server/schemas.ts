@@ -13,7 +13,10 @@ const count = z.number().int().min(0).max(1_000_000)
 const qty = z.number().finite().min(0).max(100_000_000)
 const text = (max = 500) => z.string().max(max)
 const optText = (max = 500) => z.string().max(max).nullable()
-const time = z.string().regex(/^\d{2}:\d{2}$/).nullable()
+const time = z
+  .string()
+  .regex(/^\d{2}:\d{2}$/)
+  .nullable()
 const none = z.unknown().optional()
 const lang = z.enum(['en', 'si'])
 const category = z.enum(INVENTORY_CATEGORIES)
@@ -67,7 +70,11 @@ const settingsPatch = z
     medicineExpiryWarnDays: z.number().int().min(0).max(365),
     medicineUnits: z.array(text(20)).max(30),
     backupEnabled: z.boolean(),
-    backupIntervalHours: z.number().int().min(1).max(24 * 30),
+    backupIntervalHours: z
+      .number()
+      .int()
+      .min(1)
+      .max(24 * 30),
     backupRetention: z.number().int().min(1).max(365),
     allowSignup: z.boolean(),
     autoCheckUpdates: z.boolean(),
@@ -88,7 +95,10 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
     timezone: text(64),
     language: lang,
     startDate: date,
-    cages: z.array(z.object({ code: text(20), name: text(60), initialHens: count, hasWaterMeter: z.boolean() })).min(1).max(200),
+    cages: z
+      .array(z.object({ code: text(20), name: text(60), initialHens: count, hasWaterMeter: z.boolean() }))
+      .min(1)
+      .max(200),
     admin: z.object({ email: text(255), displayName: text(80), password: text(200) }),
     inventory: z
       .array(
@@ -136,7 +146,14 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
   'farms.setStatus': z.object({ id, status: z.enum(['active', 'archived']), reason: text(500) }),
   'farms.switch': z.object({ id }),
   'houses.list': none,
-  'houses.save': z.object({ id: id.nullable(), code: text(40), name: text(100), active: z.boolean(), sortOrder: z.number().int().min(0).max(10000), notes: optText() }),
+  'houses.save': z.object({
+    id: id.nullable(),
+    code: text(40),
+    name: text(100),
+    active: z.boolean(),
+    sortOrder: z.number().int().min(0).max(10000),
+    notes: optText()
+  }),
   'flocks.list': z.object({ includeClosed: z.boolean().optional() }),
   'flocks.get': z.object({ id }),
   'flocks.save': z.object({
@@ -155,7 +172,13 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
   'flocks.close': z.object({ id, date, reason: text(500) }),
   'flocks.series': z.object({ id, from: date, to: date }),
   'flocks.reminders': none,
-  'flocks.saveReminder': z.object({ id: id.nullable(), atWeek: z.number().int().min(0).max(200), title: text(200), instructions: optText(2000), active: z.boolean() }),
+  'flocks.saveReminder': z.object({
+    id: id.nullable(),
+    atWeek: z.number().int().min(0).max(200),
+    title: text(200),
+    instructions: optText(2000),
+    active: z.boolean()
+  }),
   'flocks.dueReminders': none,
   'flocks.markReminder': z.object({ flockId: id, reminderId: id, outcome: z.enum(['done', 'skipped']), note: optText() }),
   'cages.update': z.object({ id, cage: cageInput, reason: optText() }),
@@ -263,7 +286,14 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
   'inventory.updateItem': z.object({ id, item: itemInput }),
   'inventory.balances': z.object({ category: category.optional(), warehouseId: id.nullable().optional() }),
   'inventory.batches': z.object({ itemId: id.optional(), onlyInStock: z.boolean().optional(), warehouseId: id.nullable().optional() }),
-  'inventory.txns': z.object({ itemId: id.optional(), category: category.optional(), from: date.optional(), to: date.optional(), limit: z.number().int().min(1).max(5000).optional(), warehouseId: id.nullable().optional() }),
+  'inventory.txns': z.object({
+    itemId: id.optional(),
+    category: category.optional(),
+    from: date.optional(),
+    to: date.optional(),
+    limit: z.number().int().min(1).max(5000).optional(),
+    warehouseId: id.nullable().optional()
+  }),
   'inventory.record': z.object({
     itemId: id,
     type: z.enum(MANUAL_TXN_TYPES),
@@ -283,7 +313,13 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
   'analytics.series': range,
   'analytics.comparison': z.object({ from: date, to: date }),
 
-  'audit.list': z.object({ from: date.optional(), to: date.optional(), entity: text(40).optional(), search: text(100).optional(), limit: z.number().int().min(1).max(5000).optional() }),
+  'audit.list': z.object({
+    from: date.optional(),
+    to: date.optional(),
+    entity: text(40).optional(),
+    search: text(100).optional(),
+    limit: z.number().int().min(1).max(5000).optional()
+  }),
 
   'reports.preview': reportSpec,
   'reports.print': reportSpec,
@@ -333,7 +369,10 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
     supplierId: id,
     warehouseId: id,
     notes: optText(),
-    lines: z.array(z.object({ itemId: id, quantity: qty, unitCost: qty.nullable() })).min(1).max(50)
+    lines: z
+      .array(z.object({ itemId: id, quantity: qty, unitCost: qty.nullable() }))
+      .min(1)
+      .max(50)
   }),
   'purchases.closeOrder': z.object({ id, status: z.enum(['closed', 'cancelled']), reason: text(500) }),
   'stores.list': z.object({ includeInactive: z.boolean().optional() }),
@@ -344,13 +383,19 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
     fromWarehouseId: id,
     toWarehouseId: id,
     notes: optText(),
-    lines: z.array(z.object({ itemId: id, batchNo: optText(60), quantity: qty })).min(1).max(50)
+    lines: z
+      .array(z.object({ itemId: id, batchNo: optText(60), quantity: qty }))
+      .min(1)
+      .max(50)
   }),
   'stores.count': z.object({
     warehouseId: id,
     date,
     notes: optText(),
-    lines: z.array(z.object({ itemId: id, batchId: id.nullable(), countedQty: qty })).min(1).max(500)
+    lines: z
+      .array(z.object({ itemId: id, batchId: id.nullable(), countedQty: qty }))
+      .min(1)
+      .max(500)
   }),
   'stores.counts': z.object({ from: date, to: date }),
   'stores.movements': z.object({

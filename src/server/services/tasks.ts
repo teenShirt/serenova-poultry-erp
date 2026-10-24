@@ -40,9 +40,7 @@ function occurrences(recurrence: Exclude<Recurrence, 'none'>, start: string, fro
 /** Makes the tasks of active recurring series up to a week ahead (each occurrence once). */
 export async function generateOccurrences(ctx: Ctx) {
   const today = await farmToday(ctx)
-  const series = (await ctx.db
-    .prepare('SELECT * FROM task_series WHERE organization_id = ? AND active = 1')
-    .all(ctx.org)) as {
+  const series = (await ctx.db.prepare('SELECT * FROM task_series WHERE organization_id = ? AND active = 1').all(ctx.org)) as {
     id: number
     farm_id: number | null
     house_id: number | null
@@ -66,9 +64,27 @@ export async function generateOccurrences(ctx: Ctx) {
           `INSERT IGNORE INTO tasks (organization_id, series_id, farm_id, house_id, title, category, priority, instructions, completion_criteria,
              assignee_user_id, assignee_role_id, start_date, due_date, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
-        .run(ctx.org, s.id, s.farm_id, s.house_id, s.title, s.category, s.priority, s.instructions, s.completion_criteria, s.assignee_user_id, s.assignee_role_id, d, d, s.created_by, ctx.now().toISOString())
+        .run(
+          ctx.org,
+          s.id,
+          s.farm_id,
+          s.house_id,
+          s.title,
+          s.category,
+          s.priority,
+          s.instructions,
+          s.completion_criteria,
+          s.assignee_user_id,
+          s.assignee_role_id,
+          d,
+          d,
+          s.created_by,
+          ctx.now().toISOString()
+        )
       if (r.changes === 1) {
-        await ctx.db.prepare("INSERT INTO task_events (organization_id, task_id, at, user_id, action) VALUES (?, ?, ?, NULL, 'created')").run(ctx.org, r.lastInsertRowid, ctx.now().toISOString())
+        await ctx.db
+          .prepare("INSERT INTO task_events (organization_id, task_id, at, user_id, action) VALUES (?, ?, ?, NULL, 'created')")
+          .run(ctx.org, r.lastInsertRowid, ctx.now().toISOString())
       }
     }
   }
@@ -144,13 +160,22 @@ async function event(ctx: Ctx, taskId: number, action: string, note: string | nu
 async function checkPlaces(ctx: Ctx, t: TaskInput) {
   if (t.farmId) assert(await ctx.db.prepare('SELECT 1 AS x FROM farms WHERE id = ? AND organization_id = ?').get(t.farmId, ctx.org), 'farm_not_found')
   if (t.houseId) {
-    const h = (await ctx.db.prepare('SELECT farm_id FROM houses WHERE id = ? AND organization_id = ?').get(t.houseId, ctx.org)) as { farm_id: number } | undefined
+    const h = (await ctx.db.prepare('SELECT farm_id FROM houses WHERE id = ? AND organization_id = ?').get(t.houseId, ctx.org)) as
+      | { farm_id: number }
+      | undefined
     assert(h && (!t.farmId || h.farm_id === t.farmId), 'house_not_found')
   }
   if (t.assigneeUserId) {
-    assert(await ctx.db.prepare('SELECT 1 AS x FROM users WHERE id = ? AND organization_id = ? AND active = 1 AND pending = 0').get(t.assigneeUserId, ctx.org), 'not_found')
+    assert(
+      await ctx.db.prepare('SELECT 1 AS x FROM users WHERE id = ? AND organization_id = ? AND active = 1 AND pending = 0').get(t.assigneeUserId, ctx.org),
+      'not_found'
+    )
   }
-  if (t.assigneeRoleId) assert(await ctx.db.prepare('SELECT 1 AS x FROM roles WHERE id = ? AND organization_id = ? AND archived_at IS NULL').get(t.assigneeRoleId, ctx.org), 'role_not_found')
+  if (t.assigneeRoleId)
+    assert(
+      await ctx.db.prepare('SELECT 1 AS x FROM roles WHERE id = ? AND organization_id = ? AND archived_at IS NULL').get(t.assigneeRoleId, ctx.org),
+      'role_not_found'
+    )
 }
 
 /** Creates a task (or a recurring series) or changes one. Changing a recurring task changes its series and its open tasks from today on. */
@@ -162,7 +187,17 @@ export async function saveTask(ctx: Ctx, t: TaskInput): Promise<number> {
   assert(!t.untilDate || (isIsoDate(t.untilDate) && t.untilDate >= t.startDate), 'invalid_date')
   return ctx.db.transaction(async () => {
     await checkPlaces(ctx, t)
-    const vals = [t.farmId, t.houseId, title, t.category, t.priority, t.instructions?.trim() || null, t.completionCriteria?.trim() || null, t.assigneeUserId, t.assigneeRoleId]
+    const vals = [
+      t.farmId,
+      t.houseId,
+      title,
+      t.category,
+      t.priority,
+      t.instructions?.trim() || null,
+      t.completionCriteria?.trim() || null,
+      t.assigneeUserId,
+      t.assigneeRoleId
+    ]
     const today = await farmToday(ctx)
     if (t.id) {
       const before = await getTaskRow(ctx, t.id)
@@ -279,7 +314,12 @@ export async function taskAction(ctx: Ctx, id: number, action: TaskAction, note:
       default:
         throw new AppError('invalid_input', { field: 'action' })
     }
-    await event(ctx, id, action === 'start' ? 'started' : action === 'complete' ? 'completed' : action === 'verify' ? 'verified' : action === 'cancel' ? 'cancelled' : action, note)
+    await event(
+      ctx,
+      id,
+      action === 'start' ? 'started' : action === 'complete' ? 'completed' : action === 'verify' ? 'verified' : action === 'cancel' ? 'cancelled' : action,
+      note
+    )
     if (action !== 'comment') await audit(ctx, { action: `task_${action}`, entity: 'task', entityId: id, reason: note })
   })()
 }
@@ -334,6 +374,9 @@ export async function assignees(ctx: Ctx) {
     users: (await ctx.db
       .prepare('SELECT id, display_name AS name FROM users WHERE organization_id = ? AND active = 1 AND pending = 0 ORDER BY display_name')
       .all(ctx.org)) as { id: number; name: string }[],
-    roles: (await ctx.db.prepare('SELECT id, name FROM roles WHERE organization_id = ? AND archived_at IS NULL ORDER BY name').all(ctx.org)) as { id: number; name: string }[]
+    roles: (await ctx.db.prepare('SELECT id, name FROM roles WHERE organization_id = ? AND archived_at IS NULL ORDER BY name').all(ctx.org)) as {
+      id: number
+      name: string
+    }[]
   }
 }

@@ -38,7 +38,12 @@ export function MortalityPage() {
         <DayGate overview={overview} />
         <div className="grid stats">
           <Stat label={t('dash.openingHens')} value={num(tot?.opening)} />
-          <Stat label={t('dash.deathsToday')} value={num(tot?.movements.deaths)} tone={tot && tot.movements.deaths > 0 ? 'warn' : undefined} sub={tot?.mortalityPct === null || !tot ? undefined : `${num(tot.mortalityPct, 3)}%`} />
+          <Stat
+            label={t('dash.deathsToday')}
+            value={num(tot?.movements.deaths)}
+            tone={tot && tot.movements.deaths > 0 ? 'warn' : undefined}
+            sub={tot?.mortalityPct === null || !tot ? undefined : `${num(tot.mortalityPct, 3)}%`}
+          />
           <Stat label={t('dash.currentHens')} value={num(tot?.closing)} />
         </div>
         <Card
@@ -161,13 +166,26 @@ export function MortalityPage() {
           <RangePicker days={days} onChange={setDays} />
         </div>
         <div className="grid cols-2">
-          <TimeChart title={t('chart.deathsSeries')} data={series ?? []} series={[{ key: 'deaths', label: t('chart.deathsSeries'), color: SERIES.red }]} kind="bar" />
-          <TimeChart title={t('chart.cumulative')} data={(series ?? []).filter((p) => p.status !== 'not_started')} series={[{ key: 'cumulativeDeaths', label: t('chart.cumulative'), color: SERIES.orange }]} />
-          <CageBars title={`${t('rep.compare')} — ${t('col.deaths')}`} data={(comparison ?? [])} valueKey="deaths" label={t('col.deaths')} color={SERIES.red} />
+          <TimeChart
+            title={t('chart.deathsSeries')}
+            data={series ?? []}
+            series={[{ key: 'deaths', label: t('chart.deathsSeries'), color: SERIES.red }]}
+            kind="bar"
+          />
+          <TimeChart
+            title={t('chart.cumulative')}
+            data={(series ?? []).filter((p) => p.status !== 'not_started')}
+            series={[{ key: 'cumulativeDeaths', label: t('chart.cumulative'), color: SERIES.orange }]}
+          />
+          <CageBars title={`${t('rep.compare')} — ${t('col.deaths')}`} data={comparison ?? []} valueKey="deaths" label={t('col.deaths')} color={SERIES.red} />
         </div>
       </div>
-      {adding && <AddMovement date={workDate} cages={cages.map((c) => ({ id: c.cageId, name: c.name, closing: c.closing }))} onClose={() => setAdding(false)} />}
-      {transfer && <Transfer date={workDate} cages={cages.map((c) => ({ id: c.cageId, name: c.name, closing: c.closing }))} onClose={() => setTransfer(false)} />}
+      {adding && (
+        <AddMovement date={workDate} cages={cages.map((c) => ({ id: c.cageId, name: c.name, closing: c.closing }))} onClose={() => setAdding(false)} />
+      )}
+      {transfer && (
+        <Transfer date={workDate} cages={cages.map((c) => ({ id: c.cageId, name: c.name, closing: c.closing }))} onClose={() => setTransfer(false)} />
+      )}
       {toDelete && (
         <ReasonDialog
           title={t('common.deleteTitle')}

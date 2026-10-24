@@ -3,8 +3,7 @@ import { translate } from '@shared/i18n'
 import type { Language } from '@shared/types'
 import type { Cell, ReportModel } from './model'
 
-const esc = (v: unknown) =>
-  String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 
 /** Text safe inside a CSS string ("…") such as an @page margin box. */
 const cssString = (v: string) => v.replace(/[\\"<>]/g, ' ').replace(/[\r\n]+/g, ' ')

@@ -54,10 +54,32 @@ export function FeedPage() {
       for (const c of cages) {
         const r = records?.find((x) => x.cageId === c.cageId && x.itemId === itemId)
         if (r) {
-          next[c.cageId] = { id: r.id, openingStock: r.openingStock, issued: r.issued, returned: r.returned, wasted: r.wasted, measured: r.measuredConsumption, closingStock: r.closingStock, batchNo: r.batchNo ?? '', notes: r.notes ?? '', dirty: false }
+          next[c.cageId] = {
+            id: r.id,
+            openingStock: r.openingStock,
+            issued: r.issued,
+            returned: r.returned,
+            wasted: r.wasted,
+            measured: r.measuredConsumption,
+            closingStock: r.closingStock,
+            batchNo: r.batchNo ?? '',
+            notes: r.notes ?? '',
+            dirty: false
+          }
         } else {
           const suggested = await call('feed.suggestOpening', { date: workDate, cageId: c.cageId, itemId })
-          next[c.cageId] = { id: null, openingStock: suggested, issued: null, returned: null, wasted: null, measured: null, closingStock: null, batchNo: '', notes: '', dirty: false }
+          next[c.cageId] = {
+            id: null,
+            openingStock: suggested,
+            issued: null,
+            returned: null,
+            wasted: null,
+            measured: null,
+            closingStock: null,
+            batchNo: '',
+            notes: '',
+            dirty: false
+          }
         }
       }
       if (alive) setRows(next)
@@ -69,7 +91,14 @@ export function FeedPage() {
   }, [records, itemId, overview?.dayId, cages.length, workDate])
 
   const upd = (cageId: number, p: Partial<Row>) => setRows((x) => ({ ...x, [cageId]: { ...x[cageId], ...p, dirty: true } }))
-  const toInput = (r: Row) => ({ openingStock: r.openingStock, issued: r.issued ?? 0, returned: r.returned ?? 0, wasted: r.wasted ?? 0, measuredConsumption: r.measured, closingStock: r.closingStock })
+  const toInput = (r: Row) => ({
+    openingStock: r.openingStock,
+    issued: r.issued ?? 0,
+    returned: r.returned ?? 0,
+    wasted: r.wasted ?? 0,
+    measuredConsumption: r.measured,
+    closingStock: r.closingStock
+  })
   const dirty = Object.entries(rows).filter(([, r]) => r.dirty && (r.issued !== null || r.measured !== null || r.closingStock !== null))
 
   const saveAll = async () => {
@@ -101,10 +130,20 @@ export function FeedPage() {
       <div className="stack">
         <DayGate overview={overview} />
         <div className="grid stats">
-          <Stat label={t('dash.feedToday')} value={tot?.feedKg === null || !tot ? '—' : `${num(tot.feedKg, 1)} kg`} sub={tot?.feedIsEstimate ? t('feed.method.estimate') : undefined} />
+          <Stat
+            label={t('dash.feedToday')}
+            value={tot?.feedKg === null || !tot ? '—' : `${num(tot.feedKg, 1)} kg`}
+            sub={tot?.feedIsEstimate ? t('feed.method.estimate') : undefined}
+          />
           <Stat label={t('feed.perHen')} value={perHen === null ? '—' : `${num(perHen, 1)} g`} />
           {feedItems.map((i) => (
-            <Stat key={i.id} label={`${t('feed.storeBalance')}: ${i.name}`} value={`${num(i.balance, 1)} ${i.unit}`} tone={i.balance < 0 ? 'bad' : i.isLow ? 'warn' : undefined} sub={i.isLow ? t('inv.low') : undefined} />
+            <Stat
+              key={i.id}
+              label={`${t('feed.storeBalance')}: ${i.name}`}
+              value={`${num(i.balance, 1)} ${i.unit}`}
+              tone={i.balance < 0 ? 'bad' : i.isLow ? 'warn' : undefined}
+              sub={i.isLow ? t('inv.low') : undefined}
+            />
           ))}
         </div>
         {feedItems.length === 0 && <Notice tone="warn">{t('feed.noFeedItems')}</Notice>}
@@ -132,7 +171,11 @@ export function FeedPage() {
                     ))}
                   </select>
                 </Field>
-                {store && <span className="badge">{t('feed.storeBalance')}: {num(store.balance, 1)} {store.unit}</span>}
+                {store && (
+                  <span className="badge">
+                    {t('feed.storeBalance')}: {num(store.balance, 1)} {store.unit}
+                  </span>
+                )}
               </div>
               <div className="table-wrap">
                 <table className="data">
@@ -189,7 +232,8 @@ export function FeedPage() {
                               '—'
                             ) : (
                               <>
-                                <strong>{num(calc.consumption, 1)}</strong> <span className={`badge ${calc.isEstimate ? 'warn' : 'good'}`}>{t('feed.method.' + calc.method)}</span>
+                                <strong>{num(calc.consumption, 1)}</strong>{' '}
+                                <span className={`badge ${calc.isEstimate ? 'warn' : 'good'}`}>{t('feed.method.' + calc.method)}</span>
                               </>
                             )}
                           </td>
@@ -209,11 +253,15 @@ export function FeedPage() {
                   </tbody>
                 </table>
               </div>
-              {Object.values(rows).map((r) => feedConsumption(toInput(r)).error).filter(Boolean).slice(0, 1).map((err) => (
-                <Notice key={err} tone="bad">
-                  {t('err.' + feedErrorKey(err))}
-                </Notice>
-              ))}
+              {Object.values(rows)
+                .map((r) => feedConsumption(toInput(r)).error)
+                .filter(Boolean)
+                .slice(0, 1)
+                .map((err) => (
+                  <Notice key={err} tone="bad">
+                    {t('err.' + feedErrorKey(err))}
+                  </Notice>
+                ))}
             </div>
           </Card>
         )}
@@ -221,8 +269,22 @@ export function FeedPage() {
           <RangePicker days={days} onChange={setDays} />
         </div>
         <div className="grid cols-2">
-          <TimeChart title={t('chart.feedDaily')} data={series ?? []} series={[{ key: 'feedKg', label: t('chart.feedDaily'), color: SERIES.aqua }]} kind="bar" unit="kg" digits={1} note={t('chart.missingDays')} />
-          <TimeChart title={t('chart.feedPerHen')} data={series ?? []} series={[{ key: 'feedPerHenG', label: t('chart.feedPerHen'), color: SERIES.blue }]} unit="g" digits={1} />
+          <TimeChart
+            title={t('chart.feedDaily')}
+            data={series ?? []}
+            series={[{ key: 'feedKg', label: t('chart.feedDaily'), color: SERIES.aqua }]}
+            kind="bar"
+            unit="kg"
+            digits={1}
+            note={t('chart.missingDays')}
+          />
+          <TimeChart
+            title={t('chart.feedPerHen')}
+            data={series ?? []}
+            series={[{ key: 'feedPerHenG', label: t('chart.feedPerHen'), color: SERIES.blue }]}
+            unit="g"
+            digits={1}
+          />
         </div>
         {!series && <Empty text={t('common.loading')} />}
       </div>

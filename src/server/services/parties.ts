@@ -30,7 +30,9 @@ export async function saveParty(ctx: Ctx, kind: PartyKind, p: PartyInput): Promi
   assert(name.length >= 2, 'required_field', { field: 'name' })
   const table = TABLE[kind]
   return ctx.db.transaction(async () => {
-    const dup = (await ctx.db.prepare(`SELECT id FROM ${table} WHERE organization_id = ? AND name = ? AND NOT (id <=> ?)`).get(ctx.org, name, p.id)) as { id: number } | undefined
+    const dup = (await ctx.db.prepare(`SELECT id FROM ${table} WHERE organization_id = ? AND name = ? AND NOT (id <=> ?)`).get(ctx.org, name, p.id)) as
+      | { id: number }
+      | undefined
     assert(!dup, 'name_taken')
     const vals = [name, p.phone?.trim() || null, p.address?.trim() || null, p.notes?.trim() || null, p.active ? 1 : 0]
     if (p.id) {

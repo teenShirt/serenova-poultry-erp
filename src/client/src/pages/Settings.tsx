@@ -70,58 +70,71 @@ function FarmTab() {
   const { f, setF, save } = useSettingsForm()
   return (
     <div className="stack">
-    <Card>
-      <div className="stack">
-        <div className="form-grid">
-          <Field label={t('setup.farmName')} required>
-            <input className="input" value={f.farmName} onChange={(e) => setF({ ...f, farmName: e.target.value })} />
-          </Field>
-          <Field label={t('setup.location')}>
-            <input className="input" value={f.farmLocation} onChange={(e) => setF({ ...f, farmLocation: e.target.value })} />
-          </Field>
-          <Field label={t('setup.timezone')}>
-            <input className="input" value={f.timezone} onChange={(e) => setF({ ...f, timezone: e.target.value })} />
-          </Field>
-          <Field label={t('app.language')}>
-            <select className="select" value={f.language} onChange={(e) => setF({ ...f, language: e.target.value as 'en' | 'si' })}>
-              <option value="si">සිංහල</option>
-              <option value="en">English</option>
-            </select>
-          </Field>
+      <Card>
+        <div className="stack">
+          <div className="form-grid">
+            <Field label={t('setup.farmName')} required>
+              <input className="input" value={f.farmName} onChange={(e) => setF({ ...f, farmName: e.target.value })} />
+            </Field>
+            <Field label={t('setup.location')}>
+              <input className="input" value={f.farmLocation} onChange={(e) => setF({ ...f, farmLocation: e.target.value })} />
+            </Field>
+            <Field label={t('setup.timezone')}>
+              <input className="input" value={f.timezone} onChange={(e) => setF({ ...f, timezone: e.target.value })} />
+            </Field>
+            <Field label={t('app.language')}>
+              <select className="select" value={f.language} onChange={(e) => setF({ ...f, language: e.target.value as 'en' | 'si' })}>
+                <option value="si">සිංහල</option>
+                <option value="en">English</option>
+              </select>
+            </Field>
+          </div>
+          <div className="form-grid">
+            <Field label={t('set.currency')}>
+              <input className="input" value={f.currency} maxLength={10} onChange={(e) => setF({ ...f, currency: e.target.value })} style={{ maxWidth: 140 }} />
+            </Field>
+          </div>
+          <label className="check">
+            <input type="checkbox" checked={f.allowSignup} onChange={(e) => setF({ ...f, allowSignup: e.target.checked })} />
+            {t('set.allowSignup')}
+          </label>
+          <div className="row end">
+            <button
+              className="btn primary"
+              disabled={!f.farmName.trim()}
+              onClick={() =>
+                save({
+                  farmName: f.farmName.trim(),
+                  farmLocation: f.farmLocation.trim(),
+                  timezone: f.timezone.trim(),
+                  language: f.language,
+                  allowSignup: f.allowSignup,
+                  currency: f.currency.trim() || 'Rs.'
+                })
+              }
+            >
+              {t('common.saveChanges')}
+            </button>
+          </div>
+          <h3>{t('set.about')}</h3>
+          <dl className="kv">
+            <dt>{t('app.name')}</dt>
+            <dd>{t('app.version', { version: status.version })}</dd>
+            {status.organization && (
+              <>
+                <dt>{t('set.orgCode')}</dt>
+                <dd>
+                  <strong>{status.organization.code}</strong> <span className="muted small">{t('set.orgCodeHint')}</span>
+                </dd>
+              </>
+            )}
+            <dt>{t('set.dataFolder')}</dt>
+            <dd className="small">{status.dataDir}</dd>
+          </dl>
         </div>
-        <div className="form-grid">
-          <Field label={t('set.currency')}>
-            <input className="input" value={f.currency} maxLength={10} onChange={(e) => setF({ ...f, currency: e.target.value })} style={{ maxWidth: 140 }} />
-          </Field>
-        </div>
-        <label className="check">
-          <input type="checkbox" checked={f.allowSignup} onChange={(e) => setF({ ...f, allowSignup: e.target.checked })} />
-          {t('set.allowSignup')}
-        </label>
-        <div className="row end">
-          <button className="btn primary" disabled={!f.farmName.trim()} onClick={() => save({ farmName: f.farmName.trim(), farmLocation: f.farmLocation.trim(), timezone: f.timezone.trim(), language: f.language, allowSignup: f.allowSignup, currency: f.currency.trim() || 'Rs.' })}>
-            {t('common.saveChanges')}
-          </button>
-        </div>
-        <h3>{t('set.about')}</h3>
-        <dl className="kv">
-          <dt>{t('app.name')}</dt>
-          <dd>{t('app.version', { version: status.version })}</dd>
-          {status.organization && (
-            <>
-              <dt>{t('set.orgCode')}</dt>
-              <dd>
-                <strong>{status.organization.code}</strong> <span className="muted small">{t('set.orgCodeHint')}</span>
-              </dd>
-            </>
-          )}
-          <dt>{t('set.dataFolder')}</dt>
-          <dd className="small">{status.dataDir}</dd>
-        </dl>
-      </div>
-    </Card>
-    <FarmsCard />
-    <StagesCard />
+      </Card>
+      <FarmsCard />
+      <StagesCard />
     </div>
   )
 }
@@ -130,21 +143,34 @@ function CalcTab() {
   const { t } = useApp()
   const { f, setF, save } = useSettingsForm()
   const toggleSession = (s: (typeof EGG_SESSIONS)[number]) =>
-    setF({ ...f, expectedEggSessions: f.expectedEggSessions.includes(s) ? f.expectedEggSessions.filter((x) => x !== s) : EGG_SESSIONS.filter((x) => x === s || f.expectedEggSessions.includes(x)) })
+    setF({
+      ...f,
+      expectedEggSessions: f.expectedEggSessions.includes(s)
+        ? f.expectedEggSessions.filter((x) => x !== s)
+        : EGG_SESSIONS.filter((x) => x === s || f.expectedEggSessions.includes(x))
+    })
   return (
     <Card>
       <div className="stack">
         <h3>{t('set.calc')}</h3>
         <div className="form-grid">
           <Field label={t('set.prodDen')}>
-            <select className="select" value={f.productionDenominator} onChange={(e) => setF({ ...f, productionDenominator: e.target.value as FarmSettings['productionDenominator'] })}>
+            <select
+              className="select"
+              value={f.productionDenominator}
+              onChange={(e) => setF({ ...f, productionDenominator: e.target.value as FarmSettings['productionDenominator'] })}
+            >
               <option value="average">{t('set.prodDen.average')}</option>
               <option value="opening">{t('set.prodDen.opening')}</option>
               <option value="closing">{t('set.prodDen.closing')}</option>
             </select>
           </Field>
           <Field label={t('set.mortDen')}>
-            <select className="select" value={f.mortalityDenominator} onChange={(e) => setF({ ...f, mortalityDenominator: e.target.value as FarmSettings['mortalityDenominator'] })}>
+            <select
+              className="select"
+              value={f.mortalityDenominator}
+              onChange={(e) => setF({ ...f, mortalityDenominator: e.target.value as FarmSettings['mortalityDenominator'] })}
+            >
               <option value="opening">{t('set.mortDen.opening')}</option>
               <option value="average">{t('set.mortDen.average')}</option>
             </select>
@@ -179,7 +205,19 @@ function CalcTab() {
             <NumInput value={f.medicineExpiryWarnDays} onChange={(v) => setF({ ...f, medicineExpiryWarnDays: v ?? 30 })} />
           </Field>
           <Field label={t('set.medUnits')}>
-            <input className="input" value={f.medicineUnits.join(', ')} onChange={(e) => setF({ ...f, medicineUnits: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} />
+            <input
+              className="input"
+              value={f.medicineUnits.join(', ')}
+              onChange={(e) =>
+                setF({
+                  ...f,
+                  medicineUnits: e.target.value
+                    .split(',')
+                    .map((x) => x.trim())
+                    .filter(Boolean)
+                })
+              }
+            />
           </Field>
         </div>
         <div className="row end">
@@ -252,7 +290,11 @@ export function UsersTab() {
                     <td className="nowrap">{dateTime(u.createdAt)}</td>
                     <td className="nowrap">
                       <span className="field-label">{t('set.approveAs')} </span>
-                      <RoleSelect roles={roles} value={approveRole[u.id] ?? defaultRole?.id ?? null} onChange={(id) => setApproveRole({ ...approveRole, [u.id]: id })} />
+                      <RoleSelect
+                        roles={roles}
+                        value={approveRole[u.id] ?? defaultRole?.id ?? null}
+                        onChange={(id) => setApproveRole({ ...approveRole, [u.id]: id })}
+                      />
                     </td>
                     <td className="nowrap right">
                       <button className="btn sm primary" onClick={() => approve(u)}>
@@ -327,7 +369,13 @@ export function UsersTab() {
       </Card>
       {can('roles.manage') && <RolesCard />}
       {editing && (
-        <UserForm user={editing === 'new' ? null : editing} roles={roles} defaultRole={defaultRole ?? null} onClose={() => setEditing(null)} onCode={(code, name) => setShownCode({ code, name })} />
+        <UserForm
+          user={editing === 'new' ? null : editing}
+          roles={roles}
+          defaultRole={defaultRole ?? null}
+          onClose={() => setEditing(null)}
+          onCode={(code, name) => setShownCode({ code, name })}
+        />
       )}
       {resetFor && <ResetPassword user={resetFor} onClose={() => setResetFor(null)} />}
       {cagesFor && <CagesDialog user={cagesFor} onClose={() => setCagesFor(null)} />}
@@ -547,7 +595,12 @@ function ChangePassword() {
           <input className="input" type="password" value={next} onChange={(e) => setNext(e.target.value)} />
         </Field>
         <Field label={t('auth.confirmPassword')}>
-          <input className={`input ${confirm && confirm !== next ? 'invalid' : ''}`} type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          <input
+            className={`input ${confirm && confirm !== next ? 'invalid' : ''}`}
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
         </Field>
         <div>
           <button

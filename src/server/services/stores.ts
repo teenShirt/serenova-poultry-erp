@@ -48,11 +48,17 @@ export async function saveWarehouse(ctx: Ctx, w: { id: number | null; code: stri
       assert(before, 'store_not_found')
       if (!w.active && before.active) {
         assert(!before.is_main, 'main_store_required')
-        const stock = (await ctx.db.prepare('SELECT COALESCE(SUM(ABS(b)), 0) AS s FROM (SELECT SUM(quantity) AS b FROM inventory_transactions WHERE warehouse_id = ? GROUP BY item_id) x').get(w.id)) as { s: number }
+        const stock = (await ctx.db
+          .prepare(
+            'SELECT COALESCE(SUM(ABS(b)), 0) AS s FROM (SELECT SUM(quantity) AS b FROM inventory_transactions WHERE warehouse_id = ? GROUP BY item_id) x'
+          )
+          .get(w.id)) as { s: number }
         assert(Number(stock.s) < 1e-9, 'store_has_stock')
       }
       if (w.active && !before.active) await assertStoreSlot(ctx)
-      await ctx.db.prepare('UPDATE warehouses SET code = ?, name = ?, active = ?, notes = ? WHERE id = ?').run(code, w.name.trim(), w.active ? 1 : 0, w.notes?.trim() || null, w.id)
+      await ctx.db
+        .prepare('UPDATE warehouses SET code = ?, name = ?, active = ?, notes = ? WHERE id = ?')
+        .run(code, w.name.trim(), w.active ? 1 : 0, w.notes?.trim() || null, w.id)
       await audit(ctx, { action: 'update', entity: 'warehouse', entityId: w.id, details: w })
       return w.id
     }
@@ -84,7 +90,10 @@ export async function storeBalances(ctx: Ctx, f: { warehouseId?: number | null; 
        WHERE i.organization_id = ? AND w.farm_id = ? ${f.warehouseId ? 'AND w.id = ?' : ''} ${f.category ? 'AND i.category = ?' : ''} AND i.active = 1
        GROUP BY i.id, w.id ORDER BY w.is_main DESC, w.name, i.category, i.name`
     )
-    .all(ctx.org, ctx.farm, ...(f.warehouseId ? [f.warehouseId] : []), ...(f.category ? [f.category] : []))) as (Omit<StoreBalance, 'value' | 'isLow' | 'needsReorder'> & { isMain: number })[]
+    .all(ctx.org, ctx.farm, ...(f.warehouseId ? [f.warehouseId] : []), ...(f.category ? [f.category] : []))) as (Omit<
+    StoreBalance,
+    'value' | 'isLow' | 'needsReorder'
+  > & { isMain: number })[]
   // Minimum and reorder levels are for the item on the farm: they are judged on its stock in all the farm's stores.
   const farmTotal = new Map<number, number>()
   for (const r of rows) farmTotal.set(r.itemId, (farmTotal.get(r.itemId) ?? 0) + Number(r.balance))
@@ -123,9 +132,9 @@ export async function transferStock(ctx: Ctx, t: TransferInput): Promise<string>
       const item = await getItem(ctx, l.itemId)
       let batchId: number | null = null
       if (l.batchNo?.trim()) {
-        const b = (await ctx.db.prepare('SELECT id FROM inventory_batches WHERE organization_id = ? AND item_id = ? AND batch_no = ?').get(ctx.org, l.itemId, l.batchNo.trim())) as
-          | { id: number }
-          | undefined
+        const b = (await ctx.db
+          .prepare('SELECT id FROM inventory_batches WHERE organization_id = ? AND item_id = ? AND batch_no = ?')
+          .get(ctx.org, l.itemId, l.batchNo.trim())) as { id: number } | undefined
         assert(b, 'batch_not_found', { batch: l.batchNo })
         batchId = b.id
       }
@@ -176,7 +185,12 @@ export async function countStock(ctx: Ctx, c: StockCountInput): Promise<number> 
       assert(!seen.has(key), 'invalid_input', { field: 'lines' })
       seen.add(key)
       const item = await getItem(ctx, l.itemId)
-      if (l.batchId) assert(await ctx.db.prepare('SELECT 1 AS x FROM inventory_batches WHERE id = ? AND organization_id = ? AND item_id = ?').get(l.batchId, ctx.org, l.itemId), 'batch_not_found', { batch: String(l.batchId) })
+      if (l.batchId)
+        assert(
+          await ctx.db.prepare('SELECT 1 AS x FROM inventory_batches WHERE id = ? AND organization_id = ? AND item_id = ?').get(l.batchId, ctx.org, l.itemId),
+          'batch_not_found',
+          { batch: String(l.batchId) }
+        )
       const sys = (await ctx.db
         .prepare(
           `SELECT COALESCE(SUM(quantity), 0) AS b FROM inventory_transactions

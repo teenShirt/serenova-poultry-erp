@@ -58,7 +58,10 @@ export async function createSubscription(db: DB, orgId: number, opts: { planCode
  * that has ended moves into its grace period, and after that it is expired. Suspended, cancelled
  * and expired stay as they are.
  */
-export function effectiveStatus(s: { status: SubscriptionStatus; endsOn: string | null; trialEndsOn: string | null; graceDays: number }, today: string): {
+export function effectiveStatus(
+  s: { status: SubscriptionStatus; endsOn: string | null; trialEndsOn: string | null; graceDays: number },
+  today: string
+): {
   status: SubscriptionStatus
   until: string | null
 } {
@@ -77,7 +80,16 @@ export async function getEntitlements(db: DB, orgId: number, today: string): Pro
       `SELECT s.status, s.starts_on, s.ends_on, s.trial_ends_on, s.grace_days, s.overrides, p.*
        FROM subscriptions s JOIN plans p ON p.id = s.plan_id WHERE s.organization_id = ?`
     )
-    .get(orgId)) as (PlanRow & { status: SubscriptionStatus; starts_on: string; ends_on: string | null; trial_ends_on: string | null; grace_days: number; overrides: string | null }) | undefined
+    .get(orgId)) as
+    | (PlanRow & {
+        status: SubscriptionStatus
+        starts_on: string
+        ends_on: string | null
+        trial_ends_on: string | null
+        grace_days: number
+        overrides: string | null
+      })
+    | undefined
   if (!row) {
     // An organization restored from a backup made before subscriptions existed keeps everything it had.
     await createSubscription(db, orgId, { planCode: 'enterprise', today })
@@ -127,7 +139,9 @@ async function usage(db: DB, orgId: number) {
   const n = async (sql: string) => ((await db.prepare(sql).get(orgId)) as { n: number }).n
   return {
     users: await n('SELECT COUNT(*) AS n FROM users WHERE organization_id = ? AND (active = 1 OR pending = 1)'),
-    admins: await n('SELECT COUNT(*) AS n FROM users u JOIN roles r ON r.id = u.role_id WHERE u.organization_id = ? AND r.is_admin = 1 AND u.active = 1 AND u.pending = 0'),
+    admins: await n(
+      'SELECT COUNT(*) AS n FROM users u JOIN roles r ON r.id = u.role_id WHERE u.organization_id = ? AND r.is_admin = 1 AND u.active = 1 AND u.pending = 0'
+    ),
     roles: await n('SELECT COUNT(*) AS n FROM roles WHERE organization_id = ? AND is_admin = 0 AND archived_at IS NULL'),
     farms: await n("SELECT COUNT(*) AS n FROM farms WHERE organization_id = ? AND status = 'active'")
   }

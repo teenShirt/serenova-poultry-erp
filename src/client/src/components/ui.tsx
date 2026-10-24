@@ -110,7 +110,19 @@ export function NumInput({
   )
 }
 
-export function Modal({ title, onClose, children, footer, wide }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  footer,
+  wide
+}: {
+  title: string
+  onClose: () => void
+  children: ReactNode
+  footer?: ReactNode
+  wide?: boolean
+}) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', h)
@@ -194,7 +206,21 @@ export function ReasonDialog({
   )
 }
 
-export function ConfirmDialog({ title, body, confirmLabel, danger, onConfirm, onClose }: { title: string; body: ReactNode; confirmLabel?: string; danger?: boolean; onConfirm: () => Promise<void> | void; onClose: () => void }) {
+export function ConfirmDialog({
+  title,
+  body,
+  confirmLabel,
+  danger,
+  onConfirm,
+  onClose
+}: {
+  title: string
+  body: ReactNode
+  confirmLabel?: string
+  danger?: boolean
+  onConfirm: () => Promise<void> | void
+  onClose: () => void
+}) {
   const { t, fail } = useApp()
   const [busy, setBusy] = useState(false)
   return (
@@ -289,10 +315,27 @@ export function useCages(includeInactive = false) {
   return useLoad(() => call('cages.list', { includeInactive }), [includeInactive])
 }
 
-export function CageSelect({ cages, value, onChange, allowAll, allowFarm }: { cages: Pick<Cage, 'id' | 'name'>[]; value: number | null; onChange: (id: number | null) => void; allowAll?: boolean; allowFarm?: boolean }) {
+export function CageSelect({
+  cages,
+  value,
+  onChange,
+  allowAll,
+  allowFarm
+}: {
+  cages: Pick<Cage, 'id' | 'name'>[]
+  value: number | null
+  onChange: (id: number | null) => void
+  allowAll?: boolean
+  allowFarm?: boolean
+}) {
   const { t } = useApp()
   return (
-    <select className="select" value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)} style={{ width: 'auto', minWidth: 170 }}>
+    <select
+      className="select"
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+      style={{ width: 'auto', minWidth: 170 }}
+    >
       {allowAll && <option value="">{t('common.allCages')}</option>}
       {allowFarm && <option value="">{t('med.wholeFarm')}</option>}
       {!allowAll && !allowFarm && value === null && <option value="">—</option>}

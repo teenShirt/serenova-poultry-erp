@@ -33,14 +33,40 @@ export function FlowPage() {
           <div className="muted">{t('flow.intro')}</div>
           <div className="flow-chain" role="list">
             <Node icon={<PackagePlus size={14} />} label={t('flow.received')} value={`${num(flow.feed.receivedKg)} kg`} sub={money(flow.feed.purchaseCost)} />
-            <Node icon={<Warehouse size={14} />} label={t('flow.feedStore')} value={`${num(flow.feed.closingKg)} kg`} sub={t('flow.opening', { value: `${num(flow.feed.openingKg)} kg` })} />
-            <Node icon={<Wheat size={14} />} label={t('flow.issued')} value={`${num(flow.feed.issuedKg)} kg`} sub={flow.feed.consumedKg === null ? t('common.unknown') : t('flow.eaten', { value: `${num(flow.feed.consumedKg)} kg` })} />
+            <Node
+              icon={<Warehouse size={14} />}
+              label={t('flow.feedStore')}
+              value={`${num(flow.feed.closingKg)} kg`}
+              sub={t('flow.opening', { value: `${num(flow.feed.openingKg)} kg` })}
+            />
+            <Node
+              icon={<Wheat size={14} />}
+              label={t('flow.issued')}
+              value={`${num(flow.feed.issuedKg)} kg`}
+              sub={flow.feed.consumedKg === null ? t('common.unknown') : t('flow.eaten', { value: `${num(flow.feed.consumedKg)} kg` })}
+            />
             <Node icon={<Bird size={14} />} label={t('flow.hens')} value={num(flow.hens.closing)} sub={t('flow.deaths', { count: num(flow.hens.deaths) })} />
-            <Node icon={<Egg size={14} />} label={t('flow.collected')} value={num(flow.eggs.collected)} sub={`${t('col.good')} ${num(flow.eggs.good)} · ${t('col.damaged')} ${num(flow.eggs.cracked)}`} />
-            <Node icon={<Truck size={14} />} label={t('flow.dispatched')} value={num(flow.eggs.dispatchedGood + flow.eggs.dispatchedCracked)} sub={t('flow.inStore', { good: num(flow.eggs.closingGood), cracked: num(flow.eggs.closingCracked) })} />
+            <Node
+              icon={<Egg size={14} />}
+              label={t('flow.collected')}
+              value={num(flow.eggs.collected)}
+              sub={`${t('col.good')} ${num(flow.eggs.good)} · ${t('col.damaged')} ${num(flow.eggs.cracked)}`}
+            />
+            <Node
+              icon={<Truck size={14} />}
+              label={t('flow.dispatched')}
+              value={num(flow.eggs.dispatchedGood + flow.eggs.dispatchedCracked)}
+              sub={t('flow.inStore', { good: num(flow.eggs.closingGood), cracked: num(flow.eggs.closingCracked) })}
+            />
           </div>
           <div className="grid stats">
-            <Node money icon={<Banknote size={14} />} label={t('flow.sales')} value={money(flow.money.sales)} sub={t('flow.receivedMoney', { value: money(flow.money.received) })} />
+            <Node
+              money
+              icon={<Banknote size={14} />}
+              label={t('flow.sales')}
+              value={money(flow.money.sales)}
+              sub={t('flow.receivedMoney', { value: money(flow.money.received) })}
+            />
             <Node money icon={<Banknote size={14} />} label={t('sal.outstanding')} value={money(flow.money.outstanding)} />
             <Node icon={<PackagePlus size={14} />} label={t('pur.cost')} value={money(flow.money.purchases)} />
             <Node icon={<Banknote size={14} />} label={t('flow.margin')} value={money(flow.money.sales - flow.money.purchases)} sub={t('flow.marginHint')} />

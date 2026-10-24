@@ -62,7 +62,15 @@ export function formatDateTime(lang: Language, iso: string | null, timeZone: str
   if (!iso) return '—'
   if (lang === 'si') {
     try {
-      const local = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso))
+      const local = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23'
+      }).format(new Date(iso))
       const [datePart, timePart] = local.split(', ')
       return `${formatDate('si', datePart)} ${timePart}`
     } catch {

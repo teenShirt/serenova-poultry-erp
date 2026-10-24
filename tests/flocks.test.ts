@@ -73,7 +73,15 @@ describe('flocks', () => {
     const [s] = await flockSeries(f.admin, id, D, D)
     expect(s).toMatchObject({ date: D, opening: 2000, closing: 1997, eggs: 804, deaths: 3, ageDays: 134, ageWeeks: 19 })
     const [summary] = await listFlocks(f.admin)
-    expect(summary).toMatchObject({ code: 'B1', hatchDate: '2025-10-26', hatchDateEstimated: true, currentHens: 1997, deaths: 3, stage: 'laying', age: { days: 135, weeks: 19 } })
+    expect(summary).toMatchObject({
+      code: 'B1',
+      hatchDate: '2025-10-26',
+      hatchDateEstimated: true,
+      currentHens: 1997,
+      deaths: 3,
+      stage: 'laying',
+      age: { days: 135, weeks: 19 }
+    })
     expect(summary.cages.map((c) => c.cageId)).toEqual([c1, c2])
 
     // A cage holds one flock at a time.
@@ -101,7 +109,8 @@ describe('flocks', () => {
     const call = api(f.db)
     // Hatched 1 Jan, arrived at 9 days old: 68 days = 9 weeks old on 10 March.
     const id = await saveFlock(f.admin, flock({ hatchDate: '2026-01-01', arrivalDate: '2026-01-10', ageOnArrivalDays: null }))
-    const r = async (atWeek: number, title: string) => saveReminder(f.admin, { id: null, atWeek, title, instructions: 'As prescribed by the farm veterinarian', active: true })
+    const r = async (atWeek: number, title: string) =>
+      saveReminder(f.admin, { id: null, atWeek, title, instructions: 'As prescribed by the farm veterinarian', active: true })
     await r(0, 'Before arrival')
     const overdue = await r(8, 'Week 8 check')
     await r(9, 'Week 9 check')
@@ -115,20 +124,35 @@ describe('flocks', () => {
       ['Week 10 check', 'upcoming']
     ])
     const dash = await call(f.admin, 'analytics.dashboard', { date: TODAY })
-    expect(dash.ok && (dash.data as { alerts: { code: string }[] }).alerts.map((a) => a.code)).toEqual(expect.arrayContaining(['flock_reminder_due', 'flock_reminder_overdue']))
+    expect(dash.ok && (dash.data as { alerts: { code: string }[] }).alerts.map((a) => a.code)).toEqual(
+      expect.arrayContaining(['flock_reminder_due', 'flock_reminder_overdue'])
+    )
 
-    expect(await call(f.worker, 'flocks.markReminder', { flockId: id, reminderId: overdue, outcome: 'skipped', note: null })).toMatchObject({ ok: false, code: 'reason_required' })
+    expect(await call(f.worker, 'flocks.markReminder', { flockId: id, reminderId: overdue, outcome: 'skipped', note: null })).toMatchObject({
+      ok: false,
+      code: 'reason_required'
+    })
     expect(await call(f.worker, 'flocks.markReminder', { flockId: id, reminderId: overdue, outcome: 'done', note: null })).toMatchObject({ ok: true })
-    expect(await call(f.worker, 'flocks.markReminder', { flockId: id, reminderId: overdue, outcome: 'done', note: null })).toMatchObject({ ok: false, code: 'already_done' })
+    expect(await call(f.worker, 'flocks.markReminder', { flockId: id, reminderId: overdue, outcome: 'done', note: null })).toMatchObject({
+      ok: false,
+      code: 'already_done'
+    })
     const detail = await getFlock(f.admin, id)
     expect(detail.reminders.find((x) => x.reminderId === overdue)).toMatchObject({ state: 'done', doneBy: 'Worker' })
     // Writing the programme itself needs flock management.
-    expect(await call(f.worker, 'flocks.saveReminder', { id: null, atWeek: 1, title: 'Mine', instructions: null, active: true })).toMatchObject({ ok: false, code: 'no_permission' })
+    expect(await call(f.worker, 'flocks.saveReminder', { id: null, atWeek: 1, title: 'Mine', instructions: null, active: true })).toMatchObject({
+      ok: false,
+      code: 'no_permission'
+    })
   })
 
   it('farms: within the plan, switch between them; each has its own cages and flocks', async () => {
     const starter = await makeFarm({ plan: 'starter' })
-    expect(await api(starter.db)(starter.admin, 'farms.save', { id: null, name: 'Second', location: null })).toMatchObject({ ok: false, code: 'farm_limit_reached', params: { limit: 1 } })
+    expect(await api(starter.db)(starter.admin, 'farms.save', { id: null, name: 'Second', location: null })).toMatchObject({
+      ok: false,
+      code: 'farm_limit_reached',
+      params: { limit: 1 }
+    })
 
     const f = await makeFarm()
     const call = api(f.db)
@@ -157,13 +181,29 @@ describe('flocks', () => {
     const h = await call(f.admin, 'houses.save', { id: null, code: 'H1', name: 'Shed 1', active: true, sortOrder: 1, notes: null })
     const houseId = h.ok ? (h.data as number) : 0
     const cages = await call(f.admin, 'cages.list', {})
-    const c = ((cages.ok ? cages.data : []) as { id: number; code: string; name: string; initialHens: number; capacity: number | null; hasWaterMeter: boolean; active: boolean; sortOrder: number; notes: string | null }[])[0]
+    const c = (
+      (cages.ok ? cages.data : []) as {
+        id: number
+        code: string
+        name: string
+        initialHens: number
+        capacity: number | null
+        hasWaterMeter: boolean
+        active: boolean
+        sortOrder: number
+        notes: string | null
+      }[]
+    )[0]
     const { id: cageId, ...cage } = c
     expect(await call(f.admin, 'cages.update', { id: cageId, cage: { ...cage, houseId }, reason: null })).toMatchObject({ ok: true })
     expect(await call(f.admin, 'houses.list')).toMatchObject({ ok: true, data: [{ code: 'H1', cages: 1 }] })
     // Leaving the house out keeps it.
-    expect(await call(f.admin, 'cages.update', { id: cageId, cage: { ...cage, houseId: undefined, name: 'Renamed' }, reason: null })).toMatchObject({ ok: true })
-    expect(await call(f.admin, 'cages.list', {})).toMatchObject({ data: expect.arrayContaining([expect.objectContaining({ id: cageId, houseId, name: 'Renamed' })]) })
+    expect(await call(f.admin, 'cages.update', { id: cageId, cage: { ...cage, houseId: undefined, name: 'Renamed' }, reason: null })).toMatchObject({
+      ok: true
+    })
+    expect(await call(f.admin, 'cages.list', {})).toMatchObject({
+      data: expect.arrayContaining([expect.objectContaining({ id: cageId, houseId, name: 'Renamed' })])
+    })
   })
 })
 
@@ -177,7 +217,19 @@ describe('exact decimals', () => {
     await startDay(f.worker, { date: D, corrections: [], acknowledgeWarnings: true })
     const feed = await saveFeed(
       f.worker,
-      { date: D, cageId: f.cageIds[0], itemId: f.feedId, batchNo: null, openingStock: null, issued: 0.1, returned: 0, wasted: 0, measuredConsumption: null, closingStock: null, notes: null },
+      {
+        date: D,
+        cageId: f.cageIds[0],
+        itemId: f.feedId,
+        batchNo: null,
+        openingStock: null,
+        issued: 0.1,
+        returned: 0,
+        wasted: 0,
+        measuredConsumption: null,
+        closingStock: null,
+        notes: null
+      },
       null
     )
     // With floating point, 0.1 + 0.2 would be 0.30000000000000004.

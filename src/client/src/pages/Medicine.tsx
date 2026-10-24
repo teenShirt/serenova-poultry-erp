@@ -4,7 +4,24 @@ import { addDays } from '@shared/dates'
 import type { HealthEvent, Treatment } from '@shared/types'
 import { call } from '../lib/api'
 import { useApp, useLoad } from '../lib/app'
-import { Card, CageSelect, DateBar, DayGate, Empty, Field, Modal, Notice, NumInput, PageHeader, ReasonDialog, Seg, Tabs, nz, useCages, useDay } from '../components/ui'
+import {
+  Card,
+  CageSelect,
+  DateBar,
+  DayGate,
+  Empty,
+  Field,
+  Modal,
+  Notice,
+  NumInput,
+  PageHeader,
+  ReasonDialog,
+  Seg,
+  Tabs,
+  nz,
+  useCages,
+  useDay
+} from '../components/ui'
 
 export function MedicinePage() {
   const { t, num, workDate, date, status } = useApp()
@@ -137,7 +154,9 @@ export function MedicinePage() {
                         <td>{h.cageName ?? t('common.farm')}</td>
                         <td>{t('med.cat.' + h.category)}</td>
                         <td>
-                          <span className={`badge ${h.severity === 'high' ? 'bad' : h.severity === 'medium' ? 'warn' : ''}`}>{t('med.severity.' + h.severity)}</span>
+                          <span className={`badge ${h.severity === 'high' ? 'bad' : h.severity === 'medium' ? 'warn' : ''}`}>
+                            {t('med.severity.' + h.severity)}
+                          </span>
                         </td>
                         <td>{h.description}</td>
                         <td>{h.actionTaken}</td>
@@ -180,7 +199,13 @@ export function MedicinePage() {
                         <td>{b.batchNo}</td>
                         <td>{b.expiryDate ? date(b.expiryDate) : '—'}</td>
                         <td className="num">
-                          {b.daysToExpiry === null ? '—' : <span className={`badge ${b.daysToExpiry < 0 ? 'bad' : b.daysToExpiry <= warnDays ? 'warn' : ''}`}>{b.daysToExpiry < 0 ? t('inv.expired') : b.daysToExpiry}</span>}
+                          {b.daysToExpiry === null ? (
+                            '—'
+                          ) : (
+                            <span className={`badge ${b.daysToExpiry < 0 ? 'bad' : b.daysToExpiry <= warnDays ? 'warn' : ''}`}>
+                              {b.daysToExpiry < 0 ? t('inv.expired') : b.daysToExpiry}
+                            </span>
+                          )}
                         </td>
                         <td className="num">
                           {num(b.balance, 2)} {b.unit}
@@ -196,8 +221,26 @@ export function MedicinePage() {
       </div>
       {adding === 'treatment' && <AddTreatment date={workDate} onClose={() => setAdding(null)} />}
       {adding === 'health' && <AddHealth date={workDate} onClose={() => setAdding(null)} />}
-      {delT && <ReasonDialog title={t('common.deleteTitle')} hint={`${delT.itemName} ${delT.quantity} ${delT.unit}. ${t('common.deleteHint')}`} danger confirmLabel={t('common.delete')} onClose={() => setDelT(null)} onSubmit={(reason) => call('medicine.deleteTreatment', { id: delT.id, reason })} />}
-      {delH && <ReasonDialog title={t('common.deleteTitle')} hint={`${delH.description}. ${t('common.deleteHint')}`} danger confirmLabel={t('common.delete')} onClose={() => setDelH(null)} onSubmit={(reason) => call('medicine.deleteHealthEvent', { id: delH.id, reason })} />}
+      {delT && (
+        <ReasonDialog
+          title={t('common.deleteTitle')}
+          hint={`${delT.itemName} ${delT.quantity} ${delT.unit}. ${t('common.deleteHint')}`}
+          danger
+          confirmLabel={t('common.delete')}
+          onClose={() => setDelT(null)}
+          onSubmit={(reason) => call('medicine.deleteTreatment', { id: delT.id, reason })}
+        />
+      )}
+      {delH && (
+        <ReasonDialog
+          title={t('common.deleteTitle')}
+          hint={`${delH.description}. ${t('common.deleteHint')}`}
+          danger
+          confirmLabel={t('common.delete')}
+          onClose={() => setDelH(null)}
+          onSubmit={(reason) => call('medicine.deleteHealthEvent', { id: delH.id, reason })}
+        />
+      )}
     </div>
   )
 }
@@ -234,7 +277,17 @@ function AddTreatment({ date, onClose }: { date: string; onClose: () => void }) 
             disabled={!ok}
             onClick={async () => {
               try {
-                await call('medicine.addTreatment', { date, cageId, itemId: itemId!, batchId, quantity: quantity!, administeredAt: time || null, reason: reason.trim(), prescribedBy: nz(prescribedBy), notes: nz(notes) })
+                await call('medicine.addTreatment', {
+                  date,
+                  cageId,
+                  itemId: itemId!,
+                  batchId,
+                  quantity: quantity!,
+                  administeredAt: time || null,
+                  reason: reason.trim(),
+                  prescribedBy: nz(prescribedBy),
+                  notes: nz(notes)
+                })
                 toast('success', t('common.saved'))
                 onClose()
               } catch (e) {
@@ -324,7 +377,15 @@ function AddHealth({ date, onClose }: { date: string; onClose: () => void }) {
             disabled={!ok}
             onClick={async () => {
               try {
-                await call('medicine.addHealthEvent', { date, cageId, eventTime: time || null, category, severity, description: description.trim(), actionTaken: nz(action) })
+                await call('medicine.addHealthEvent', {
+                  date,
+                  cageId,
+                  eventTime: time || null,
+                  category,
+                  severity,
+                  description: description.trim(),
+                  actionTaken: nz(action)
+                })
                 toast('success', t('common.saved'))
                 onClose()
               } catch (e) {

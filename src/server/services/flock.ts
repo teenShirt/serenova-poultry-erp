@@ -96,14 +96,16 @@ export async function deleteMovement(ctx: Ctx, id: number, reason: string) {
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const row = (await ctx.db
-      .prepare('SELECT m.*, d.business_date FROM flock_movements m JOIN farm_days d ON d.id = m.day_id WHERE m.id = ? AND m.organization_id = ? AND d.farm_id = ?')
-      .get(id, ctx.org, ctx.farm)) as
-      | { id: number; day_id: number; cage_id: number; transfer_ref: string | null; business_date: string }
-      | undefined
+      .prepare(
+        'SELECT m.*, d.business_date FROM flock_movements m JOIN farm_days d ON d.id = m.day_id WHERE m.id = ? AND m.organization_id = ? AND d.farm_id = ?'
+      )
+      .get(id, ctx.org, ctx.farm)) as { id: number; day_id: number; cage_id: number; transfer_ref: string | null; business_date: string } | undefined
     assert(row, 'not_found')
     await requireWritableDay(ctx, row.business_date)
     const rows = row.transfer_ref
-      ? ((await ctx.db.prepare('SELECT * FROM flock_movements WHERE organization_id = ? AND transfer_ref = ?').all(ctx.org, row.transfer_ref)) as typeof row[])
+      ? ((await ctx.db
+          .prepare('SELECT * FROM flock_movements WHERE organization_id = ? AND transfer_ref = ?')
+          .all(ctx.org, row.transfer_ref)) as (typeof row)[])
       : [row]
     for (const r of rows) await ctx.db.prepare('DELETE FROM flock_movements WHERE id = ?').run(r.id)
     for (const r of rows) await assertCageDayValid(ctx, r.day_id, r.cage_id, row.business_date)

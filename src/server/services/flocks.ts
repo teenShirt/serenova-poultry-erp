@@ -54,7 +54,9 @@ export async function saveFarm(ctx: Ctx, f: { id: number | null; name: string; l
   assert(name.length >= 2, 'required_field', { field: 'name' })
   return ctx.db.transaction(async () => {
     if (f.id) {
-      const r = await ctx.db.prepare('UPDATE farms SET name = ?, location = ? WHERE id = ? AND organization_id = ?').run(name, f.location?.trim() || null, f.id, ctx.org)
+      const r = await ctx.db
+        .prepare('UPDATE farms SET name = ?, location = ? WHERE id = ? AND organization_id = ?')
+        .run(name, f.location?.trim() || null, f.id, ctx.org)
       assert(r.changes === 1, 'farm_not_found')
       await audit(ctx, { action: 'update', entity: 'farm', entityId: f.id, details: f })
       return f.id
@@ -62,7 +64,12 @@ export async function saveFarm(ctx: Ctx, f: { id: number | null; name: string; l
     const e = await getEntitlements(ctx.db, ctx.org, platformToday(ctx))
     if (e.usage.farms >= e.limits.maxFarms) throw new AppError('farm_limit_reached', { limit: e.limits.maxFarms, plan: e.planName })
     if (e.usage.farms >= 1) await assertModule(ctx, 'multi_farm')
-    const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'farm'
+    const base =
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 30) || 'farm'
     let code = base
     for (let i = 2; await ctx.db.prepare('SELECT 1 AS x FROM farms WHERE organization_id = ? AND code = ?').get(ctx.org, code); i++) code = `${base}-${i}`
     const id = (
@@ -86,7 +93,9 @@ export async function setFarmStatus(ctx: Ctx, id: number, status: 'active' | 'ar
     assert(farm, 'farm_not_found')
     if (status === 'archived') {
       assert(id !== ctx.farm, 'farm_in_use')
-      const others = (await ctx.db.prepare("SELECT COUNT(*) AS n FROM farms WHERE organization_id = ? AND status = 'active' AND id <> ?").get(ctx.org, id)) as { n: number }
+      const others = (await ctx.db.prepare("SELECT COUNT(*) AS n FROM farms WHERE organization_id = ? AND status = 'active' AND id <> ?").get(ctx.org, id)) as {
+        n: number
+      }
       assert(others.n > 0, 'last_farm')
     } else if (farm.status !== 'active') {
       const e = await getEntitlements(ctx.db, ctx.org, platformToday(ctx))
@@ -178,7 +187,10 @@ async function placements(ctx: Ctx, flockIds: number[]): Promise<Map<number, Flo
 /** Hens in each cage now: the latest day's closing count, or the starting count before any day. */
 async function currentCageHens(ctx: Ctx): Promise<Map<number, number>> {
   const out = new Map<number, number>()
-  for (const c of (await ctx.db.prepare('SELECT id, initial_hens AS n FROM cages WHERE organization_id = ? AND farm_id = ?').all(ctx.org, ctx.farm)) as { id: number; n: number }[]) {
+  for (const c of (await ctx.db.prepare('SELECT id, initial_hens AS n FROM cages WHERE organization_id = ? AND farm_id = ?').all(ctx.org, ctx.farm)) as {
+    id: number
+    n: number
+  }[]) {
     out.set(c.id, c.n)
   }
   const latest = await latestDay(ctx)
@@ -241,7 +253,9 @@ export async function listFlocks(ctx: Ctx, includeClosed = true): Promise<FlockS
 }
 
 async function getFlockRow(ctx: Ctx, id: number): Promise<FlockRowDb> {
-  const r = (await ctx.db.prepare('SELECT * FROM flocks WHERE id = ? AND organization_id = ? AND farm_id = ?').get(id, ctx.org, ctx.farm)) as FlockRowDb | undefined
+  const r = (await ctx.db.prepare('SELECT * FROM flocks WHERE id = ? AND organization_id = ? AND farm_id = ?').get(id, ctx.org, ctx.farm)) as
+    | FlockRowDb
+    | undefined
   assert(r, 'flock_not_found')
   return r
 }
@@ -289,7 +303,9 @@ export async function saveFlock(ctx: Ctx, f: FlockInput): Promise<number> {
       const first = (await ctx.db.prepare('SELECT MIN(from_date) AS d FROM flock_placements WHERE flock_id = ?').get(f.id)) as { d: string | null }
       assert(!first.d || first.d >= f.arrivalDate, 'placement_before_arrival')
       await ctx.db
-        .prepare('UPDATE flocks SET code = ?, breed = ?, source = ?, hatch_date = ?, hatch_date_estimated = ?, arrival_date = ?, initial_count = ?, notes = ? WHERE id = ? AND organization_id = ?')
+        .prepare(
+          'UPDATE flocks SET code = ?, breed = ?, source = ?, hatch_date = ?, hatch_date_estimated = ?, arrival_date = ?, initial_count = ?, notes = ? WHERE id = ? AND organization_id = ?'
+        )
         .run(...vals, f.id, ctx.org)
       await audit(ctx, { action: 'update', entity: 'flock', entityId: f.id, details: { before, after: f } })
       return f.id
@@ -320,7 +336,9 @@ export async function placeFlock(ctx: Ctx, flockId: number, cageIds: number[], f
     assert(flock.status === 'active', 'flock_closed')
     assert(fromDate >= flock.arrival_date, 'placement_before_arrival')
     for (const cageId of new Set(cageIds)) {
-      const cage = (await ctx.db.prepare('SELECT code FROM cages WHERE id = ? AND organization_id = ? AND farm_id = ?').get(cageId, ctx.org, ctx.farm)) as { code: string } | undefined
+      const cage = (await ctx.db.prepare('SELECT code FROM cages WHERE id = ? AND organization_id = ? AND farm_id = ?').get(cageId, ctx.org, ctx.farm)) as
+        | { code: string }
+        | undefined
       assert(cage, 'cage_not_found')
       const clash = (await ctx.db
         .prepare(
@@ -400,7 +418,9 @@ export async function saveReminder(ctx: Ctx, r: Omit<ReminderRow, 'id'> & { id: 
   return ctx.db.transaction(async () => {
     const vals = [r.atWeek, title, r.instructions?.trim() || null, r.active ? 1 : 0]
     if (r.id) {
-      const u = await ctx.db.prepare('UPDATE flock_reminders SET at_week = ?, title = ?, instructions = ?, active = ? WHERE id = ? AND organization_id = ?').run(...vals, r.id, ctx.org)
+      const u = await ctx.db
+        .prepare('UPDATE flock_reminders SET at_week = ?, title = ?, instructions = ?, active = ? WHERE id = ? AND organization_id = ?')
+        .run(...vals, r.id, ctx.org)
       assert(u.changes === 1, 'not_found')
       await audit(ctx, { action: 'update', entity: 'flock_reminder', entityId: r.id, details: r })
       return r.id
@@ -429,7 +449,14 @@ export async function remindersFor(ctx: Ctx, flocks: FlockSummary[], horizonWeek
        FROM flock_reminder_done r LEFT JOIN users u ON u.id = r.done_by
        WHERE r.organization_id = ? AND r.flock_id IN (${active.map(() => '?').join(',')})`
     )
-    .all(ctx.org, ...active.map((f) => f.id))) as { flockId: number; reminderId: number; outcome: 'done' | 'skipped'; note: string | null; doneAt: string; doneBy: string | null }[]
+    .all(ctx.org, ...active.map((f) => f.id))) as {
+    flockId: number
+    reminderId: number
+    outcome: 'done' | 'skipped'
+    note: string | null
+    doneAt: string
+    doneBy: string | null
+  }[]
   const out: ReminderDue[] = []
   for (const f of active) {
     const arrivalWeeks = flockAge(f.hatchDate, f.arrivalDate).weeks
@@ -461,7 +488,10 @@ export async function remindersFor(ctx: Ctx, flocks: FlockSummary[], horizonWeek
 export async function markReminder(ctx: Ctx, flockId: number, reminderId: number, outcome: 'done' | 'skipped', note: string | null) {
   const user = ctx.user
   if (!user) throw new AppError('not_logged_in')
-  assert(['flock.record', 'medicine.record', 'flocks.manage'].some((p) => user.permissions.includes(p)), 'no_permission')
+  assert(
+    ['flock.record', 'medicine.record', 'flocks.manage'].some((p) => user.permissions.includes(p)),
+    'no_permission'
+  )
   assert(outcome === 'done' || (note?.trim().length ?? 0) >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const f = await getFlockRow(ctx, flockId)

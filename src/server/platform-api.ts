@@ -20,7 +20,10 @@ export interface PlatformCtx extends AnonCtx {
 }
 
 type SignedInCtx = PlatformCtx & { platformUser: PlatformUser }
-type Handler<M extends PlatformMethod> = (input: Api[M]['in'], ctx: M extends 'platform.status' | 'platform.login' ? PlatformCtx : SignedInCtx) => Promise<Api[M]['out']> | Api[M]['out']
+type Handler<M extends PlatformMethod> = (
+  input: Api[M]['in'],
+  ctx: M extends 'platform.status' | 'platform.login' ? PlatformCtx : SignedInCtx
+) => Promise<Api[M]['out']> | Api[M]['out']
 export type PlatformHandlers = { [M in PlatformMethod]: Handler<M> }
 
 const PUBLIC = new Set<PlatformMethod>(['platform.status', 'platform.login'])

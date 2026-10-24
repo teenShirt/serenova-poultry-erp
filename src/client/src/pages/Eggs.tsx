@@ -139,7 +139,11 @@ export function EggsPage() {
                           <tr key={c.cageId} style={r.dirty ? { background: '#fffbea' } : undefined}>
                             <td>
                               <strong>{c.name}</strong>
-                              {r.id && !r.dirty && <span className="badge good" style={{ marginLeft: 8 }}>✓</span>}
+                              {r.id && !r.dirty && (
+                                <span className="badge good" style={{ marginLeft: 8 }}>
+                                  ✓
+                                </span>
+                              )}
                             </td>
                             <td style={{ width: 140 }}>
                               <NumInput value={r.good} onChange={(v) => upd(c.cageId, { good: v })} ariaLabel={`${c.name} ${t('eggs.good')}`} />

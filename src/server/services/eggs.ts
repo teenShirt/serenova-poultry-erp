@@ -81,7 +81,9 @@ export async function deleteEggs(ctx: Ctx, id: number, reason: string) {
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const row = (await ctx.db
-      .prepare('SELECT e.*, d.business_date FROM egg_collections e JOIN farm_days d ON d.id = e.day_id WHERE e.id = ? AND e.organization_id = ? AND d.farm_id = ?')
+      .prepare(
+        'SELECT e.*, d.business_date FROM egg_collections e JOIN farm_days d ON d.id = e.day_id WHERE e.id = ? AND e.organization_id = ? AND d.farm_id = ?'
+      )
       .get(id, ctx.org, ctx.farm)) as (Record<string, unknown> & { business_date: string; day_id: number }) | undefined
     assert(row, 'not_found')
     await requireWritableDay(ctx, row.business_date)

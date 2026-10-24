@@ -75,11 +75,25 @@ export async function flowSummary(ctx: Ctx, from: string, to: string): Promise<F
     to,
     feed: {
       openingKg: await feedBalance(ctx, addDays(from, -1)),
-      receivedKg: round(p.reduce((a, d) => a + d.feedKg, 0), 2),
-      issuedKg: round(p.reduce((a, d) => a + d.feedIssuedKg, 0), 2),
-      consumedKg: consumed.length ? round(consumed.reduce((a, b) => a + b, 0), 2) : null,
+      receivedKg: round(
+        p.reduce((a, d) => a + d.feedKg, 0),
+        2
+      ),
+      issuedKg: round(
+        p.reduce((a, d) => a + d.feedIssuedKg, 0),
+        2
+      ),
+      consumedKg: consumed.length
+        ? round(
+            consumed.reduce((a, b) => a + b, 0),
+            2
+          )
+        : null,
       closingKg: await feedBalance(ctx, to),
-      purchaseCost: round(p.reduce((a, d) => a + d.cost, 0), 2)
+      purchaseCost: round(
+        p.reduce((a, d) => a + d.cost, 0),
+        2
+      )
     },
     eggs: {
       collected: sum((s) => s.eggs),
@@ -93,7 +107,15 @@ export async function flowSummary(ctx: Ctx, from: string, to: string): Promise<F
       openingCracked: openGood.cracked,
       closingCracked: closeGood.cracked
     },
-    money: { sales: round(disp.amount, 2), received: round(paid.a, 2), outstanding: await outstandingTotal(ctx), purchases: round(p.reduce((a, d) => a + d.cost, 0), 2) },
+    money: {
+      sales: round(disp.amount, 2),
+      received: round(paid.a, 2),
+      outstanding: await outstandingTotal(ctx),
+      purchases: round(
+        p.reduce((a, d) => a + d.cost, 0),
+        2
+      )
+    },
     hens: {
       opening: recorded.length ? recorded[0].opening : null,
       closing: recorded.length ? recorded[recorded.length - 1].closing : null,

@@ -16,9 +16,10 @@ import { storeBalances } from './stores'
  * totals. Definitions are in src/shared/overview.ts; production figures use closed days only.
  */
 export async function organizationOverview(ctx: Ctx, from: string, to: string): Promise<OrganizationOverview> {
-  const farms = (await ctx.db
-    .prepare("SELECT id, name FROM farms WHERE organization_id = ? AND status = 'active' ORDER BY id")
-    .all(ctx.org)) as { id: number; name: string }[]
+  const farms = (await ctx.db.prepare("SELECT id, name FROM farms WHERE organization_id = ? AND status = 'active' ORDER BY id").all(ctx.org)) as {
+    id: number
+    name: string
+  }[]
   const settings = await getSettings(ctx)
   const today = await farmToday(ctx)
   const rows: FarmOverviewRow[] = []
@@ -38,7 +39,10 @@ export async function organizationOverview(ctx: Ctx, from: string, to: string): 
     const birdDays = closed.reduce((s, p) => s + (p.opening + p.closing) / 2, 0)
     const eggs = closed.reduce((s, p) => s + p.eggs, 0)
     const deaths = closed.reduce((s, p) => s + p.deaths, 0)
-    const feedKg = round(closed.reduce((s, p) => s + (p.feedKg ?? 0), 0), 2)
+    const feedKg = round(
+      closed.reduce((s, p) => s + (p.feedKg ?? 0), 0),
+      2
+    )
     const firstOpening = closed[0]?.opening ?? 0
     firstOpeningTotal += firstOpening
     birdDaysAll += birdDays
@@ -46,24 +50,45 @@ export async function organizationOverview(ctx: Ctx, from: string, to: string): 
     for (const p of series) trend.get(p.date)![String(farm.id)] = p.status === 'closed' ? p.eggs : null
 
     // Birds now: the latest day's closing counts (the cages' starting counts before any day).
-    let birdsNow = ((await ctx.db.prepare('SELECT COALESCE(SUM(initial_hens), 0) AS n FROM cages WHERE farm_id = ? AND active = 1').get(farm.id)) as { n: number }).n
+    let birdsNow = (
+      (await ctx.db.prepare('SELECT COALESCE(SUM(initial_hens), 0) AS n FROM cages WHERE farm_id = ? AND active = 1').get(farm.id)) as { n: number }
+    ).n
     const latest = await latestDay(fctx)
     if (latest) birdsNow = (await loadCageDayStats(fctx, settings, latest.date, latest.date)).reduce((s, r) => s + r.closing, 0)
 
     const flocks = await listFlocks(fctx, false)
     const due = (await remindersFor(fctx, flocks, 0)).filter((r) => r.state === 'due' || r.state === 'overdue')
-    for (const r of due) reminders.push({ farmName: farm.name, flockCode: r.flockCode, title: r.title, atWeek: r.atWeek, state: r.state as 'due' | 'overdue', dueOn: r.dueOn })
+    for (const r of due)
+      reminders.push({ farmName: farm.name, flockCode: r.flockCode, title: r.title, atWeek: r.atWeek, state: r.state as 'due' | 'overdue', dueOn: r.dueOn })
 
     const stock = await storeBalances(fctx)
     const alerted = new Set<number>()
     for (const b of stock) {
       if ((b.isLow || b.needsReorder) && !alerted.has(b.itemId)) {
         alerted.add(b.itemId)
-        stockAlerts.push({ farmName: farm.name, warehouseName: b.warehouseName, item: b.itemName, balance: b.balance, unit: b.unit, kind: b.isLow ? 'low' : 'reorder' })
+        stockAlerts.push({
+          farmName: farm.name,
+          warehouseName: b.warehouseName,
+          item: b.itemName,
+          balance: b.balance,
+          unit: b.unit,
+          kind: b.isLow ? 'low' : 'reorder'
+        })
       }
     }
-    const exp = (await listBatches(fctx, { onlyInStock: true, farmId: farm.id })).filter((b) => b.daysToExpiry !== null && b.daysToExpiry <= settings.medicineExpiryWarnDays)
-    for (const b of exp) expiring.push({ farmName: farm.name, item: b.itemName, batchNo: b.batchNo, expiryDate: b.expiryDate!, daysToExpiry: b.daysToExpiry!, balance: b.balance, unit: b.unit })
+    const exp = (await listBatches(fctx, { onlyInStock: true, farmId: farm.id })).filter(
+      (b) => b.daysToExpiry !== null && b.daysToExpiry <= settings.medicineExpiryWarnDays
+    )
+    for (const b of exp)
+      expiring.push({
+        farmName: farm.name,
+        item: b.itemName,
+        batchNo: b.batchNo,
+        expiryDate: b.expiryDate!,
+        daysToExpiry: b.daysToExpiry!,
+        balance: b.balance,
+        unit: b.unit
+      })
 
     const tasks = (await ctx.db
       .prepare(
@@ -84,7 +109,10 @@ export async function organizationOverview(ctx: Ctx, from: string, to: string): 
       culls: closed.reduce((s, p) => s + p.removals, 0),
       mortalityPct: firstOpening > 0 ? round((deaths / firstOpening) * 100, 2) : null,
       feedKg,
-      waterLitres: round(closed.reduce((s, p) => s + (p.waterLitres ?? 0), 0), 1),
+      waterLitres: round(
+        closed.reduce((s, p) => s + (p.waterLitres ?? 0), 0),
+        1
+      ),
       feedPerBirdG: birdDays > 0 && feedKg > 0 ? round((feedKg * 1000) / birdDays, 1) : null,
       activeFlocks: flocks.length,
       tasksDue: Number(tasks.due ?? 0),
@@ -171,9 +199,11 @@ export async function movementsPage(
     args.push(f.type)
   }
   const sqlWhere = where.join(' AND ')
-  const total = ((await ctx.db
-    .prepare(`SELECT COUNT(*) AS n FROM inventory_transactions t JOIN warehouses w ON w.id = t.warehouse_id WHERE ${sqlWhere}`)
-    .get(...args)) as { n: number }).n
+  const total = (
+    (await ctx.db.prepare(`SELECT COUNT(*) AS n FROM inventory_transactions t JOIN warehouses w ON w.id = t.warehouse_id WHERE ${sqlWhere}`).get(...args)) as {
+      n: number
+    }
+  ).n
   const rows = (await ctx.db
     .prepare(
       `SELECT t.id, t.txn_date AS date, w.name AS store, cw.name AS counterpart, i.name AS item, b.batch_no AS batchNo, t.type, t.quantity, i.unit,

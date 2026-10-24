@@ -57,7 +57,11 @@ function StartDay({ date, onStarted }: { date: string; onStarted: () => void }) 
   const start = async () => {
     setBusy(true)
     try {
-      await call('days.start', { date, corrections: corrections.map((c) => ({ cageId: c.cageId, opening: c.opening!, reason: c.reason })), acknowledgeWarnings: ack })
+      await call('days.start', {
+        date,
+        corrections: corrections.map((c) => ({ cageId: c.cageId, opening: c.opening!, reason: c.reason })),
+        acknowledgeWarnings: ack
+      })
       toast('success', t('day.started'))
       onStarted()
     } catch (e) {
@@ -75,7 +79,9 @@ function StartDay({ date, onStarted }: { date: string; onStarted: () => void }) 
       <Card title={t('day.startTitle')}>
         <div className="stack">
           <Notice tone="info">{t('day.startIntro')}</Notice>
-          <div className="muted">{p.previous ? t('day.previousDay', { date: p.previous.date, status: t('status.' + p.previous.status) }) : t('day.noPrevious')}</div>
+          <div className="muted">
+            {p.previous ? t('day.previousDay', { date: p.previous.date, status: t('status.' + p.previous.status) }) : t('day.noPrevious')}
+          </div>
           {p.warnings.map((w) => (
             <Notice key={w} tone={blocking.includes(w) ? 'bad' : 'warn'}>
               {t('day.warn.' + w, { date: p.previous?.date ?? '', count: p.gapDays })}
@@ -105,7 +111,11 @@ function StartDay({ date, onStarted }: { date: string; onStarted: () => void }) 
                           <td className="num">{num(c.carried)}</td>
                           {can('day.correct_opening') && (
                             <td style={{ width: 150 }}>
-                              <NumInput value={v?.opening ?? c.carried} onChange={(o) => setCorr({ ...corr, [c.cageId]: { opening: o, reason: v?.reason ?? '' } })} ariaLabel={`${c.name} ${t('day.opening')}`} />
+                              <NumInput
+                                value={v?.opening ?? c.carried}
+                                onChange={(o) => setCorr({ ...corr, [c.cageId]: { opening: o, reason: v?.reason ?? '' } })}
+                                ariaLabel={`${c.name} ${t('day.opening')}`}
+                              />
                             </td>
                           )}
                           {can('day.correct_opening') && (
@@ -254,7 +264,11 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
                       </span>
                     )}
                     {can('day.correct_opening') && writable && (
-                      <button className="icon-btn" title={t('day.correction')} onClick={() => setCorrect({ cageId: c.cageId, name: c.name, opening: c.opening })}>
+                      <button
+                        className="icon-btn"
+                        title={t('day.correction')}
+                        onClick={() => setCorrect({ cageId: c.cageId, name: c.name, opening: c.opening })}
+                      >
                         <Pencil size={14} />
                       </button>
                     )}
@@ -326,13 +340,13 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
       </Card>
 
       <Card title={t('day.checklist')}>
-        {ov.issues.length === 0 || blocking.length === 0 ? (
-          <Notice tone="good">{t('day.allClear')}</Notice>
-        ) : null}
+        {ov.issues.length === 0 || blocking.length === 0 ? <Notice tone="good">{t('day.allClear')}</Notice> : null}
         {writable && can('day.approve_issues') && (
           <div className="row mt">
             {Object.entries(
-              ov.issues.filter((i) => i.confirmable && !i.confirmation).reduce<Record<string, DayIssue[]>>((g, i) => ({ ...g, [i.code]: [...(g[i.code] ?? []), i] }), {})
+              ov.issues
+                .filter((i) => i.confirmable && !i.confirmation)
+                .reduce<Record<string, DayIssue[]>>((g, i) => ({ ...g, [i.code]: [...(g[i.code] ?? []), i] }), {})
             )
               .filter(([, list]) => list.length > 1)
               .map(([code, list]) => (
@@ -358,10 +372,7 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
                 </button>
               )}
               {writable && can('day.approve_issues') && i.confirmation && (
-                <button
-                  className="btn sm ghost"
-                  onClick={() => call('days.revokeConfirmation', { date: ov.date, cageId: i.cageId, key: i.key }).catch(fail)}
-                >
+                <button className="btn sm ghost" onClick={() => call('days.revokeConfirmation', { date: ov.date, cageId: i.cageId, key: i.key }).catch(fail)}>
                   {t('day.revoke')}
                 </button>
               )}
@@ -377,7 +388,13 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
 
       <Card title={t('day.managerComment')}>
         <div className="stack">
-          <textarea className="input" value={comment} disabled={!can('day.comment') || !writable} onChange={(e) => setComment(e.target.value)} maxLength={2000} />
+          <textarea
+            className="input"
+            value={comment}
+            disabled={!can('day.comment') || !writable}
+            onChange={(e) => setComment(e.target.value)}
+            maxLength={2000}
+          />
           <div className="row">
             <button className="btn" onClick={() => setPreview({ kind: 'day_open', date: ov.date })}>
               <Printer size={18} /> {t('day.openReport')}
@@ -399,7 +416,12 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
               </button>
             )}
             {can('day.close') && ov.status !== 'closed' && (
-              <button className="btn primary big" disabled={blocking.length > 0} onClick={() => setClosing(true)} title={blocking.length ? t('err.day_has_open_issues', { count: blocking.length }) : ''}>
+              <button
+                className="btn primary big"
+                disabled={blocking.length > 0}
+                onClick={() => setClosing(true)}
+                title={blocking.length ? t('err.day_has_open_issues', { count: blocking.length }) : ''}
+              >
                 <Lock size={18} /> {t('day.closeButton')}
               </button>
             )}
@@ -559,7 +581,9 @@ function AmendmentHistory({ date }: { date: string }) {
                 <td className="nowrap">
                   {a.openedBy} · {dateTime(a.openedAt)}
                 </td>
-                <td className="nowrap">{a.closedAt ? `${a.closedBy} · ${dateTime(a.closedAt)}` : <span className="badge warn">{t('status.amending')}</span>}</td>
+                <td className="nowrap">
+                  {a.closedAt ? `${a.closedBy} · ${dateTime(a.closedAt)}` : <span className="badge warn">{t('status.amending')}</span>}
+                </td>
               </tr>
             ))}
           </tbody>

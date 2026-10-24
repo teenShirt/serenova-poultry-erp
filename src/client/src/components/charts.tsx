@@ -34,7 +34,23 @@ function Legend({ series }: { series: SeriesDef[] }) {
   )
 }
 
-function Tip({ active, payload, label, series, unit, digits, labelFormat }: { active?: boolean; payload?: { dataKey: string; value: number | null }[]; label?: string; series: SeriesDef[]; unit?: string; digits: number; labelFormat: (l: string) => string }) {
+function Tip({
+  active,
+  payload,
+  label,
+  series,
+  unit,
+  digits,
+  labelFormat
+}: {
+  active?: boolean
+  payload?: { dataKey: string; value: number | null }[]
+  label?: string
+  series: SeriesDef[]
+  unit?: string
+  digits: number
+  labelFormat: (l: string) => string
+}) {
   const { num, t } = useApp()
   if (!active || !payload?.length) return null
   return (
@@ -92,10 +108,26 @@ export function TimeChart({
             <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
               <XAxis dataKey="date" tickFormatter={short} {...axisProps} minTickGap={24} />
-              <YAxis {...axisProps} allowDecimals={digits > 0} width={52} tickFormatter={(v) => num(v, digits > 1 ? 1 : 0)} domain={yDomain ?? ['auto', 'auto']} />
+              <YAxis
+                {...axisProps}
+                allowDecimals={digits > 0}
+                width={52}
+                tickFormatter={(v) => num(v, digits > 1 ? 1 : 0)}
+                domain={yDomain ?? ['auto', 'auto']}
+              />
               <Tooltip content={<Tip series={series} unit={unit} digits={digits} labelFormat={long} />} cursor={{ stroke: AXIS, strokeDasharray: '3 3' }} />
               {series.map((s) => (
-                <Line key={s.key} type="monotone" dataKey={s.key} stroke={s.color} strokeWidth={2} dot={data.length <= 31 ? { r: 3, strokeWidth: 0, fill: s.color } : false} activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }} connectNulls={false} isAnimationActive={false} />
+                <Line
+                  key={s.key}
+                  type="monotone"
+                  dataKey={s.key}
+                  stroke={s.color}
+                  strokeWidth={2}
+                  dot={data.length <= 31 ? { r: 3, strokeWidth: 0, fill: s.color } : false}
+                  activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
+                  connectNulls={false}
+                  isAnimationActive={false}
+                />
               ))}
             </LineChart>
           ) : (
@@ -126,7 +158,25 @@ export function TimeChart({
 }
 
 /** Comparison between cages: one bar per cage, one hue (identity is the label, not the colour). */
-export function CageBars({ title, data: input, valueKey, label, unit, digits = 0, color = SERIES.blue, height = 260 }: { title: string; data: readonly object[]; valueKey: string; label: string; unit?: string; digits?: number; color?: string; height?: number }) {
+export function CageBars({
+  title,
+  data: input,
+  valueKey,
+  label,
+  unit,
+  digits = 0,
+  color = SERIES.blue,
+  height = 260
+}: {
+  title: string
+  data: readonly object[]
+  valueKey: string
+  label: string
+  unit?: string
+  digits?: number
+  color?: string
+  height?: number
+}) {
   const { num, t } = useApp()
   const series = [{ key: valueKey, label, color }]
   const data = input as Record<string, unknown>[]

@@ -36,11 +36,7 @@ export function AdminPage() {
   return (
     <div className="page">
       <PageHeader title={t('admin.title')} icon={<ShieldCheck size={26} color="var(--brand)" />} />
-      <Tabs
-        value={tab}
-        onChange={setTab}
-        tabs={tabs}
-      />
+      <Tabs value={tab} onChange={setTab} tabs={tabs} />
       {tab === 'overview' && <Overview onTab={setTab} />}
       {tab === 'users' && <UsersTab />}
       {tab === 'database' && <DatabaseTab />}
@@ -77,8 +73,21 @@ function Overview({ onTab }: { onTab: (t: Tab) => void }) {
         </Notice>
       )}
       <div className="grid stats">
-        <Kpi icon={<Users size={18} />} label={t('admin.activeUsers')} value={num(active.length)} sub={t('admin.adminsWorkers', { admins: active.filter((u) => u.role === 'admin').length, workers: active.filter((u) => u.role === 'operator').length })} />
-        <Kpi icon={<Database size={18} />} label={t('admin.dbSize')} value={info ? `${mb(info.sizeBytes)} MB` : '—'} sub={info ? t('admin.records', { count: num(info.tables.reduce((s, x) => s + x.rows, 0)) }) : undefined} />
+        <Kpi
+          icon={<Users size={18} />}
+          label={t('admin.activeUsers')}
+          value={num(active.length)}
+          sub={t('admin.adminsWorkers', {
+            admins: active.filter((u) => u.role === 'admin').length,
+            workers: active.filter((u) => u.role === 'operator').length
+          })}
+        />
+        <Kpi
+          icon={<Database size={18} />}
+          label={t('admin.dbSize')}
+          value={info ? `${mb(info.sizeBytes)} MB` : '—'}
+          sub={info ? t('admin.records', { count: num(info.tables.reduce((s, x) => s + x.rows, 0)) }) : undefined}
+        />
         <Kpi
           icon={<DatabaseBackup size={18} />}
           label={t('admin.lastBackup')}
@@ -93,7 +102,13 @@ function Overview({ onTab }: { onTab: (t: Tab) => void }) {
           sub={info?.lastCheck ? dateTime(info.lastCheck.at) : undefined}
           tone={info?.lastCheck && !info.lastCheck.ok ? 'bad' : undefined}
         />
-        <Kpi icon={<Activity size={18} />} label={t('admin.failedLogins')} value={num(failed)} sub={t('common.last30')} tone={failed > 10 ? 'warn' : undefined} />
+        <Kpi
+          icon={<Activity size={18} />}
+          label={t('admin.failedLogins')}
+          value={num(failed)}
+          sub={t('common.last30')}
+          tone={failed > 10 ? 'warn' : undefined}
+        />
       </div>
       <div className="grid cols-2">
         <TimeChart
@@ -105,7 +120,12 @@ function Overview({ onTab }: { onTab: (t: Tab) => void }) {
             { key: 'logins', label: t('admin.logins'), color: SERIES.aqua }
           ]}
         />
-        <CageBars title={t('admin.byUser')} data={(act?.byUser ?? []).map((u) => ({ name: u.username, changes: u.changes }))} valueKey="changes" label={t('admin.changes')} />
+        <CageBars
+          title={t('admin.byUser')}
+          data={(act?.byUser ?? []).map((u) => ({ name: u.username, changes: u.changes }))}
+          valueKey="changes"
+          label={t('admin.changes')}
+        />
       </div>
       <Card
         title={t('admin.coverage')}
@@ -190,9 +210,7 @@ function DatabaseTab() {
               {d.file}
             </dd>
             <dt>{t('admin.dbSize')}</dt>
-            <dd>
-              {mb(d.sizeBytes)} MB
-            </dd>
+            <dd>{mb(d.sizeBytes)} MB</dd>
             <dt>{t('admin.schema')}</dt>
             <dd>v{d.schemaVersion}</dd>
             <dt>Server</dt>

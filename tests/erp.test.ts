@@ -10,7 +10,16 @@ import { archiveRole, saveRole } from '../src/server/services/roles'
 import { createUser, listUsers, resetPassword, updateUser } from '../src/server/services/auth'
 import { saveParty } from '../src/server/services/parties'
 import { cancelReceipt, createReceipt, listReceipts } from '../src/server/services/purchases'
-import { addPayment, adjustEggStore, cancelDispatch, createDispatch, eggStock, listDispatches, outstandingTotal, salesSeries } from '../src/server/services/sales'
+import {
+  addPayment,
+  adjustEggStore,
+  cancelDispatch,
+  createDispatch,
+  eggStock,
+  listDispatches,
+  outstandingTotal,
+  salesSeries
+} from '../src/server/services/sales'
 import { flowSummary, purchasesSeries } from '../src/server/services/supply'
 import { activitySummary, checkDatabase, dbInfo } from '../src/server/services/admin'
 import { makeFarm } from './helpers'
@@ -87,7 +96,19 @@ describe('roles, permissions and cage responsibility', () => {
 
   it('a role can give a non-administrator an administrative task, such as stock adjustments', async () => {
     const f = await makeFarm()
-    const adjust = { itemId: f.feedId, type: 'adjustment' as const, quantity: -10, date: D1, batchNo: null, expiryDate: null, unitCost: null, supplier: null, reference: null, notes: 'Counted', cageId: null }
+    const adjust = {
+      itemId: f.feedId,
+      type: 'adjustment' as const,
+      quantity: -10,
+      date: D1,
+      batchNo: null,
+      expiryDate: null,
+      unitCost: null,
+      supplier: null,
+      reference: null,
+      notes: 'Counted',
+      cageId: null
+    }
     expect(await code(() => recordTxn(f.worker, adjust))).toBe('no_permission')
     const storekeeper = await saveRole(f.admin, { id: null, name: 'Storekeeper', description: null, permissions: ['inventory.record', 'inventory.adjust'] })
     await updateUser(f.admin, { id: f.worker.user!.id, email: 'worker@test.farm', displayName: 'Worker', roleId: storekeeper, active: true })
@@ -98,16 +119,27 @@ describe('roles, permissions and cage responsibility', () => {
 
   it('nobody can give permissions they do not hold, or change an account more powerful than their own', async () => {
     const f = await makeFarm()
-    const userManager = await saveRole(f.admin, { id: null, name: 'User manager', description: null, permissions: ['users.manage', 'roles.manage', 'eggs.record'] })
+    const userManager = await saveRole(f.admin, {
+      id: null,
+      name: 'User manager',
+      description: null,
+      permissions: ['users.manage', 'roles.manage', 'eggs.record']
+    })
     await updateUser(f.admin, { id: f.worker.user!.id, email: 'worker@test.farm', displayName: 'Worker', roleId: userManager, active: true })
     const m = await f.signIn('worker@test.farm', 'worker123')
     // Cannot make a role with more than they hold, or give anyone (themselves included) the administrator role.
     expect(await code(() => saveRole(m, { id: null, name: 'Big', description: null, permissions: ['backup.restore'] }))).toBe('cannot_grant_permission')
-    expect(await code(() => updateUser(m, { id: m.user!.id, email: 'worker@test.farm', displayName: 'Worker', roleId: f.roles.admin, active: true }))).toBe('cannot_grant_permission')
-    expect(await code(() => createUser(m, { email: 'friend@test.farm', displayName: 'Friend', password: 'abcdef', roleId: f.roles.admin }))).toBe('cannot_grant_permission')
+    expect(await code(() => updateUser(m, { id: m.user!.id, email: 'worker@test.farm', displayName: 'Worker', roleId: f.roles.admin, active: true }))).toBe(
+      'cannot_grant_permission'
+    )
+    expect(await code(() => createUser(m, { email: 'friend@test.farm', displayName: 'Friend', password: 'abcdef', roleId: f.roles.admin }))).toBe(
+      'cannot_grant_permission'
+    )
     // Cannot touch the administrator's account.
     expect(await code(() => resetPassword(m, f.admin.user!.id, 'hacked123'))).toBe('no_permission')
-    expect(await code(() => updateUser(m, { id: f.admin.user!.id, email: 'admin@test.farm', displayName: 'A', roleId: userManager, active: false }))).toBe('no_permission')
+    expect(await code(() => updateUser(m, { id: f.admin.user!.id, email: 'admin@test.farm', displayName: 'A', roleId: userManager, active: false }))).toBe(
+      'no_permission'
+    )
     expect(await code(() => setUserCages(m, f.admin.user!.id, [f.cageIds[0]]))).toBe('no_permission')
     // Within their own level they can work normally.
     const helper = await saveRole(m, { id: null, name: 'Helper', description: null, permissions: ['eggs.record'] })
@@ -123,7 +155,9 @@ describe('roles, permissions and cage responsibility', () => {
     await archiveRole(f.admin, spare)
     expect(await code(() => createUser(f.admin, { email: 'x@test.farm', displayName: 'X', password: 'abcdef', roleId: spare }))).toBe('role_not_found')
     // The last active administrator stays an administrator.
-    expect(await code(() => updateUser(f.admin, { id: f.admin.user!.id, email: 'admin@test.farm', displayName: 'Admin', roleId: f.roles.worker, active: true }))).toBe('last_admin')
+    expect(
+      await code(() => updateUser(f.admin, { id: f.admin.user!.id, email: 'admin@test.farm', displayName: 'Admin', roleId: f.roles.worker, active: true }))
+    ).toBe('last_admin')
   })
 
   it('data-entry users get the Farm Worker role with every duty', async () => {
@@ -136,7 +170,12 @@ describe('roles, permissions and cage responsibility', () => {
   it('builds "my duties today" and ticks off work as it is recorded', async () => {
     const f = await makeFarm()
     const [c1] = f.cageIds
-    const role = await saveRole(f.admin, { id: null, name: 'Morning shift', description: null, permissions: ['day.start', 'eggs.record', 'feed.record', 'flock.record'] })
+    const role = await saveRole(f.admin, {
+      id: null,
+      name: 'Morning shift',
+      description: null,
+      permissions: ['day.start', 'eggs.record', 'feed.record', 'flock.record']
+    })
     await updateUser(f.admin, { id: f.worker.user!.id, email: 'worker@test.farm', displayName: 'Worker', roleId: role, active: true })
     await setUserCages(f.admin, f.worker.user!.id, [c1])
     const w = await f.signIn('worker@test.farm', 'worker123')
@@ -157,7 +196,9 @@ describe('goods received from suppliers', () => {
   it('adds stock exactly once per line, numbers receipts, and can be cancelled', async () => {
     const f = await makeFarm()
     const mill = await saveParty(f.worker, 'supplier', { id: null, name: 'Prima Feed Mill', phone: '0771234567', address: null, notes: null, active: true })
-    expect(await code(() => saveParty(f.worker, 'supplier', { id: null, name: 'prima feed mill', phone: null, address: null, notes: null, active: true }))).toBe('name_taken')
+    expect(
+      await code(() => saveParty(f.worker, 'supplier', { id: null, name: 'prima feed mill', phone: null, address: null, notes: null, active: true }))
+    ).toBe('name_taken')
     const r1 = await createReceipt(f.worker, {
       date: D1,
       supplierId: mill,
@@ -169,13 +210,31 @@ describe('goods received from suppliers', () => {
         { itemId: f.medId, quantity: 500, unitCost: 2, batchNo: 'VM-02', expiryDate: '2027-01-31' }
       ]
     })
-    const r2 = await createReceipt(f.worker, { date: D1, supplierId: mill, invoiceNo: null, vehicle: null, notes: null, lines: [{ itemId: f.feedId, quantity: 100, unitCost: null, batchNo: null, expiryDate: null }] })
+    const r2 = await createReceipt(f.worker, {
+      date: D1,
+      supplierId: mill,
+      invoiceNo: null,
+      vehicle: null,
+      notes: null,
+      lines: [{ itemId: f.feedId, quantity: 100, unitCost: null, batchNo: null, expiryDate: null }]
+    })
     expect(r1.grnNo).toBe('GRN-20260309-001')
     expect(r2.grnNo).toBe('GRN-20260309-002')
     expect(await itemBalance(f.worker, f.feedId)).toBe(5000 + 2000 + 100)
     const list = await listReceipts(f.worker, D1, D1)
     expect(list.find((r) => r.grnNo === r1.grnNo)).toMatchObject({ supplierName: 'Prima Feed Mill', totalCost: 2000 * 160 + 500 * 2 })
-    expect(await code(() => createReceipt(f.worker, { date: D1, supplierId: null, invoiceNo: null, vehicle: null, notes: null, lines: [{ itemId: f.medId, quantity: 5, unitCost: null, batchNo: null, expiryDate: null }] }))).toBe('batch_required')
+    expect(
+      await code(() =>
+        createReceipt(f.worker, {
+          date: D1,
+          supplierId: null,
+          invoiceNo: null,
+          vehicle: null,
+          notes: null,
+          lines: [{ itemId: f.medId, quantity: 5, unitCost: null, batchNo: null, expiryDate: null }]
+        })
+      )
+    ).toBe('batch_required')
     expect(await code(() => cancelReceipt(f.worker, r2.id, 'typo'))).toBe('no_permission')
     await cancelReceipt(f.admin, r2.id, 'Entered twice')
     expect(await itemBalance(f.worker, f.feedId)).toBe(7000)
@@ -183,9 +242,32 @@ describe('goods received from suppliers', () => {
 
   it('cannot cancel a delivery whose stock has already been used', async () => {
     const f = await makeFarm()
-    const r = await createReceipt(f.worker, { date: D1, supplierId: null, invoiceNo: null, vehicle: null, notes: null, lines: [{ itemId: f.feedId, quantity: 1000, unitCost: null, batchNo: null, expiryDate: null }] })
+    const r = await createReceipt(f.worker, {
+      date: D1,
+      supplierId: null,
+      invoiceNo: null,
+      vehicle: null,
+      notes: null,
+      lines: [{ itemId: f.feedId, quantity: 1000, unitCost: null, batchNo: null, expiryDate: null }]
+    })
     await startDay(f.worker, { date: D1, corrections: [], acknowledgeWarnings: false })
-    await saveFeed(f.worker, { date: D1, cageId: f.cageIds[0], itemId: f.feedId, batchNo: null, openingStock: null, issued: 5500, returned: 0, wasted: 0, measuredConsumption: null, closingStock: null, notes: null }, null)
+    await saveFeed(
+      f.worker,
+      {
+        date: D1,
+        cageId: f.cageIds[0],
+        itemId: f.feedId,
+        batchNo: null,
+        openingStock: null,
+        issued: 5500,
+        returned: 0,
+        wasted: 0,
+        measuredConsumption: null,
+        closingStock: null,
+        notes: null
+      },
+      null
+    )
     expect(await code(() => cancelReceipt(f.admin, r.id, 'mistake'))).toBe('insufficient_stock')
   })
 })
@@ -233,8 +315,31 @@ describe('egg store and sales', () => {
 
   it('daily series and the whole-farm flow agree with the records', async () => {
     const { f, shop } = await farmWithEggs()
-    await createReceipt(f.worker, { date: D2, supplierId: null, invoiceNo: null, vehicle: null, notes: null, lines: [{ itemId: f.feedId, quantity: 1000, unitCost: 150, batchNo: null, expiryDate: null }] })
-    await saveFeed(f.worker, { date: D1, cageId: f.cageIds[0], itemId: f.feedId, batchNo: null, openingStock: null, issued: 115, returned: 0, wasted: 0, measuredConsumption: null, closingStock: null, notes: null }, null)
+    await createReceipt(f.worker, {
+      date: D2,
+      supplierId: null,
+      invoiceNo: null,
+      vehicle: null,
+      notes: null,
+      lines: [{ itemId: f.feedId, quantity: 1000, unitCost: 150, batchNo: null, expiryDate: null }]
+    })
+    await saveFeed(
+      f.worker,
+      {
+        date: D1,
+        cageId: f.cageIds[0],
+        itemId: f.feedId,
+        batchNo: null,
+        openingStock: null,
+        issued: 115,
+        returned: 0,
+        wasted: 0,
+        measuredConsumption: null,
+        closingStock: null,
+        notes: null
+      },
+      null
+    )
     await createDispatch(f.worker, dispatch(shop, 1000, { amountPaid: 45000 }))
     const s = await salesSeries(f.worker, D1, D2)
     expect(s[0]).toMatchObject({ collectedGood: 1700, dispatchedGood: 0, stockGood: 1700, stockCracked: 30 })

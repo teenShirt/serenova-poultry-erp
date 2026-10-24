@@ -83,7 +83,10 @@ export function DashboardPage() {
     .map((c) => ({ name: c.name, value: ov?.status === 'not_started' ? c.opening : c.closing }))
     .filter((c) => c.value > 0)
     .sort((a, b) => b.value - a.value)
-  const donut = byCage.length > 5 ? [...byCage.slice(0, 4), { name: t('dash2.otherCages', { count: byCage.length - 4 }), value: byCage.slice(4).reduce((s, c) => s + c.value, 0) }] : byCage
+  const donut =
+    byCage.length > 5
+      ? [...byCage.slice(0, 4), { name: t('dash2.otherCages', { count: byCage.length - 4 }), value: byCage.slice(4).reduce((s, c) => s + c.value, 0) }]
+      : byCage
   const donutTotal = donut.reduce((s, c) => s + c.value, 0)
 
   const stockRows = [...(stock ?? [])]
@@ -139,8 +142,22 @@ export function DashboardPage() {
       ) : (
         <>
           <div className="dash-kpis">
-            <KpiTile tone="blue" icon={<Bird size={26} />} label={t('dash2.flock')} value={hens === null ? '—' : num(hens)} change={change('closing')} sub={t('dash2.vsWeek')} />
-            <KpiTile tone="green" icon={<Egg size={26} />} label={t('dash2.eggs')} value={ov.status === 'not_started' ? '—' : num(tot.eggs.collected)} change={change('eggs')} sub={subText} />
+            <KpiTile
+              tone="blue"
+              icon={<Bird size={26} />}
+              label={t('dash2.flock')}
+              value={hens === null ? '—' : num(hens)}
+              change={change('closing')}
+              sub={t('dash2.vsWeek')}
+            />
+            <KpiTile
+              tone="green"
+              icon={<Egg size={26} />}
+              label={t('dash2.eggs')}
+              value={ov.status === 'not_started' ? '—' : num(tot.eggs.collected)}
+              change={change('eggs')}
+              sub={subText}
+            />
             <KpiTile
               tone="orange"
               icon={<Wheat size={26} />}
@@ -189,7 +206,17 @@ export function DashboardPage() {
                     <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#64748b' }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fontSize: 12, fill: '#64748b' }} tickLine={false} axisLine={false} width={56} tickFormatter={(v: number) => num(v)} />
                     <Tooltip formatter={(v) => [num(Number(v)), t('chart.eggs')]} />
-                    <Area type="monotone" dataKey="eggs" stroke={C.blue} strokeWidth={2.5} fill="url(#eggFill)" connectNulls={false} dot={{ r: 3.5, fill: C.blue }} activeDot={{ r: 5 }} isAnimationActive={false} />
+                    <Area
+                      type="monotone"
+                      dataKey="eggs"
+                      stroke={C.blue}
+                      strokeWidth={2.5}
+                      fill="url(#eggFill)"
+                      connectNulls={false}
+                      dot={{ r: 3.5, fill: C.blue }}
+                      activeDot={{ r: 5 }}
+                      isAnimationActive={false}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -209,7 +236,17 @@ export function DashboardPage() {
                   <div className="donut">
                     <ResponsiveContainer>
                       <PieChart>
-                        <Pie data={donut} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="96%" paddingAngle={1} startAngle={90} endAngle={-270} stroke="none">
+                        <Pie
+                          data={donut}
+                          dataKey="value"
+                          nameKey="name"
+                          innerRadius="62%"
+                          outerRadius="96%"
+                          paddingAngle={1}
+                          startAngle={90}
+                          endAngle={-270}
+                          stroke="none"
+                        >
                           {donut.map((_, i) => (
                             <Cell key={i} fill={DONUT[i % DONUT.length]} />
                           ))}
@@ -254,7 +291,9 @@ export function DashboardPage() {
                     <li key={x.key}>
                       <span className="grow">
                         <strong>{t('duty.' + x.duty)}</strong>
-                        <small>{[x.cageName, x.params.session ? t('session.' + x.params.session) : null].filter(Boolean).join(' · ') || t('dash2.wholeFarm')}</small>
+                        <small>
+                          {[x.cageName, x.params.session ? t('session.' + x.params.session) : null].filter(Boolean).join(' · ') || t('dash2.wholeFarm')}
+                        </small>
                       </span>
                       <span className={`pill ${x.done ? 'good' : 'warn'}`}>{x.done ? t('dash2.done') : t('dash2.pending')}</span>
                     </li>
@@ -276,12 +315,14 @@ export function DashboardPage() {
               </header>
               <MiniTable
                 head={[t('dash2.grnNo'), t('pur.supplier'), t('common.date'), t('common.status')]}
-                rows={(receipts ?? []).slice(0, 5).map((r) => [
-                  <span className="link">{r.grnNo}</span>,
-                  r.supplierName ?? '—',
-                  date(r.date, { month: 'short', day: 'numeric' }),
-                  <span className="pill good">{t('dash2.received')}</span>
-                ])}
+                rows={(receipts ?? [])
+                  .slice(0, 5)
+                  .map((r) => [
+                    <span className="link">{r.grnNo}</span>,
+                    r.supplierName ?? '—',
+                    date(r.date, { month: 'short', day: 'numeric' }),
+                    <span className="pill good">{t('dash2.received')}</span>
+                  ])}
                 empty={t('common.noData')}
               />
             </section>
@@ -317,7 +358,9 @@ export function DashboardPage() {
                 head={[t('dash2.item'), t('dash2.expiry'), t('dash2.daysLeft')]}
                 rows={expiring.map((b) => [
                   `${b.itemName} · ${b.batchNo}`,
-                  <span className={(b.daysToExpiry ?? 0) <= 30 ? 'text-bad' : undefined}>{b.expiryDate ? date(b.expiryDate, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>,
+                  <span className={(b.daysToExpiry ?? 0) <= 30 ? 'text-bad' : undefined}>
+                    {b.expiryDate ? date(b.expiryDate, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                  </span>,
                   <span className={`pill ${(b.daysToExpiry ?? 0) < 0 ? 'bad' : (b.daysToExpiry ?? 0) <= 30 ? 'warn' : 'good'}`}>{num(b.daysToExpiry)}</span>
                 ])}
                 empty={t('common.noData')}
@@ -354,13 +397,15 @@ export function DashboardPage() {
               </header>
               <MiniTable
                 head={[t('dash2.cage'), t('dash2.hens'), t('col.eggs'), t('dash2.prod'), t('dash2.mortality')]}
-                rows={(cagesPerf ?? []).slice(0, 6).map((c) => [
-                  c.name,
-                  num(c.closingHens),
-                  num(c.eggs),
-                  c.avgProductionPct === null ? '—' : `${num(c.avgProductionPct, 1)}%`,
-                  c.mortalityPct === null ? '—' : `${num(c.mortalityPct, 2)}%`
-                ])}
+                rows={(cagesPerf ?? [])
+                  .slice(0, 6)
+                  .map((c) => [
+                    c.name,
+                    num(c.closingHens),
+                    num(c.eggs),
+                    c.avgProductionPct === null ? '—' : `${num(c.avgProductionPct, 1)}%`,
+                    c.mortalityPct === null ? '—' : `${num(c.mortalityPct, 2)}%`
+                  ])}
                 empty={t('common.noData')}
               />
             </section>
@@ -381,7 +426,25 @@ export function DashboardPage() {
   )
 }
 
-function KpiTile({ tone, icon, label, value, unit, change, sub, upIsGood = true }: { tone: 'blue' | 'green' | 'orange' | 'red'; icon: ReactNode; label: string; value: string; unit?: string; change: number | null; sub: string; upIsGood?: boolean }) {
+function KpiTile({
+  tone,
+  icon,
+  label,
+  value,
+  unit,
+  change,
+  sub,
+  upIsGood = true
+}: {
+  tone: 'blue' | 'green' | 'orange' | 'red'
+  icon: ReactNode
+  label: string
+  value: string
+  unit?: string
+  change: number | null
+  sub: string
+  upIsGood?: boolean
+}) {
   const { num } = useApp()
   const up = change !== null && change >= 0
   const good = change === null ? null : up === upIsGood

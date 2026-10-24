@@ -2,7 +2,16 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { round } from '@shared/calc'
 import type { Language } from '@shared/types'
-import { MODULES, SUBSCRIPTION_STATUSES, type OrgSummary, type Plan, type PlatformMetrics, type PlatformUser, type SubscriptionChange, type SubscriptionStatus } from '@shared/platform'
+import {
+  MODULES,
+  SUBSCRIPTION_STATUSES,
+  type OrgSummary,
+  type Plan,
+  type PlatformMetrics,
+  type PlatformUser,
+  type SubscriptionChange,
+  type SubscriptionStatus
+} from '@shared/platform'
 import { isIsoDate, isValidTimezone } from '@shared/dates'
 import type { AnonCtx } from '../context'
 import type { DB } from '../db/connection'
@@ -64,7 +73,9 @@ export async function platformLogin(anon: AnonCtx, email: string, password: stri
     if (row) {
       const attempts = row.failed_attempts + 1
       if (attempts >= MAX_ATTEMPTS) {
-        await anon.db.prepare('UPDATE platform_users SET failed_attempts = 0, locked_until = ? WHERE id = ?').run(new Date(now.getTime() + LOCK_MINUTES * 60000).toISOString(), row.id)
+        await anon.db
+          .prepare('UPDATE platform_users SET failed_attempts = 0, locked_until = ? WHERE id = ?')
+          .run(new Date(now.getTime() + LOCK_MINUTES * 60000).toISOString(), row.id)
       } else {
         await anon.db.prepare('UPDATE platform_users SET failed_attempts = ? WHERE id = ?').run(attempts, row.id)
       }
@@ -82,7 +93,9 @@ export async function platformLogin(anon: AnonCtx, email: string, password: stri
 /** The signed-in platform administrator, read afresh on every request (a disabled account stops working at once). */
 export async function loadPlatformUser(db: DB, id: number | null): Promise<PlatformUser | null> {
   if (!id) return null
-  const row = (await db.prepare('SELECT id, email, display_name, active FROM platform_users WHERE id = ?').get(id)) as (PlatformRow & { active: number }) | undefined
+  const row = (await db.prepare('SELECT id, email, display_name, active FROM platform_users WHERE id = ?').get(id)) as
+    | (PlatformRow & { active: number })
+    | undefined
   return row && row.active ? toPlatformUser(row) : null
 }
 
@@ -131,7 +144,13 @@ export async function platformCreateOrganization(anon: AnonCtx, actor: PlatformU
     },
     { planId: i.planId, trialDays: i.trialDays, allowNoCages: true }
   )
-  await platformAudit(anon.db, actor, 'create_organization', created.organizationId, { name: i.name, code: created.organizationCode, plan: i.planId, trialDays: i.trialDays, admin: i.adminEmail })
+  await platformAudit(anon.db, actor, 'create_organization', created.organizationId, {
+    name: i.name,
+    code: created.organizationCode,
+    plan: i.planId,
+    trialDays: i.trialDays,
+    admin: i.adminEmail
+  })
   return { id: created.organizationId, code: created.organizationCode, recoveryCode: created.recoveryCode }
 }
 
@@ -139,7 +158,14 @@ export async function platformCreateOrganization(anon: AnonCtx, actor: PlatformU
  * Suspends (nobody can sign in), archives (kept, no sign-in) or reactivates an organization.
  * Its records are never deleted. Suspending or archiving signs everyone out at once.
  */
-export async function setOrganizationStatus(db: DB, actor: PlatformUser, id: number, status: 'active' | 'suspended' | 'archived', reason: string, now = new Date()) {
+export async function setOrganizationStatus(
+  db: DB,
+  actor: PlatformUser,
+  id: number,
+  status: 'active' | 'suspended' | 'archived',
+  reason: string,
+  now = new Date()
+) {
   assert(reason.trim().length >= 3, 'reason_required')
   const org = (await db.prepare('SELECT status FROM organizations WHERE id = ?').get(id)) as { status: string } | undefined
   assert(org, 'not_found')
@@ -158,7 +184,13 @@ export async function savePlan(db: DB, actor: PlatformUser, p: Omit<Plan, 'id'> 
   const code = p.code.trim().toLowerCase()
   assert(/^[a-z0-9-]{2,40}$/.test(code), 'invalid_input', { field: 'code' })
   assert(p.name.trim().length >= 2, 'required_field', { field: 'name' })
-  for (const [k, v] of Object.entries({ maxUsers: p.maxUsers, maxAdmins: p.maxAdmins, maxRoles: p.maxRoles, maxFarms: p.maxFarms, maxWarehouses: p.maxWarehouses })) {
+  for (const [k, v] of Object.entries({
+    maxUsers: p.maxUsers,
+    maxAdmins: p.maxAdmins,
+    maxRoles: p.maxRoles,
+    maxFarms: p.maxFarms,
+    maxWarehouses: p.maxWarehouses
+  })) {
     assert(Number.isInteger(v) && v >= (k === 'maxRoles' || k === 'maxWarehouses' ? 0 : 1) && v <= 100000, 'invalid_input', { field: k })
   }
   assert(p.maxAdmins <= p.maxUsers, 'invalid_input', { field: 'maxAdmins' })
@@ -169,13 +201,17 @@ export async function savePlan(db: DB, actor: PlatformUser, p: Omit<Plan, 'id'> 
   let id = p.id
   if (id) {
     const r = await db
-      .prepare('UPDATE plans SET code = ?, name = ?, max_users = ?, max_admins = ?, max_roles = ?, max_farms = ?, max_warehouses = ?, modules = ?, active = ? WHERE id = ?')
+      .prepare(
+        'UPDATE plans SET code = ?, name = ?, max_users = ?, max_admins = ?, max_roles = ?, max_farms = ?, max_warehouses = ?, modules = ?, active = ? WHERE id = ?'
+      )
       .run(...vals, id)
     assert(r.changes === 1, 'not_found')
   } else {
     id = (
       await db
-        .prepare('INSERT INTO plans (code, name, max_users, max_admins, max_roles, max_farms, max_warehouses, modules, active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .prepare(
+          'INSERT INTO plans (code, name, max_users, max_admins, max_roles, max_farms, max_warehouses, modules, active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        )
         .run(...vals, new Date().toISOString())
     ).lastInsertRowid
   }
@@ -201,20 +237,36 @@ export async function setSubscription(db: DB, actor: PlatformUser, c: Subscripti
   const overrides = c.overrides ? Object.fromEntries(Object.entries(c.overrides).filter(([, v]) => Number.isInteger(v) && (v as number) >= 0)) : null
   await db.transaction(async () => {
     await db
-      .prepare('UPDATE subscriptions SET plan_id = ?, status = ?, starts_on = ?, ends_on = ?, trial_ends_on = ?, grace_days = ?, overrides = ?, updated_at = ? WHERE organization_id = ?')
-      .run(c.planId, c.status as SubscriptionStatus, c.startsOn, c.endsOn, c.trialEndsOn, c.graceDays, overrides && Object.keys(overrides).length ? JSON.stringify(overrides) : null, new Date().toISOString(), c.organizationId)
+      .prepare(
+        'UPDATE subscriptions SET plan_id = ?, status = ?, starts_on = ?, ends_on = ?, trial_ends_on = ?, grace_days = ?, overrides = ?, updated_at = ? WHERE organization_id = ?'
+      )
+      .run(
+        c.planId,
+        c.status as SubscriptionStatus,
+        c.startsOn,
+        c.endsOn,
+        c.trialEndsOn,
+        c.graceDays,
+        overrides && Object.keys(overrides).length ? JSON.stringify(overrides) : null,
+        new Date().toISOString(),
+        c.organizationId
+      )
     await platformAudit(db, actor, 'set_subscription', c.organizationId, { before, after: { ...c, overrides } })
   })()
 }
 
-export async function platformMetrics(db: DB, today: string, env: { version: string; backupDir: string | null } = { version: '', backupDir: null }): Promise<PlatformMetrics> {
+export async function platformMetrics(
+  db: DB,
+  today: string,
+  env: { version: string; backupDir: string | null } = { version: '', backupDir: null }
+): Promise<PlatformMetrics> {
   const orgs = await listOrganizations(db, today)
   const subscriptions = Object.fromEntries(SUBSCRIPTION_STATUSES.map((s) => [s, 0])) as Record<SubscriptionStatus, number>
   for (const o of orgs) subscriptions[o.entitlements.effective]++
   const n = async (sql: string, ...args: unknown[]) => ((await db.prepare(sql).get(...args)) as { n: number }).n
   const weekAgo = new Date(Date.parse(today) - 7 * 86400000).toISOString()
   const lastWhole = (await db
-    .prepare("SELECT status, created_at AS createdAt FROM backup_runs WHERE organization_id IS NULL ORDER BY id DESC LIMIT 1")
+    .prepare('SELECT status, created_at AS createdAt FROM backup_runs WHERE organization_id IS NULL ORDER BY id DESC LIMIT 1')
     .get()) as { status: string; createdAt: string } | undefined
   const events = (await db
     .prepare(
@@ -234,14 +286,23 @@ export async function platformMetrics(db: DB, today: string, env: { version: str
       active: await n('SELECT COUNT(*) AS n FROM users WHERE active = 1 AND pending = 0'),
       signedInLast7Days: await n('SELECT COUNT(*) AS n FROM users WHERE last_login_at >= ?', weekAgo)
     },
-    backups: { lastWholeDatabase: lastWhole ?? null, failedLast7Days: await n("SELECT COUNT(*) AS n FROM backup_runs WHERE status = 'failed' AND created_at >= ?", weekAgo) },
+    backups: {
+      lastWholeDatabase: lastWhole ?? null,
+      failedLast7Days: await n("SELECT COUNT(*) AS n FROM backup_runs WHERE status = 'failed' AND created_at >= ?", weekAgo)
+    },
     recentEvents: events,
     health: {
       version: env.version,
       schemaVersion: await currentSchemaVersion(db),
       uptimeSeconds: Math.round(process.uptime()),
       databaseMb: round(
-        Number(((await db.prepare('SELECT COALESCE(SUM(data_length + index_length), 0) AS b FROM information_schema.tables WHERE table_schema = DATABASE()').get()) as { b: number }).b) / 1048576,
+        Number(
+          (
+            (await db
+              .prepare('SELECT COALESCE(SUM(data_length + index_length), 0) AS b FROM information_schema.tables WHERE table_schema = DATABASE()')
+              .get()) as { b: number }
+          ).b
+        ) / 1048576,
         1
       ),
       ...folderSize(env.backupDir),

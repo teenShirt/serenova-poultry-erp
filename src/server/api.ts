@@ -71,7 +71,17 @@ export interface ApiDeps {
 }
 
 /** Methods callable before signing in. Everything else requires a signed-in user of an organization. */
-const PUBLIC_METHODS = ['app.status', 'app.setLanguage', 'auth.signup', 'auth.resetWithCode', 'setup.complete', 'demo.enter', 'demo.exit', 'demo.reset', 'auth.login'] as const
+const PUBLIC_METHODS = [
+  'app.status',
+  'app.setLanguage',
+  'auth.signup',
+  'auth.resetWithCode',
+  'setup.complete',
+  'demo.enter',
+  'demo.exit',
+  'demo.reset',
+  'auth.login'
+] as const
 type PublicMethod = (typeof PUBLIC_METHODS)[number]
 const PUBLIC = new Set<ApiMethod>(PUBLIC_METHODS)
 
@@ -84,7 +94,14 @@ type Handlers = { [M in OrgMethod]: Handler<M> }
  * Requests that still work while the subscription is read-only (expired, cancelled, suspended):
  * signing out, looking after one's own account, and taking a backup of the organization's records.
  */
-const ALLOWED_WHILE_READ_ONLY = new Set<ApiMethod>(['auth.logout', 'auth.changePassword', 'auth.newRecoveryCode', 'app.setLanguage', 'backup.create', 'farms.switch'])
+const ALLOWED_WHILE_READ_ONLY = new Set<ApiMethod>([
+  'auth.logout',
+  'auth.changePassword',
+  'auth.newRecoveryCode',
+  'app.setLanguage',
+  'backup.create',
+  'farms.switch'
+])
 
 function validatePeriod(from: string, to: string) {
   if (from > to || from < addDays(to, -400)) throw new AppError('invalid_date')
@@ -105,7 +122,9 @@ export async function recordReport(ctx: Ctx, spec: ReportSpec, format: 'pdf' | '
   const from = spec.kind === 'period' ? spec.from : spec.date
   const to = spec.kind === 'period' ? spec.to : spec.date
   await ctx.db
-    .prepare('INSERT INTO report_runs (organization_id, kind, period_start, period_end, format, file_path, generated_by, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .prepare(
+      'INSERT INTO report_runs (organization_id, kind, period_start, period_end, format, file_path, generated_by, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    )
     .run(ctx.org, spec.kind, from, to, format, fileName, ctx.user?.id ?? null, ctx.now().toISOString())
 }
 
@@ -356,7 +375,11 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
       // Age reminders the organization set up (its own programme; never suggested by the system).
       for (const r of await flocks.remindersFor(ctx, await flocks.listFlocks(ctx, false), 0)) {
         if (r.state === 'due' || r.state === 'overdue') {
-          d.alerts.push({ code: r.state === 'due' ? 'flock_reminder_due' : 'flock_reminder_overdue', severity: r.state === 'due' ? 'info' : 'warning', params: { flock: r.flockCode, title: r.title, week: r.atWeek } })
+          d.alerts.push({
+            code: r.state === 'due' ? 'flock_reminder_due' : 'flock_reminder_overdue',
+            severity: r.state === 'due' ? 'info' : 'warning',
+            params: { flock: r.flockCode, title: r.title, week: r.atWeek }
+          })
         }
       }
       return d

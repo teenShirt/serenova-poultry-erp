@@ -91,8 +91,28 @@ function CageForm({ cage, nextOrder, onClose }: { cage: (Cage & { hasHistory: bo
   const { t, toast, fail } = useApp()
   const [f, setF] = useState<CageInputDto>(
     cage
-      ? { code: cage.code, name: cage.name, initialHens: cage.initialHens, capacity: cage.capacity, hasWaterMeter: cage.hasWaterMeter, active: cage.active, sortOrder: cage.sortOrder, notes: cage.notes, houseId: cage.houseId }
-      : { code: String(nextOrder).padStart(2, '0'), name: `Cage ${String(nextOrder).padStart(2, '0')}`, initialHens: 0, capacity: null, hasWaterMeter: true, active: true, sortOrder: nextOrder, notes: null, houseId: null }
+      ? {
+          code: cage.code,
+          name: cage.name,
+          initialHens: cage.initialHens,
+          capacity: cage.capacity,
+          hasWaterMeter: cage.hasWaterMeter,
+          active: cage.active,
+          sortOrder: cage.sortOrder,
+          notes: cage.notes,
+          houseId: cage.houseId
+        }
+      : {
+          code: String(nextOrder).padStart(2, '0'),
+          name: `Cage ${String(nextOrder).padStart(2, '0')}`,
+          initialHens: 0,
+          capacity: null,
+          hasWaterMeter: true,
+          active: true,
+          sortOrder: nextOrder,
+          notes: null,
+          houseId: null
+        }
   )
   const [reason, setReason] = useState('')
   const { data: houses } = useLoad(() => call('houses.list'), [])

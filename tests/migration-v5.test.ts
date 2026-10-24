@@ -37,7 +37,19 @@ describe('upgrade to organizations and farms (schema v5)', () => {
     expect(await db.prepare('SELECT id, organization_id, code, name, location FROM farms').all()).toEqual([
       { id: 1, organization_id: 1, code: 'main', name: 'Hill Farm', location: 'Kandy' }
     ])
-    for (const t of ['app_settings', 'users', 'cages', 'farm_days', 'cage_days', 'egg_collections', 'inventory_items', 'inventory_transactions', 'suppliers', 'goods_receipts', 'audit_log']) {
+    for (const t of [
+      'app_settings',
+      'users',
+      'cages',
+      'farm_days',
+      'cage_days',
+      'egg_collections',
+      'inventory_items',
+      'inventory_transactions',
+      'suppliers',
+      'goods_receipts',
+      'audit_log'
+    ]) {
       const r = (await db.prepare(`SELECT COUNT(*) AS n, SUM(organization_id = 1) AS mine FROM ${t}`).get()) as { n: number; mine: number }
       expect(r.n, t).toBeGreaterThan(0)
       expect(r.mine, t).toBe(r.n)
@@ -57,16 +69,22 @@ INSERT INTO farms (id, organization_id, code, name, created_at) VALUES (2, 2, 'm
 `)
     // Organization 2 tries to record eggs against organization 1's day and cage.
     await expect(
-      db.prepare("INSERT INTO egg_collections (organization_id, day_id, cage_id, session, good, created_at, updated_at) VALUES (2, 1, 1, 'evening', 1, 'x', 'x')").run()
+      db
+        .prepare(
+          "INSERT INTO egg_collections (organization_id, day_id, cage_id, session, good, created_at, updated_at) VALUES (2, 1, 1, 'evening', 1, 'x', 'x')"
+        )
+        .run()
     ).rejects.toThrow(/foreign key constraint fails/)
     // ...or to place one of its cages on organization 1's farm.
-    await expect(db.prepare("INSERT INTO cages (organization_id, farm_id, code, name, initial_hens, created_at) VALUES (2, 1, '09', 'X', 1, 'x')").run()).rejects.toThrow(
-      /foreign key constraint fails/
-    )
+    await expect(
+      db.prepare("INSERT INTO cages (organization_id, farm_id, code, name, initial_hens, created_at) VALUES (2, 1, '09', 'X', 1, 'x')").run()
+    ).rejects.toThrow(/foreign key constraint fails/)
     // The same date and the same codes are fine in another organization / farm.
     await db.prepare("INSERT INTO farm_days (organization_id, farm_id, business_date, status, opened_at) VALUES (2, 2, '2026-10-01', 'in_progress', 'x')").run()
     await db.prepare("INSERT INTO cages (organization_id, farm_id, code, name, initial_hens, created_at) VALUES (2, 2, '01', 'Cage 01', 10, 'x')").run()
-    await db.prepare("INSERT INTO users (organization_id, username, display_name, password_hash, role, created_at) VALUES (2, 'admin', 'A', 'x', 'admin', 'x')").run()
+    await db
+      .prepare("INSERT INTO users (organization_id, username, display_name, password_hash, role, created_at) VALUES (2, 'admin', 'A', 'x', 'admin', 'x')")
+      .run()
   })
 
   it('gives existing accounts roles matching what they could do (schema v6)', async () => {
@@ -74,9 +92,7 @@ INSERT INTO farms (id, organization_id, code, name, created_at) VALUES (2, 2, 'm
     await db.exec(`UPDATE users SET duties = '["eggs","flock"]', assigned_cages = '[1]' WHERE id = 2;
 INSERT INTO users (id, username, display_name, password_hash, role, active, created_at) VALUES (3, 'helper', 'Helper', 'x', 'operator', 1, 'x');`)
     await migrate(db)
-    const users = await db
-      .prepare('SELECT u.username, r.name, r.is_admin, u.assigned_cages FROM users u JOIN roles r ON r.id = u.role_id ORDER BY u.id')
-      .all()
+    const users = await db.prepare('SELECT u.username, r.name, r.is_admin, u.assigned_cages FROM users u JOIN roles r ON r.id = u.role_id ORDER BY u.id').all()
     expect(users).toEqual([
       { username: 'admin', name: 'Organization Admin', is_admin: 1, assigned_cages: null },
       { username: 'worker', name: 'Worker (duties)', is_admin: 0, assigned_cages: '[1]' },

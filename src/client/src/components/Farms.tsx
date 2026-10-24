@@ -20,13 +20,22 @@ export function FarmsCard() {
       title={t('farm.title')}
       actions={
         manage ? (
-          <button className="btn primary" disabled={atLimit} title={atLimit ? t('farm.atLimit', { n: sub!.limits.maxFarms }) : undefined} onClick={() => setEditing('new')}>
+          <button
+            className="btn primary"
+            disabled={atLimit}
+            title={atLimit ? t('farm.atLimit', { n: sub!.limits.maxFarms }) : undefined}
+            onClick={() => setEditing('new')}
+          >
             <Plus size={18} /> {t('farm.add')}
           </button>
         ) : undefined
       }
     >
-      {sub && <div className="muted small" style={{ marginBottom: 8 }}>{t('farm.usage', { used: sub.usage.farms, max: sub.limits.maxFarms, plan: sub.planName })}</div>}
+      {sub && (
+        <div className="muted small" style={{ marginBottom: 8 }}>
+          {t('farm.usage', { used: sub.usage.farms, max: sub.limits.maxFarms, plan: sub.planName })}
+        </div>
+      )}
       <table className="data">
         <thead>
           <tr>
@@ -43,7 +52,11 @@ export function FarmsCard() {
             <tr key={f.id}>
               <td>
                 <strong>{f.name}</strong>
-                {f.current && <span className="badge info" style={{ marginLeft: 8 }}>{t('farm.current')}</span>}
+                {f.current && (
+                  <span className="badge info" style={{ marginLeft: 8 }}>
+                    {t('farm.current')}
+                  </span>
+                )}
               </td>
               <td>{f.location ?? '—'}</td>
               <td className="num">{f.cages}</td>
@@ -76,10 +89,7 @@ export function FarmsCard() {
                   </button>
                 )}
                 {manage && f.status === 'archived' && (
-                  <button
-                    className="btn sm"
-                    onClick={() => call('farms.setStatus', { id: f.id, status: 'active', reason: 'Reactivated' }).catch(fail)}
-                  >
+                  <button className="btn sm" onClick={() => call('farms.setStatus', { id: f.id, status: 'active', reason: 'Reactivated' }).catch(fail)}>
                     {t('farm.reactivate')}
                   </button>
                 )}

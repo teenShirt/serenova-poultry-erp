@@ -118,7 +118,14 @@ export function OverviewPage() {
               series={o.farms.map((f, i) => ({ key: String(f.farmId), label: f.farmName, color: FARM_COLORS[i % FARM_COLORS.length] }))}
               note={t('ov.closedOnlyNote')}
             />
-            <CageBars title={t('ov.layingByFarm')} data={o.farms.map((f) => ({ name: f.farmName, v: f.layingPct ?? 0 }))} valueKey="v" label={t('ov.layingPct')} unit="%" digits={1} />
+            <CageBars
+              title={t('ov.layingByFarm')}
+              data={o.farms.map((f) => ({ name: f.farmName, v: f.layingPct ?? 0 }))}
+              valueKey="v"
+              label={t('ov.layingPct')}
+              unit="%"
+              digits={1}
+            />
           </div>
 
           <div className="grid cols-2">
@@ -154,7 +161,9 @@ export function OverviewPage() {
                           {num(e.balance, 1)} {e.unit}
                         </td>
                         <td>
-                          <span className={`badge ${e.daysToExpiry < 0 ? 'bad' : 'warn'}`}>{e.daysToExpiry < 0 ? t('ov.expired') : t('ov.expiresIn', { n: e.daysToExpiry })}</span>
+                          <span className={`badge ${e.daysToExpiry < 0 ? 'bad' : 'warn'}`}>
+                            {e.daysToExpiry < 0 ? t('ov.expired') : t('ov.expiresIn', { n: e.daysToExpiry })}
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -208,7 +217,9 @@ export function OverviewPage() {
                           {status.settings.currency} {num(r.total, 2)}
                         </td>
                         <td>
-                          <span className={`badge ${r.status === 'posted' ? 'good' : r.status === 'submitted' ? 'warn' : 'bad'}`}>{t('pur.status.' + r.status)}</span>
+                          <span className={`badge ${r.status === 'posted' ? 'good' : r.status === 'submitted' ? 'warn' : 'bad'}`}>
+                            {t('pur.status.' + r.status)}
+                          </span>
                         </td>
                       </tr>
                     ))}

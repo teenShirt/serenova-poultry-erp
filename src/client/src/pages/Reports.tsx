@@ -178,7 +178,11 @@ function ReportsTab() {
                     <td>{r.format.toUpperCase()}</td>
                     <td className="nowrap">{dateTime(r.generatedAt)}</td>
                     <td>
-                      <button className="btn sm" disabled={r.format !== 'pdf' && !canExcel} onClick={() => (r.format === 'pdf' ? pdf(specOf(r)) : excel(specOf(r)))}>
+                      <button
+                        className="btn sm"
+                        disabled={r.format !== 'pdf' && !canExcel}
+                        onClick={() => (r.format === 'pdf' ? pdf(specOf(r)) : excel(specOf(r)))}
+                      >
                         {r.format === 'pdf' ? <Printer size={14} /> : <FileSpreadsheet size={14} />} {t('common.open')}
                       </button>
                     </td>
@@ -263,10 +267,22 @@ function AnalyticsTab() {
         )}
       </Card>
       <div className="grid cols-2">
-        <CageBars title={`${t('rep.avgProduction')} %`} data={(cmp ?? [])} valueKey="avgProductionPct" label={t('rep.avgProduction')} unit="%" digits={1} />
-        <CageBars title={t('chart.cageEggs')} data={(cmp ?? [])} valueKey="eggs" label={t('col.eggs')} />
-        <TimeChart title={t('chart.production')} data={series ?? []} series={[{ key: 'productionPct', label: t('chart.production'), color: SERIES.blue }]} unit="%" digits={1} />
-        <TimeChart title={t('chart.feedPerHen')} data={series ?? []} series={[{ key: 'feedPerHenG', label: t('chart.feedPerHen'), color: SERIES.aqua }]} unit="g" digits={1} />
+        <CageBars title={`${t('rep.avgProduction')} %`} data={cmp ?? []} valueKey="avgProductionPct" label={t('rep.avgProduction')} unit="%" digits={1} />
+        <CageBars title={t('chart.cageEggs')} data={cmp ?? []} valueKey="eggs" label={t('col.eggs')} />
+        <TimeChart
+          title={t('chart.production')}
+          data={series ?? []}
+          series={[{ key: 'productionPct', label: t('chart.production'), color: SERIES.blue }]}
+          unit="%"
+          digits={1}
+        />
+        <TimeChart
+          title={t('chart.feedPerHen')}
+          data={series ?? []}
+          series={[{ key: 'feedPerHenG', label: t('chart.feedPerHen'), color: SERIES.aqua }]}
+          unit="g"
+          digits={1}
+        />
       </div>
     </div>
   )

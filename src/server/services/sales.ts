@@ -24,7 +24,9 @@ export async function eggStock(ctx: Pick<Ctx, 'db' | 'org'>, asOf?: string): Pro
     )
     .get(ctx.org, date)) as EggStock
   const s = (await ctx.db
-    .prepare('SELECT COALESCE(SUM(good_qty), 0) AS good, COALESCE(SUM(cracked_qty), 0) AS cracked FROM egg_dispatches WHERE organization_id = ? AND dispatch_date <= ?')
+    .prepare(
+      'SELECT COALESCE(SUM(good_qty), 0) AS good, COALESCE(SUM(cracked_qty), 0) AS cracked FROM egg_dispatches WHERE organization_id = ? AND dispatch_date <= ?'
+    )
     .get(ctx.org, date)) as EggStock
   const a = (await ctx.db
     .prepare(
@@ -64,7 +66,7 @@ export interface DispatchInput {
 export async function createDispatch(ctx: Ctx, d: DispatchInput): Promise<{ id: number; dispatchNo: string }> {
   const user = requireUser(ctx)
   assert(isIsoDate(d.date), 'invalid_date')
-  assert(d.date <= await farmToday(ctx), 'future_date')
+  assert(d.date <= (await farmToday(ctx)), 'future_date')
   for (const q of [d.goodQty, d.crackedQty]) assert(Number.isInteger(q) && q >= 0, 'invalid_count')
   assert(d.goodQty + d.crackedQty > 0, 'quantity_required')
   const amount = round(d.goodQty * d.goodPrice + d.crackedQty * d.crackedPrice, 2)
@@ -75,13 +77,31 @@ export async function createDispatch(ctx: Ctx, d: DispatchInput): Promise<{ id: 
     const dispatchNo = await nextNumber(ctx, 'DSP', 'egg_dispatches', 'dispatch_no', d.date)
     const now = ctx.now().toISOString()
     const id = Number(
-      (await ctx.db
-        .prepare(
-          `INSERT INTO egg_dispatches (organization_id, dispatch_no, dispatch_date, customer_id, good_qty, good_price, cracked_qty, cracked_price, amount,
+      (
+        await ctx.db
+          .prepare(
+            `INSERT INTO egg_dispatches (organization_id, dispatch_no, dispatch_date, customer_id, good_qty, good_price, cracked_qty, cracked_price, amount,
              amount_paid, invoice_no, vehicle, driver, notes, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(ctx.org, dispatchNo, d.date, d.customerId, d.goodQty, d.goodPrice, d.crackedQty, d.crackedPrice, amount, 0, d.invoiceNo?.trim() || null, d.vehicle?.trim() || null, d.driver?.trim() || null, d.notes?.trim() || null, user.id, now))
-        .lastInsertRowid
+          )
+          .run(
+            ctx.org,
+            dispatchNo,
+            d.date,
+            d.customerId,
+            d.goodQty,
+            d.goodPrice,
+            d.crackedQty,
+            d.crackedPrice,
+            amount,
+            0,
+            d.invoiceNo?.trim() || null,
+            d.vehicle?.trim() || null,
+            d.driver?.trim() || null,
+            d.notes?.trim() || null,
+            user.id,
+            now
+          )
+      ).lastInsertRowid
     )
     await assertEggStock(ctx, d.date)
     if (d.amountPaid > 0) await insertPayment(ctx, id, d.date, d.amountPaid, d.paymentMethod, null)
@@ -92,19 +112,26 @@ export async function createDispatch(ctx: Ctx, d: DispatchInput): Promise<{ id: 
 
 async function insertPayment(ctx: Ctx, dispatchId: number, date: string, amount: number, method: string, reference: string | null) {
   await ctx.db
-    .prepare('INSERT INTO customer_payments (organization_id, dispatch_id, payment_date, amount, method, reference, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .prepare(
+      'INSERT INTO customer_payments (organization_id, dispatch_id, payment_date, amount, method, reference, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    )
     .run(ctx.org, dispatchId, date, round(amount, 2), method, reference, ctx.user?.id ?? null, ctx.now().toISOString())
-  await ctx.db.prepare('UPDATE egg_dispatches SET amount_paid = (SELECT COALESCE(SUM(amount), 0) FROM customer_payments WHERE dispatch_id = ?) WHERE id = ?').run(dispatchId, dispatchId)
+  await ctx.db
+    .prepare('UPDATE egg_dispatches SET amount_paid = (SELECT COALESCE(SUM(amount), 0) FROM customer_payments WHERE dispatch_id = ?) WHERE id = ?')
+    .run(dispatchId, dispatchId)
 }
 
-export async function addPayment(ctx: Ctx, p: { dispatchId: number; date: string; amount: number; method: 'cash' | 'bank' | 'cheque' | 'other'; reference: string | null }) {
+export async function addPayment(
+  ctx: Ctx,
+  p: { dispatchId: number; date: string; amount: number; method: 'cash' | 'bank' | 'cheque' | 'other'; reference: string | null }
+) {
   requireUser(ctx)
-  assert(isIsoDate(p.date) && p.date <= await farmToday(ctx), 'invalid_date')
+  assert(isIsoDate(p.date) && p.date <= (await farmToday(ctx)), 'invalid_date')
   assert(p.amount > 0, 'quantity_positive')
   await ctx.db.transaction(async () => {
-    const d = (await ctx.db.prepare('SELECT amount, amount_paid, dispatch_no FROM egg_dispatches WHERE id = ? AND organization_id = ?').get(p.dispatchId, ctx.org)) as
-      | { amount: number; amount_paid: number; dispatch_no: string }
-      | undefined
+    const d = (await ctx.db
+      .prepare('SELECT amount, amount_paid, dispatch_no FROM egg_dispatches WHERE id = ? AND organization_id = ?')
+      .get(p.dispatchId, ctx.org)) as { amount: number; amount_paid: number; dispatch_no: string } | undefined
     assert(d, 'not_found')
     assert(p.amount <= d.amount - d.amount_paid + 0.005, 'payment_exceeds_balance')
     await insertPayment(ctx, p.dispatchId, p.date, p.amount, p.method, p.reference?.trim() || null)
@@ -117,7 +144,9 @@ export async function cancelDispatch(ctx: Ctx, id: number, reason: string) {
   requirePermission(ctx, 'sales.cancel')
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
-    const d = (await ctx.db.prepare('SELECT * FROM egg_dispatches WHERE id = ? AND organization_id = ?').get(id, ctx.org)) as { dispatch_date: string } | undefined
+    const d = (await ctx.db.prepare('SELECT * FROM egg_dispatches WHERE id = ? AND organization_id = ?').get(id, ctx.org)) as
+      | { dispatch_date: string }
+      | undefined
     assert(d, 'not_found')
     await assertDateWritable(ctx, d.dispatch_date)
     await ctx.db.prepare('DELETE FROM egg_dispatches WHERE id = ?').run(id)
@@ -128,15 +157,19 @@ export async function cancelDispatch(ctx: Ctx, id: number, reason: string) {
 /** Breakage in the store, opening stock or a counted difference (administrator; signed quantity). */
 export async function adjustEggStore(ctx: Ctx, a: { date: string; grade: 'good' | 'cracked'; quantity: number; reason: string }) {
   requirePermission(ctx, 'sales.adjust_store')
-  assert(isIsoDate(a.date) && a.date <= await farmToday(ctx), 'invalid_date')
+  assert(isIsoDate(a.date) && a.date <= (await farmToday(ctx)), 'invalid_date')
   assert(Number.isInteger(a.quantity) && a.quantity !== 0, 'quantity_required')
   assert(a.reason.trim().length >= 3, 'reason_required')
   return ctx.db.transaction(async () => {
     await assertDateWritable(ctx, a.date)
     const id = Number(
-      (await ctx.db
-        .prepare('INSERT INTO egg_store_adjustments (organization_id, adj_date, grade, quantity, reason, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-        .run(ctx.org, a.date, a.grade, a.quantity, a.reason.trim(), ctx.user!.id, ctx.now().toISOString())).lastInsertRowid
+      (
+        await ctx.db
+          .prepare(
+            'INSERT INTO egg_store_adjustments (organization_id, adj_date, grade, quantity, reason, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+          )
+          .run(ctx.org, a.date, a.grade, a.quantity, a.reason.trim(), ctx.user!.id, ctx.now().toISOString())
+      ).lastInsertRowid
     )
     await assertEggStock(ctx, a.date)
     await audit(ctx, { action: 'egg_store_adjustment', entity: 'egg_store', entityId: id, reason: a.reason, details: a })
@@ -153,7 +186,10 @@ function toDispatch(r: Omit<EggDispatch, 'balance' | 'paymentStatus'>): EggDispa
   return { ...r, balance, paymentStatus: balance <= 0.004 ? 'paid' : r.amountPaid > 0 ? 'partial' : 'unpaid' }
 }
 
-export async function listDispatches(ctx: Pick<Ctx, 'db' | 'org'>, f: { from: string; to: string; customerId?: number | null; unpaidOnly?: boolean }): Promise<EggDispatch[]> {
+export async function listDispatches(
+  ctx: Pick<Ctx, 'db' | 'org'>,
+  f: { from: string; to: string; customerId?: number | null; unpaidOnly?: boolean }
+): Promise<EggDispatch[]> {
   const rows = (await ctx.db
     .prepare(
       `SELECT ${dispatchCols} FROM egg_dispatches d JOIN customers c ON c.id = d.customer_id LEFT JOIN users u ON u.id = d.recorded_by
@@ -175,7 +211,9 @@ export async function listEggAdjustments(ctx: Pick<Ctx, 'db' | 'org'>, from: str
 }
 
 export async function outstandingTotal(ctx: Pick<Ctx, 'db' | 'org'>): Promise<number> {
-  const r = (await ctx.db.prepare('SELECT COALESCE(SUM(amount - amount_paid), 0) AS o FROM egg_dispatches WHERE organization_id = ?').get(ctx.org)) as { o: number }
+  const r = (await ctx.db.prepare('SELECT COALESCE(SUM(amount - amount_paid), 0) AS o FROM egg_dispatches WHERE organization_id = ?').get(ctx.org)) as {
+    o: number
+  }
   return round(r.o, 2)
 }
 

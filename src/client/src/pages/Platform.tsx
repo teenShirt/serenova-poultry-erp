@@ -142,7 +142,11 @@ function Overview() {
   return (
     <div className="stack">
       <div className="grid stats">
-        <Stat label={t('plat.m.orgs')} value={num(m.organizations.total)} sub={t('plat.m.orgsSub', { active: m.organizations.active, suspended: m.organizations.suspended })} />
+        <Stat
+          label={t('plat.m.orgs')}
+          value={num(m.organizations.total)}
+          sub={t('plat.m.orgsSub', { active: m.organizations.active, suspended: m.organizations.suspended })}
+        />
         <Stat label={t('plat.m.users')} value={num(m.users.active)} sub={t('plat.m.usersSub', { n: m.users.signedInLast7Days })} />
         <Stat
           label={t('plat.m.trials')}
@@ -168,7 +172,9 @@ function Overview() {
           <dt>{t('plat.h.database')}</dt>
           <dd>{num(m.health.databaseMb, 1)} MB</dd>
           <dt>{t('plat.h.backups')}</dt>
-          <dd>{m.health.backupFolderMb === null ? '—' : t('plat.h.backupFolder', { mb: num(m.health.backupFolderMb, 1), files: m.health.backupFiles ?? 0 })}</dd>
+          <dd>
+            {m.health.backupFolderMb === null ? '—' : t('plat.h.backupFolder', { mb: num(m.health.backupFolderMb, 1), files: m.health.backupFiles ?? 0 })}
+          </dd>
           <dt>{t('plat.h.failedBackups')}</dt>
           <dd className={m.backups.failedLast7Days ? 'bad' : ''}>{m.backups.failedLast7Days}</dd>
         </dl>
@@ -265,7 +271,12 @@ function Organizations() {
                       <strong>{o.name}</strong>
                       <div className="muted small">
                         {o.code}
-                        {o.status !== 'active' && <> · <span className="pill bad">{t('plat.orgStatus.' + o.status)}</span></>}
+                        {o.status !== 'active' && (
+                          <>
+                            {' '}
+                            · <span className="pill bad">{t('plat.orgStatus.' + o.status)}</span>
+                          </>
+                        )}
                       </div>
                     </td>
                     <td>{e.planName}</td>
@@ -339,7 +350,9 @@ function SubscriptionDialog({ org, plans, onClose }: { org: OrgSummary; plans: P
   const [graceDays, setGraceDays] = useState(String(e.graceDays))
   const plan = plans.find((p) => p.id === planId)!
   // Only limits that differ from the plan are kept as per-customer overrides.
-  const [limits, setLimits] = useState<Record<LimitKey, string>>(() => Object.fromEntries(LIMIT_KEYS.map((k) => [k, String(e.limits[k])])) as Record<LimitKey, string>)
+  const [limits, setLimits] = useState<Record<LimitKey, string>>(
+    () => Object.fromEntries(LIMIT_KEYS.map((k) => [k, String(e.limits[k])])) as Record<LimitKey, string>
+  )
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const save = async () => {
@@ -507,7 +520,13 @@ function NewOrgDialog({ plans, onClose, onCreated }: { plans: Plan[]; onClose: (
           <input className="input" type="email" value={f.adminEmail} onChange={(e) => set({ adminEmail: e.target.value })} maxLength={255} />
         </Field>
         <Field label={t('plat.adminPassword')} required hint={t('plat.adminPasswordHint')}>
-          <input className="input" type="password" autoComplete="new-password" value={f.adminPassword} onChange={(e) => set({ adminPassword: e.target.value })} />
+          <input
+            className="input"
+            type="password"
+            autoComplete="new-password"
+            value={f.adminPassword}
+            onChange={(e) => set({ adminPassword: e.target.value })}
+          />
         </Field>
         <Field label={t('plat.plan')}>
           <select className="input" value={f.planId} onChange={(e) => set({ planId: Number(e.target.value) })}>
@@ -592,7 +611,9 @@ function PlanDialog({ plan, onClose }: { plan: Plan | null; onClose: () => void 
   const { t, fail, toast } = useApp()
   const [code, setCode] = useState(plan?.code ?? '')
   const [name, setName] = useState(plan?.name ?? '')
-  const [limits, setLimits] = useState<Record<LimitKey, string>>(() => Object.fromEntries(LIMIT_KEYS.map((k) => [k, String(plan?.[k] ?? 1)])) as Record<LimitKey, string>)
+  const [limits, setLimits] = useState<Record<LimitKey, string>>(
+    () => Object.fromEntries(LIMIT_KEYS.map((k) => [k, String(plan?.[k] ?? 1)])) as Record<LimitKey, string>
+  )
   const [modules, setModules] = useState<Module[]>(plan?.modules ?? [])
   const [active, setActive] = useState(plan?.active ?? true)
   const [busy, setBusy] = useState(false)
@@ -655,7 +676,11 @@ function PlanDialog({ plan, onClose }: { plan: Plan | null; onClose: () => void 
           <div className="row" style={{ flexWrap: 'wrap', gap: 14 }}>
             {MODULES.map((m) => (
               <label key={m} className="check">
-                <input type="checkbox" checked={modules.includes(m)} onChange={(e) => setModules(e.target.checked ? [...modules, m] : modules.filter((x) => x !== m))} />
+                <input
+                  type="checkbox"
+                  checked={modules.includes(m)}
+                  onChange={(e) => setModules(e.target.checked ? [...modules, m] : modules.filter((x) => x !== m))}
+                />
                 {t('module.' + m)}
               </label>
             ))}

@@ -10,9 +10,11 @@ async function farmWithClosedDay() {
   const f = await makeFarm()
   f.setNow(new Date('2026-03-10T10:00:00Z'))
   await startDay(f.worker, { date: '2026-03-09', corrections: [], acknowledgeWarnings: false })
-  for (const c of f.cageIds) await saveEggs(f.worker, { date: '2026-03-09', cageId: c, session: 'morning', collectedAt: '08:00', good: 600, damaged: 5, rejected: 1, notes: null }, null)
+  for (const c of f.cageIds)
+    await saveEggs(f.worker, { date: '2026-03-09', cageId: c, session: 'morning', collectedAt: '08:00', good: 600, damaged: 5, rejected: 1, notes: null }, null)
   await confirmMortality(f.worker, '2026-03-09', f.cageIds)
-  for (const i of (await getOverview(f.admin, '2026-03-09')).issues.filter(isBlocking)) await confirmIssue(f.admin, '2026-03-09', i.cageId, i.key, 'Evening collection not recorded')
+  for (const i of (await getOverview(f.admin, '2026-03-09')).issues.filter(isBlocking))
+    await confirmIssue(f.admin, '2026-03-09', i.cageId, i.key, 'Evening collection not recorded')
   await closeDay(f.admin, '2026-03-09', 'Reviewed')
   return f
 }

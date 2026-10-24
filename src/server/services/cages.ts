@@ -103,7 +103,19 @@ export async function updateCage(ctx: Ctx, id: number, c: CageInput, reason: str
         `UPDATE cages SET code = ?, name = ?, initial_hens = ?, capacity = ?, has_water_meter = ?, active = ?,
            sort_order = ?, notes = ?, house_id = ? WHERE id = ? AND organization_id = ?`
       )
-      .run(c.code.trim(), c.name.trim() || c.code.trim(), c.initialHens, c.capacity, c.hasWaterMeter ? 1 : 0, c.active ? 1 : 0, c.sortOrder, c.notes, houseId ?? null, id, ctx.org)
+      .run(
+        c.code.trim(),
+        c.name.trim() || c.code.trim(),
+        c.initialHens,
+        c.capacity,
+        c.hasWaterMeter ? 1 : 0,
+        c.active ? 1 : 0,
+        c.sortOrder,
+        c.notes,
+        houseId ?? null,
+        id,
+        ctx.org
+      )
     await audit(ctx, { action: 'update', entity: 'cage', entityId: id, reason, details: { before, after: c } })
   })()
 }

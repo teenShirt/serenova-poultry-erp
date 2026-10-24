@@ -48,9 +48,22 @@ export function PurchasesPage() {
       </PageHeader>
       <div className="stack">
         <div className="grid stats">
-          <Kpi label={t('pur.feedReceived')} value={`${num(received)} kg`} trend={series?.map((d) => d.feedKg)} color={SERIES.aqua} sub={t('common.last' + days)} />
+          <Kpi
+            label={t('pur.feedReceived')}
+            value={`${num(received)} kg`}
+            trend={series?.map((d) => d.feedKg)}
+            color={SERIES.aqua}
+            sub={t('common.last' + days)}
+          />
           <Kpi label={t('pur.cost')} value={money(cost)} trend={series?.map((d) => d.cost)} color={SERIES.orange} />
-          <Kpi label={t('dash.feedStock')} value={`${num(feedNow)} kg`} trend={series?.map((d) => d.feedStockKg)} color={SERIES.blue} tone={feedItems?.some((i) => i.isLow) ? 'warn' : undefined} sub={feedItems?.some((i) => i.isLow) ? t('inv.low') : undefined} />
+          <Kpi
+            label={t('dash.feedStock')}
+            value={`${num(feedNow)} kg`}
+            trend={series?.map((d) => d.feedStockKg)}
+            color={SERIES.blue}
+            tone={feedItems?.some((i) => i.isLow) ? 'warn' : undefined}
+            sub={feedItems?.some((i) => i.isLow) ? t('inv.low') : undefined}
+          />
           <Kpi label={t('pur.deliveries')} value={num(receipts?.length ?? 0)} />
         </div>
         <div className="grid cols-2">
@@ -64,7 +77,12 @@ export function PurchasesPage() {
               { key: 'feedIssuedKg', label: t('pur.issued'), color: SERIES.orange }
             ]}
           />
-          <TimeChart title={t('pur.storeTrend')} data={series ?? []} unit="kg" series={[{ key: 'feedStockKg', label: t('dash.feedStock'), color: SERIES.blue }]} />
+          <TimeChart
+            title={t('pur.storeTrend')}
+            data={series ?? []}
+            unit="kg"
+            series={[{ key: 'feedStockKg', label: t('dash.feedStock'), color: SERIES.blue }]}
+          />
         </div>
         <Card title={t('pur.list')} actions={<CsvButton kind="receipts" from={from} to={to} />}>
           {!receipts || receipts.length === 0 ? (
@@ -104,7 +122,10 @@ export function PurchasesPage() {
                       <td>
                         {r.lines.map((l, i) => (
                           <div key={i} className="small">
-                            {l.itemName}: <strong>{num(l.quantity - l.rejectedQty - l.damagedQty, 2)} {l.unit}</strong>
+                            {l.itemName}:{' '}
+                            <strong>
+                              {num(l.quantity - l.rejectedQty - l.damagedQty, 2)} {l.unit}
+                            </strong>
                             {l.orderedQty !== null && <span className="muted"> / {num(l.orderedQty, 2)}</span>}
                             {l.batchNo && <span className="muted"> · {l.batchNo}</span>}
                             {l.rejectedQty + l.damagedQty > 0 && (
@@ -121,7 +142,9 @@ export function PurchasesPage() {
                       </td>
                       <td className="num">{money(r.totalCost)}</td>
                       <td>
-                        <span className={`badge ${r.status === 'posted' ? 'good' : r.status === 'submitted' ? 'warn' : 'bad'}`}>{t('pur.status.' + r.status)}</span>
+                        <span className={`badge ${r.status === 'posted' ? 'good' : r.status === 'submitted' ? 'warn' : 'bad'}`}>
+                          {t('pur.status.' + r.status)}
+                        </span>
                         {r.approvedBy && <div className="small muted">{t('pur.approvedBy', { name: r.approvedBy })}</div>}
                         {r.cancelReason && <div className="small muted">{r.cancelReason}</div>}
                       </td>
@@ -189,7 +212,17 @@ export function PurchasesPage() {
 }
 
 type Line = ReceiptDto['lines'][number]
-const emptyLine = (itemId: number): Line => ({ itemId, quantity: 0, unitCost: null, batchNo: null, expiryDate: null, rejectedQty: 0, damagedQty: 0, rejectReason: null, poLineId: null })
+const emptyLine = (itemId: number): Line => ({
+  itemId,
+  quantity: 0,
+  unitCost: null,
+  batchNo: null,
+  expiryDate: null,
+  rejectedQty: 0,
+  damagedQty: 0,
+  rejectReason: null,
+  poLineId: null
+})
 
 function ReceiptDialog({ onClose, order }: { onClose: () => void; order?: PurchaseOrder }) {
   const { t, num, status, toast, fail } = useApp()
@@ -295,7 +328,12 @@ function ReceiptDialog({ onClose, order }: { onClose: () => void; order?: Purcha
           </Field>
           <Field label={t('pur.supplier')}>
             <div className="row" style={{ flexWrap: 'nowrap' }}>
-              <select className="select" disabled={!!order} value={order ? order.supplierId : (supplierId ?? '')} onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : null)}>
+              <select
+                className="select"
+                disabled={!!order}
+                value={order ? order.supplierId : (supplierId ?? '')}
+                onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : null)}
+              >
                 <option value="">—</option>
                 {suppliers
                   ?.filter((s) => s.active)
@@ -342,7 +380,12 @@ function ReceiptDialog({ onClose, order }: { onClose: () => void; order?: Purcha
                 return (
                   <tr key={i}>
                     <td>
-                      <select className="select" disabled={!!l.poLineId} value={l.itemId} onChange={(e) => upd(i, { itemId: Number(e.target.value), batchNo: null, expiryDate: null })}>
+                      <select
+                        className="select"
+                        disabled={!!l.poLineId}
+                        value={l.itemId}
+                        onChange={(e) => upd(i, { itemId: Number(e.target.value), batchNo: null, expiryDate: null })}
+                      >
                         {active.map((it) => (
                           <option key={it.id} value={it.id}>
                             {it.name} ({t('inv.cat.' + it.category)})
@@ -375,10 +418,21 @@ function ReceiptDialog({ onClose, order }: { onClose: () => void; order?: Purcha
                       <NumInput decimals value={l.unitCost} onChange={(v) => upd(i, { unitCost: v })} />
                     </td>
                     <td style={{ width: 130 }}>
-                      <input className={`input ${med && !(l.batchNo ?? '').trim() ? 'invalid' : ''}`} disabled={!med} value={l.batchNo ?? ''} onChange={(e) => upd(i, { batchNo: e.target.value })} />
+                      <input
+                        className={`input ${med && !(l.batchNo ?? '').trim() ? 'invalid' : ''}`}
+                        disabled={!med}
+                        value={l.batchNo ?? ''}
+                        onChange={(e) => upd(i, { batchNo: e.target.value })}
+                      />
                     </td>
                     <td style={{ width: 160 }}>
-                      <input className="input" type="date" disabled={!med} value={l.expiryDate ?? ''} onChange={(e) => upd(i, { expiryDate: e.target.value || null })} />
+                      <input
+                        className="input"
+                        type="date"
+                        disabled={!med}
+                        value={l.expiryDate ?? ''}
+                        onChange={(e) => upd(i, { expiryDate: e.target.value || null })}
+                      />
                     </td>
                     <td className="num nowrap">{num(accepted(l) * (l.unitCost ?? 0), 2)}</td>
                     <td>
@@ -423,7 +477,6 @@ function ReceiptDialog({ onClose, order }: { onClose: () => void; order?: Purcha
     </Modal>
   )
 }
-
 
 /** Purchase orders: what was ordered, what has been received against each line, and receiving the rest. */
 function OrdersCard() {
@@ -489,7 +542,9 @@ function OrdersCard() {
                   </td>
                   <td className="num">{money(o.total)}</td>
                   <td>
-                    <span className={`badge ${o.status === 'received' ? 'good' : o.status === 'partial' ? 'warn' : o.status === 'open' ? 'info' : ''}`}>{t('po.status.' + o.status)}</span>
+                    <span className={`badge ${o.status === 'received' ? 'good' : o.status === 'partial' ? 'warn' : o.status === 'open' ? 'info' : ''}`}>
+                      {t('po.status.' + o.status)}
+                    </span>
                   </td>
                   <td className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
                     {(o.status === 'open' || o.status === 'partial') && can('purchases.record') && (
@@ -555,7 +610,14 @@ function OrderDialog({ onClose }: { onClose: () => void }) {
             disabled={!valid}
             onClick={async () => {
               try {
-                const r = await call('purchases.createOrder', { orderDate, expectedDate: expectedDate || null, supplierId: supplierId!, warehouseId: store!, notes: nz(notes), lines })
+                const r = await call('purchases.createOrder', {
+                  orderDate,
+                  expectedDate: expectedDate || null,
+                  supplierId: supplierId!,
+                  warehouseId: store!,
+                  notes: nz(notes),
+                  lines
+                })
                 toast('success', t('po.saved', { no: r.poNo }))
                 onClose()
               } catch (e) {
@@ -611,7 +673,11 @@ function OrderDialog({ onClose }: { onClose: () => void }) {
             {lines.map((l, i) => (
               <tr key={i}>
                 <td>
-                  <select className="select" value={l.itemId} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, itemId: Number(e.target.value) } : x)))}>
+                  <select
+                    className="select"
+                    value={l.itemId}
+                    onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, itemId: Number(e.target.value) } : x)))}
+                  >
                     {active.map((it) => (
                       <option key={it.id} value={it.id}>
                         {it.name} ({it.unit})

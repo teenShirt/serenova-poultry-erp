@@ -20,7 +20,12 @@ export function SetupPage() {
   const [timezone, setTimezone] = useState('Asia/Colombo')
   const [startDate, setStartDate] = useState(status.today)
   const [cages, setCages] = useState(
-    Array.from({ length: 10 }, (_, i) => ({ code: String(i + 1).padStart(2, '0'), name: `Cage ${String(i + 1).padStart(2, '0')}`, initialHens: 1000 as number | null, hasWaterMeter: true }))
+    Array.from({ length: 10 }, (_, i) => ({
+      code: String(i + 1).padStart(2, '0'),
+      name: `Cage ${String(i + 1).padStart(2, '0')}`,
+      initialHens: 1000 as number | null,
+      hasWaterMeter: true
+    }))
   )
   const [inventory, setInventory] = useState<Inv[]>([
     { category: 'feed', name: 'Layer Mash', unit: 'kg', lowStockThreshold: 1000, openingBalance: 0, batchNo: null, expiryDate: null }
@@ -36,7 +41,9 @@ export function SetupPage() {
 
   const valid = [
     farmName.trim().length > 0 && !!startDate,
-    cages.length > 0 && cages.every((c) => c.name.trim() && c.code.trim() && c.initialHens !== null) && new Set(cages.map((c) => c.code.trim())).size === cages.length,
+    cages.length > 0 &&
+      cages.every((c) => c.name.trim() && c.code.trim() && c.initialHens !== null) &&
+      new Set(cages.map((c) => c.code.trim())).size === cages.length,
     inventory.every((i) => i.name.trim() && i.unit.trim() && (i.category !== 'medicine' || i.openingBalance === 0 || (i.batchNo ?? '').trim())),
     admin.email.includes('@') && admin.password.length >= 6 && admin.password === admin.confirm && (!status.setupKeyRequired || setupKey.trim().length > 0)
   ]
@@ -44,7 +51,8 @@ export function SetupPage() {
   const setCageCount = (n: number) => {
     setCages((cur) => {
       const next = cur.slice(0, n)
-      for (let i = cur.length; i < n; i++) next.push({ code: String(i + 1).padStart(2, '0'), name: `Cage ${String(i + 1).padStart(2, '0')}`, initialHens: 1000, hasWaterMeter: true })
+      for (let i = cur.length; i < n; i++)
+        next.push({ code: String(i + 1).padStart(2, '0'), name: `Cage ${String(i + 1).padStart(2, '0')}`, initialHens: 1000, hasWaterMeter: true })
       return next
     })
   }
@@ -149,17 +157,31 @@ export function SetupPage() {
                   {cages.map((c, i) => (
                     <tr key={i}>
                       <td style={{ width: 110 }}>
-                        <input className="input" value={c.code} maxLength={20} onChange={(e) => setCages(cages.map((x, j) => (j === i ? { ...x, code: e.target.value } : x)))} />
+                        <input
+                          className="input"
+                          value={c.code}
+                          maxLength={20}
+                          onChange={(e) => setCages(cages.map((x, j) => (j === i ? { ...x, code: e.target.value } : x)))}
+                        />
                       </td>
                       <td>
-                        <input className="input" value={c.name} maxLength={60} onChange={(e) => setCages(cages.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+                        <input
+                          className="input"
+                          value={c.name}
+                          maxLength={60}
+                          onChange={(e) => setCages(cages.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                        />
                       </td>
                       <td style={{ width: 160 }}>
                         <NumInput value={c.initialHens} onChange={(v) => setCages(cages.map((x, j) => (j === i ? { ...x, initialHens: v } : x)))} />
                       </td>
                       <td style={{ width: 120 }}>
                         <label className="check">
-                          <input type="checkbox" checked={c.hasWaterMeter} onChange={(e) => setCages(cages.map((x, j) => (j === i ? { ...x, hasWaterMeter: e.target.checked } : x)))} />
+                          <input
+                            type="checkbox"
+                            checked={c.hasWaterMeter}
+                            onChange={(e) => setCages(cages.map((x, j) => (j === i ? { ...x, hasWaterMeter: e.target.checked } : x)))}
+                          />
                         </label>
                       </td>
                     </tr>
@@ -193,7 +215,16 @@ export function SetupPage() {
                     return (
                       <tr key={i}>
                         <td>
-                          <select className="select" value={it.category} onChange={(e) => upd({ category: e.target.value as InventoryCategory, unit: e.target.value === 'feed' ? 'kg' : e.target.value === 'medicine' ? 'ml' : 'pcs' })}>
+                          <select
+                            className="select"
+                            value={it.category}
+                            onChange={(e) =>
+                              upd({
+                                category: e.target.value as InventoryCategory,
+                                unit: e.target.value === 'feed' ? 'kg' : e.target.value === 'medicine' ? 'ml' : 'pcs'
+                              })
+                            }
+                          >
                             <option value="feed">{t('inv.cat.feed')}</option>
                             <option value="medicine">{t('inv.cat.medicine')}</option>
                             <option value="supply">{t('inv.cat.supply')}</option>
@@ -212,10 +243,21 @@ export function SetupPage() {
                           <NumInput decimals value={it.lowStockThreshold} onChange={(v) => upd({ lowStockThreshold: v })} />
                         </td>
                         <td style={{ width: 120 }}>
-                          <input className="input" disabled={it.category !== 'medicine'} value={it.batchNo ?? ''} onChange={(e) => upd({ batchNo: e.target.value })} />
+                          <input
+                            className="input"
+                            disabled={it.category !== 'medicine'}
+                            value={it.batchNo ?? ''}
+                            onChange={(e) => upd({ batchNo: e.target.value })}
+                          />
                         </td>
                         <td style={{ width: 150 }}>
-                          <input className="input" type="date" disabled={it.category !== 'medicine'} value={it.expiryDate ?? ''} onChange={(e) => upd({ expiryDate: e.target.value || null })} />
+                          <input
+                            className="input"
+                            type="date"
+                            disabled={it.category !== 'medicine'}
+                            value={it.expiryDate ?? ''}
+                            onChange={(e) => upd({ expiryDate: e.target.value || null })}
+                          />
                         </td>
                         <td>
                           <button className="icon-btn" onClick={() => setInventory(inventory.filter((_, j) => j !== i))} aria-label={t('common.delete')}>
@@ -229,7 +271,15 @@ export function SetupPage() {
               </table>
             </div>
             <div>
-              <button className="btn" onClick={() => setInventory([...inventory, { category: 'medicine', name: '', unit: 'ml', lowStockThreshold: null, openingBalance: 0, batchNo: null, expiryDate: null }])}>
+              <button
+                className="btn"
+                onClick={() =>
+                  setInventory([
+                    ...inventory,
+                    { category: 'medicine', name: '', unit: 'ml', lowStockThreshold: null, openingBalance: 0, batchNo: null, expiryDate: null }
+                  ])
+                }
+              >
                 <Plus size={18} />
                 {t('setup.addItem')}
               </button>
@@ -245,13 +295,25 @@ export function SetupPage() {
                 <input className="input" value={admin.displayName} onChange={(e) => setAdmin({ ...admin, displayName: e.target.value })} />
               </Field>
               <Field label={t('auth.email')} required>
-                <input className="input" type="email" inputMode="email" autoComplete="username" value={admin.email} onChange={(e) => setAdmin({ ...admin, email: e.target.value })} />
+                <input
+                  className="input"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="username"
+                  value={admin.email}
+                  onChange={(e) => setAdmin({ ...admin, email: e.target.value })}
+                />
               </Field>
               <Field label={t('auth.password')} required hint={t('err.password_too_short')}>
                 <input className="input" type="password" value={admin.password} onChange={(e) => setAdmin({ ...admin, password: e.target.value })} />
               </Field>
               <Field label={t('auth.confirmPassword')} required>
-                <input className={`input ${admin.confirm && admin.confirm !== admin.password ? 'invalid' : ''}`} type="password" value={admin.confirm} onChange={(e) => setAdmin({ ...admin, confirm: e.target.value })} />
+                <input
+                  className={`input ${admin.confirm && admin.confirm !== admin.password ? 'invalid' : ''}`}
+                  type="password"
+                  value={admin.confirm}
+                  onChange={(e) => setAdmin({ ...admin, confirm: e.target.value })}
+                />
               </Field>
             </div>
             {admin.confirm && admin.confirm !== admin.password && <Notice tone="warn">{t('auth.passwordMismatch')}</Notice>}

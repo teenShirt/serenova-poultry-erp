@@ -47,17 +47,33 @@ export async function addTreatment(ctx: Ctx, t: TreatmentInput): Promise<number>
     const item = await getItem(ctx, t.itemId)
     assert(item.category === 'medicine', 'item_not_medicine')
     if (t.batchId) {
-      const b = (await ctx.db.prepare('SELECT item_id FROM inventory_batches WHERE id = ? AND organization_id = ?').get(t.batchId, ctx.org)) as { item_id: number } | undefined
+      const b = (await ctx.db.prepare('SELECT item_id FROM inventory_batches WHERE id = ? AND organization_id = ?').get(t.batchId, ctx.org)) as
+        | { item_id: number }
+        | undefined
       assert(b && b.item_id === t.itemId, 'batch_mismatch')
     }
     const id = Number(
-      (await ctx.db
-        .prepare(
-          `INSERT INTO medicine_treatments (organization_id, day_id, cage_id, item_id, batch_id, quantity, administered_at, reason,
+      (
+        await ctx.db
+          .prepare(
+            `INSERT INTO medicine_treatments (organization_id, day_id, cage_id, item_id, batch_id, quantity, administered_at, reason,
              prescribed_by, notes, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(ctx.org, day.id, t.cageId, t.itemId, t.batchId, t.quantity, t.administeredAt, t.reason.trim(), t.prescribedBy, t.notes, user.id, ctx.now().toISOString()))
-        .lastInsertRowid
+          )
+          .run(
+            ctx.org,
+            day.id,
+            t.cageId,
+            t.itemId,
+            t.batchId,
+            t.quantity,
+            t.administeredAt,
+            t.reason.trim(),
+            t.prescribedBy,
+            t.notes,
+            user.id,
+            ctx.now().toISOString()
+          )
+      ).lastInsertRowid
     )
     await syncLinkedTxn(ctx, {
       sourceType: 'treatment',
@@ -80,7 +96,9 @@ export async function deleteTreatment(ctx: Ctx, id: number, reason: string) {
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const row = (await ctx.db
-      .prepare('SELECT t.*, d.business_date FROM medicine_treatments t JOIN farm_days d ON d.id = t.day_id WHERE t.id = ? AND t.organization_id = ? AND d.farm_id = ?')
+      .prepare(
+        'SELECT t.*, d.business_date FROM medicine_treatments t JOIN farm_days d ON d.id = t.day_id WHERE t.id = ? AND t.organization_id = ? AND d.farm_id = ?'
+      )
       .get(id, ctx.org, ctx.farm)) as (Record<string, unknown> & { business_date: string; day_id: number }) | undefined
     assert(row, 'not_found')
     await requireWritableDay(ctx, row.business_date)
@@ -121,13 +139,14 @@ export async function addHealthEvent(ctx: Ctx, h: HealthEventInput): Promise<num
     const day = await requireWritableDay(ctx, h.date)
     if (h.cageId) await requireCageDay(ctx, day, h.cageId)
     const id = Number(
-      (await ctx.db
-        .prepare(
-          `INSERT INTO health_events (organization_id, day_id, cage_id, event_time, category, severity, description, action_taken,
+      (
+        await ctx.db
+          .prepare(
+            `INSERT INTO health_events (organization_id, day_id, cage_id, event_time, category, severity, description, action_taken,
              recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(ctx.org, day.id, h.cageId, h.eventTime, h.category, h.severity, h.description.trim(), h.actionTaken, user.id, ctx.now().toISOString()))
-        .lastInsertRowid
+          )
+          .run(ctx.org, day.id, h.cageId, h.eventTime, h.category, h.severity, h.description.trim(), h.actionTaken, user.id, ctx.now().toISOString())
+      ).lastInsertRowid
     )
     await audit(ctx, { action: 'create', entity: 'health_event', entityId: id, dayId: day.id, details: h })
     return id
@@ -139,7 +158,9 @@ export async function deleteHealthEvent(ctx: Ctx, id: number, reason: string) {
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const row = (await ctx.db
-      .prepare('SELECT h.*, d.business_date FROM health_events h JOIN farm_days d ON d.id = h.day_id WHERE h.id = ? AND h.organization_id = ? AND d.farm_id = ?')
+      .prepare(
+        'SELECT h.*, d.business_date FROM health_events h JOIN farm_days d ON d.id = h.day_id WHERE h.id = ? AND h.organization_id = ? AND d.farm_id = ?'
+      )
       .get(id, ctx.org, ctx.farm)) as (Record<string, unknown> & { business_date: string; day_id: number }) | undefined
     assert(row, 'not_found')
     await requireWritableDay(ctx, row.business_date)

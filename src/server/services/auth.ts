@@ -134,7 +134,10 @@ async function orgCtx(ctx: AnonCtx, orgId: number, user: SessionUser | null = nu
 }
 
 /** The signed-in user as requests see them: their role's permissions and the cages they look after. */
-export async function toSessionUser(ctx: Pick<Ctx, 'db'>, row: Pick<AuthRow, 'id' | 'organization_id' | 'username' | 'email' | 'display_name' | 'role_id' | 'assigned_cages'>): Promise<SessionUser> {
+export async function toSessionUser(
+  ctx: Pick<Ctx, 'db'>,
+  row: Pick<AuthRow, 'id' | 'organization_id' | 'username' | 'email' | 'display_name' | 'role_id' | 'assigned_cages'>
+): Promise<SessionUser> {
   const role = await rolePermissions(ctx.db, row.organization_id, row.role_id)
   return {
     id: row.id,
@@ -215,7 +218,12 @@ export interface NewUser {
 
 /** A short name for the audit history, taken from the email address, unique within the organization. */
 async function usernameFor(ctx: Pick<Ctx, 'db' | 'org'>, email: string): Promise<string> {
-  const base = (email.split('@')[0].replace(/[^A-Za-z0-9._-]/g, '').slice(0, 28) || 'user').padEnd(3, '0')
+  const base = (
+    email
+      .split('@')[0]
+      .replace(/[^A-Za-z0-9._-]/g, '')
+      .slice(0, 28) || 'user'
+  ).padEnd(3, '0')
   for (let n = 1; ; n++) {
     const name = n === 1 ? base : `${base}${n}`
     if (!(await ctx.db.prepare('SELECT 1 AS x FROM users WHERE organization_id = ? AND username = ?').get(ctx.org, name))) return name
@@ -239,7 +247,18 @@ export async function createUserRaw(ctx: Ctx, u: NewUser, opts: { pending?: bool
     .prepare(
       'INSERT INTO users (organization_id, username, email, display_name, password_hash, role, role_id, active, pending, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
-    .run(ctx.org, username, email, u.displayName.trim() || username, hashPassword(u.password), role.is_admin ? 'admin' : 'operator', role.id, pending ? 0 : 1, pending ? 1 : 0, ctx.now().toISOString())
+    .run(
+      ctx.org,
+      username,
+      email,
+      u.displayName.trim() || username,
+      hashPassword(u.password),
+      role.is_admin ? 'admin' : 'operator',
+      role.id,
+      pending ? 0 : 1,
+      pending ? 1 : 0,
+      ctx.now().toISOString()
+    )
   const id = Number(info.lastInsertRowid)
   const recoveryCode = await issueRecoveryCode(ctx, id)
   await audit(ctx, { action: pending ? 'signup_request' : 'create', entity: 'user', entityId: id, details: { email, username, role: role.name } })
@@ -251,9 +270,9 @@ export async function createUserRaw(ctx: Ctx, u: NewUser, opts: { pending?: bool
  * created as a data-entry user that cannot sign in until an administrator approves it.
  */
 export async function signup(anon: AnonCtx, u: { organizationCode: string; email: string; displayName: string; password: string }) {
-  const org = (await anon.db
-    .prepare("SELECT id FROM organizations WHERE code = ? AND status = 'active'")
-    .get(u.organizationCode.trim().toLowerCase())) as { id: number } | undefined
+  const org = (await anon.db.prepare("SELECT id FROM organizations WHERE code = ? AND status = 'active'").get(u.organizationCode.trim().toLowerCase())) as
+    | { id: number }
+    | undefined
   assert(org, 'organization_not_found')
   const ctx = await orgCtx(anon, org.id)
   assert((await getSettings(ctx)).allowSignup, 'signup_disabled')
@@ -261,10 +280,18 @@ export async function signup(anon: AnonCtx, u: { organizationCode: string; email
   return ctx.db.transaction(async () => {
     // Someone signing up gets the data-entry role; the administrator chooses the final role on approval.
     await ensureRoles(ctx.db, ctx.org)
-    const worker = (await ctx.db.prepare('SELECT id FROM roles WHERE organization_id = ? AND name = ? AND archived_at IS NULL').get(ctx.org, WORKER_ROLE)) as { id: number } | undefined
-    const fallback = (await ctx.db.prepare('SELECT id FROM roles WHERE organization_id = ? AND is_admin = 0 AND archived_at IS NULL ORDER BY id LIMIT 1').get(ctx.org)) as { id: number } | undefined
+    const worker = (await ctx.db.prepare('SELECT id FROM roles WHERE organization_id = ? AND name = ? AND archived_at IS NULL').get(ctx.org, WORKER_ROLE)) as
+      | { id: number }
+      | undefined
+    const fallback = (await ctx.db
+      .prepare('SELECT id FROM roles WHERE organization_id = ? AND is_admin = 0 AND archived_at IS NULL ORDER BY id LIMIT 1')
+      .get(ctx.org)) as { id: number } | undefined
     assert(worker ?? fallback, 'role_not_found')
-    const { recoveryCode } = await createUserRaw(ctx, { email: u.email, displayName: u.displayName, password: u.password, roleId: (worker ?? fallback)!.id }, { pending: true })
+    const { recoveryCode } = await createUserRaw(
+      ctx,
+      { email: u.email, displayName: u.displayName, password: u.password, roleId: (worker ?? fallback)!.id },
+      { pending: true }
+    )
     return { recoveryCode }
   })()
 }
@@ -323,10 +350,9 @@ export async function adminNewRecoveryCode(ctx: Ctx, id: number) {
 
 export async function listUsers(ctx: Ctx): Promise<UserRow[]> {
   requirePermission(ctx, 'users.manage')
-  const rows = (await ctx.db.prepare(`SELECT ${userCols} FROM ${userFrom} WHERE u.organization_id = ? ORDER BY u.pending DESC, u.username`).all(ctx.org)) as Record<
-    string,
-    unknown
-  >[]
+  const rows = (await ctx.db
+    .prepare(`SELECT ${userCols} FROM ${userFrom} WHERE u.organization_id = ? ORDER BY u.pending DESC, u.username`)
+    .all(ctx.org)) as Record<string, unknown>[]
   const roles = new Map((await listRoles(ctx)).map((r) => [r.id, r.permissions]))
   return rows.map((r) => toUser(r, roles.get(r.roleId as number) ?? []))
 }

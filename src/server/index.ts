@@ -61,7 +61,13 @@ export async function createServer(cfg: ServerConfig) {
       return
     }
     const pick = <K extends 'userId' | 'orgId' | 'farmId' | 'platformUserId'>(k: K) => (k in change ? (change[k] ?? null) : (current?.[k] ?? null))
-    const next = { userId: pick('userId'), orgId: pick('orgId'), farmId: pick('farmId'), platformUserId: pick('platformUserId'), mode: change.mode ?? current?.mode ?? 'farm' }
+    const next = {
+      userId: pick('userId'),
+      orgId: pick('orgId'),
+      farmId: pick('farmId'),
+      platformUserId: pick('platformUserId'),
+      mode: change.mode ?? current?.mode ?? 'farm'
+    }
     if (current && !change.rotate) {
       await sessions.update(current.id, next)
       return
@@ -177,7 +183,13 @@ export async function createServer(cfg: ServerConfig) {
   app.get('/api/export/:kind', async (req, res) => {
     const kind = String(req.params['kind'])
     const q = (k: string) => String(req.query[k] ?? '')
-    if (!(CSV_KINDS as readonly string[]).includes(kind) || !isIsoDate(q('from')) || !isIsoDate(q('to')) || q('from') > q('to') || q('from') < addDays(q('to'), -400)) {
+    if (
+      !(CSV_KINDS as readonly string[]).includes(kind) ||
+      !isIsoDate(q('from')) ||
+      !isIsoDate(q('to')) ||
+      q('from') > q('to') ||
+      q('from') < addDays(q('to'), -400)
+    ) {
       throw new AppError('invalid_input', { field: 'kind' })
     }
     const out = await withSignedIn(req, res, async (ctx) => {
@@ -202,9 +214,7 @@ export async function createServer(cfg: ServerConfig) {
       if (ctx.mode === 'demo') throw new AppError('demo_mode_blocked')
       const row = (await ctx.db
         .prepare("SELECT path FROM backup_runs WHERE id = ? AND organization_id = ? AND status = 'ok'")
-        .get(Number(req.params['id']), ctx.org)) as
-        | { path: string }
-        | undefined
+        .get(Number(req.params['id']), ctx.org)) as { path: string } | undefined
       const p = row?.path ? path.resolve(row.path) : null
       if (!p || path.dirname(p) !== path.resolve(cfg.backupDir) || !fs.existsSync(p)) throw new AppError('file_not_allowed')
       return p
@@ -237,7 +247,9 @@ export async function createServer(cfg: ServerConfig) {
 
   const clientDir = path.join(projectRoot, 'dist', 'client')
   if (fs.existsSync(clientDir)) {
-    app.use(express.static(clientDir, { index: false, maxAge: '7d', setHeaders: (res, p) => p.endsWith('.html') && res.setHeader('Cache-Control', 'no-cache') }))
+    app.use(
+      express.static(clientDir, { index: false, maxAge: '7d', setHeaders: (res, p) => p.endsWith('.html') && res.setHeader('Cache-Control', 'no-cache') })
+    )
     app.get('/', (_req, res) => {
       res.setHeader('Cache-Control', 'no-cache')
       res.sendFile(path.join(clientDir, 'index.html'))
@@ -246,7 +258,9 @@ export async function createServer(cfg: ServerConfig) {
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof AppError) {
-      res.status(err.code === 'not_logged_in' || err.code === 'admin_only' || err.code === 'no_permission' ? 403 : 400).json({ ok: false, code: err.code, params: err.params })
+      res
+        .status(err.code === 'not_logged_in' || err.code === 'admin_only' || err.code === 'no_permission' ? 403 : 400)
+        .json({ ok: false, code: err.code, params: err.params })
       return
     }
     const e = err as { type?: string; message?: string }
@@ -316,7 +330,10 @@ function startSchedulers(cfg: ServerConfig, dbs: Databases, sessions: Sessions) 
   setTimeout(safely('Automatic backup', backupTick), 60_000).unref()
   return [
     setInterval(safely('Automatic backup', backupTick), 10 * 60_000).unref(),
-    setInterval(safely('Session clean-up', () => sessions.purgeExpired()), 60 * 60_000).unref()
+    setInterval(
+      safely('Session clean-up', () => sessions.purgeExpired()),
+      60 * 60_000
+    ).unref()
   ]
 }
 

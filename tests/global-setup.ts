@@ -31,7 +31,9 @@ export default async function setup(project: TestProject) {
     return async () => {
       const mysql = await import('mysql2/promise')
       const c = await mysql.createConnection(server)
-      const [rows] = await c.query(String.raw`SELECT schema_name AS s FROM information_schema.schemata WHERE schema_name LIKE 'pfm\_test\_%' OR schema_name LIKE 'pfm\_tpl\_%'`)
+      const [rows] = await c.query(
+        String.raw`SELECT schema_name AS s FROM information_schema.schemata WHERE schema_name LIKE 'pfm\_test\_%' OR schema_name LIKE 'pfm\_tpl\_%'`
+      )
       for (const r of rows as { s: string }[]) await c.query(`DROP DATABASE IF EXISTS \`${r.s}\``)
       await c.end()
     }

@@ -99,7 +99,9 @@ export function printHtml(html: string, title: string): Promise<void> {
     const frame = document.createElement('iframe')
     frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden'
     frame.setAttribute('aria-hidden', 'true')
-    frame.srcdoc = html.replace(/<title>[^<]*<\/title>|<\/head>/i, (m) => (m.toLowerCase() === '</head>' ? `<title>${escapeHtml(title)}</title></head>` : `<title>${escapeHtml(title)}</title>`))
+    frame.srcdoc = html.replace(/<title>[^<]*<\/title>|<\/head>/i, (m) =>
+      m.toLowerCase() === '</head>' ? `<title>${escapeHtml(title)}</title></head>` : `<title>${escapeHtml(title)}</title>`
+    )
     frame.onload = () => {
       const w = frame.contentWindow
       const done = () => {

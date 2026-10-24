@@ -76,13 +76,22 @@ export function CagesDialog({ user, onClose }: { user: UserRow; onClose: () => v
           {!allCages && (
             <div className="chips">
               {cages?.map((c) => (
-                <button key={c.id} type="button" className={`chip ${picked.includes(c.id) ? 'on' : ''}`} onClick={() => setPicked(picked.includes(c.id) ? picked.filter((x) => x !== c.id) : [...picked, c.id])}>
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`chip ${picked.includes(c.id) ? 'on' : ''}`}
+                  onClick={() => setPicked(picked.includes(c.id) ? picked.filter((x) => x !== c.id) : [...picked, c.id])}
+                >
                   {c.name}
                 </button>
               ))}
             </div>
           )}
-          {!ok && <div className="small" style={{ color: 'var(--bad)', marginTop: 6 }}>{t('duty.pickCage')}</div>}
+          {!ok && (
+            <div className="small" style={{ color: 'var(--bad)', marginTop: 6 }}>
+              {t('duty.pickCage')}
+            </div>
+          )}
         </div>
       </div>
     </Modal>
@@ -116,7 +125,12 @@ export function MyDutiesCard() {
           const d = list.filter((x) => x.done).length
           const left = list.filter((x) => !x.done)
           return (
-            <button key={duty} className={`duty ${d === list.length ? 'done' : ''}`} style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit' }} onClick={() => nav(DUTY_PAGE[duty])}>
+            <button
+              key={duty}
+              className={`duty ${d === list.length ? 'done' : ''}`}
+              style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit' }}
+              onClick={() => nav(DUTY_PAGE[duty])}
+            >
               <span className="row" style={{ gap: 8 }}>
                 {d === list.length ? <CheckCircle2 size={18} color="var(--good)" /> : <Circle size={18} color="var(--muted)" />}
                 <strong className="grow">{t('duty.' + duty)}</strong>

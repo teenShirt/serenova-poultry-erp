@@ -1,14 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  closingHens,
-  eggTotals,
-  feedConsumption,
-  feedPerHenGrams,
-  isProductionDrop,
-  mortalityPercent,
-  productionPercent,
-  waterConsumption
-} from '@shared/calc'
+import { closingHens, eggTotals, feedConsumption, feedPerHenGrams, isProductionDrop, mortalityPercent, productionPercent, waterConsumption } from '@shared/calc'
 import { addDays, daysBetween, isIsoDate, monthBounds, startOfWeek, todayInTimezone } from '@shared/dates'
 
 describe('flock reconciliation', () => {

@@ -50,7 +50,8 @@ const PRIORITY_TONE: Record<string, string> = { urgent: 'bad', high: 'warn', nor
 function StatusBadge({ task }: { task: TaskRow }) {
   const { t } = useApp()
   if (task.overdue) return <span className="badge bad">{t('task.overdue')}</span>
-  const tone = task.status === 'verified' || task.status === 'completed' ? 'good' : task.status === 'in_progress' ? 'warn' : task.status === 'cancelled' ? '' : 'info'
+  const tone =
+    task.status === 'verified' || task.status === 'completed' ? 'good' : task.status === 'in_progress' ? 'warn' : task.status === 'cancelled' ? '' : 'info'
   return <span className={`badge ${tone}`}>{t('task.status.' + task.status)}</span>
 }
 
@@ -84,7 +85,11 @@ function Board({ mineOnly, onOpen }: { mineOnly: boolean; onOpen: (id: number) =
           </div>
         }
       >
-        {week === 0 && <div className="muted small" style={{ marginBottom: 8 }}>{t('task.todayCount', { count: today.length })}</div>}
+        {week === 0 && (
+          <div className="muted small" style={{ marginBottom: 8 }}>
+            {t('task.todayCount', { count: today.length })}
+          </div>
+        )}
         {!tasks ? null : tasks.length === 0 ? (
           <Empty text={t('task.none')} />
         ) : (
@@ -371,10 +376,20 @@ function TaskForm({ task, onClose }: { task: TaskRow | null; onClose: () => void
             </select>
           </Field>
           <Field label={t('task.where')}>
-            <select className="select" value={f.houseId ? `h${f.houseId}` : f.farmId ? 'farm' : ''} onChange={(e) => {
-              const v = e.target.value
-              set(v === '' ? { farmId: null, houseId: null } : v === 'farm' ? { farmId: status.farm?.id ?? null, houseId: null } : { farmId: status.farm?.id ?? null, houseId: Number(v.slice(1)) })
-            }}>
+            <select
+              className="select"
+              value={f.houseId ? `h${f.houseId}` : f.farmId ? 'farm' : ''}
+              onChange={(e) => {
+                const v = e.target.value
+                set(
+                  v === ''
+                    ? { farmId: null, houseId: null }
+                    : v === 'farm'
+                      ? { farmId: status.farm?.id ?? null, houseId: null }
+                      : { farmId: status.farm?.id ?? null, houseId: Number(v.slice(1)) }
+                )
+              }}
+            >
               <option value="farm">{status.farm?.name}</option>
               {houses?.map((h) => (
                 <option key={h.id} value={`h${h.id}`}>
@@ -396,7 +411,13 @@ function TaskForm({ task, onClose }: { task: TaskRow | null; onClose: () => void
             </Field>
           )}
           <Field label={f.recurrence === 'none' ? t('task.start') : t('task.firstDate')}>
-            <input className="input" type="date" value={f.startDate} disabled={!!task?.seriesId} onChange={(e) => set({ startDate: e.target.value, dueDate: f.dueDate < e.target.value ? e.target.value : f.dueDate })} />
+            <input
+              className="input"
+              type="date"
+              value={f.startDate}
+              disabled={!!task?.seriesId}
+              onChange={(e) => set({ startDate: e.target.value, dueDate: f.dueDate < e.target.value ? e.target.value : f.dueDate })}
+            />
           </Field>
           {f.recurrence === 'none' ? (
             <Field label={t('task.due')}>

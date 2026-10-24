@@ -23,14 +23,20 @@ export function requirePermission(ctx: Pick<Ctx, 'user'>, p: Permission) {
 }
 
 /** The permissions of a role (every permission for the administrator role). */
-export async function rolePermissions(db: DB, orgId: number, roleId: number | null): Promise<{ isAdmin: boolean; name: string | null; permissions: Permission[] }> {
+export async function rolePermissions(
+  db: DB,
+  orgId: number,
+  roleId: number | null
+): Promise<{ isAdmin: boolean; name: string | null; permissions: Permission[] }> {
   if (!roleId) return { isAdmin: false, name: null, permissions: [] }
   const role = (await db.prepare('SELECT name, is_admin FROM roles WHERE id = ? AND organization_id = ? AND archived_at IS NULL').get(roleId, orgId)) as
     | { name: string; is_admin: number }
     | undefined
   if (!role) return { isAdmin: false, name: null, permissions: [] }
   if (role.is_admin) return { isAdmin: true, name: role.name, permissions: [...PERMISSIONS] }
-  const rows = (await db.prepare('SELECT permission FROM role_permissions WHERE role_id = ? AND organization_id = ?').all(roleId, orgId)) as { permission: string }[]
+  const rows = (await db.prepare('SELECT permission FROM role_permissions WHERE role_id = ? AND organization_id = ?').all(roleId, orgId)) as {
+    permission: string
+  }[]
   const known = new Set<string>(PERMISSIONS)
   return { isAdmin: false, name: role.name, permissions: rows.map((r) => r.permission).filter((p): p is Permission => known.has(p)) }
 }
@@ -61,7 +67,8 @@ async function insertRole(db: DB, orgId: number, r: { name: string; description:
  */
 export async function ensureRoles(db: DB, orgId: number) {
   const find = async (where: string, ...args: unknown[]) =>
-    ((await db.prepare(`SELECT id FROM roles WHERE organization_id = ? AND ${where} ORDER BY id LIMIT 1`).get(orgId, ...args)) as { id: number } | undefined)?.id
+    ((await db.prepare(`SELECT id FROM roles WHERE organization_id = ? AND ${where} ORDER BY id LIMIT 1`).get(orgId, ...args)) as { id: number } | undefined)
+      ?.id
   const adminRole = (await find('is_admin = 1')) ?? (await insertRole(db, orgId, { name: ADMIN_ROLE, description: null, isAdmin: true, permissions: [] }))
   let workerRole = await find('name = ?', WORKER_ROLE)
   const users = (await db.prepare('SELECT id, role, duties, display_name FROM users WHERE organization_id = ? AND role_id IS NULL').all(orgId)) as {
@@ -86,7 +93,7 @@ export async function ensureRoles(db: DB, orgId: number) {
         roleId = await insertRole(db, orgId, { name, description: null, isAdmin: false, permissions: duties.map((d) => DUTY_PERMISSION[d]) })
       }
     }
-    await db.prepare("UPDATE users SET role_id = ?, role = ? WHERE id = ?").run(roleId, roleId === adminRole ? 'admin' : 'operator', u.id)
+    await db.prepare('UPDATE users SET role_id = ?, role = ? WHERE id = ?').run(roleId, roleId === adminRole ? 'admin' : 'operator', u.id)
   }
 }
 
@@ -98,7 +105,10 @@ export async function listRoles(ctx: Pick<Ctx, 'db' | 'org'>): Promise<RoleRow[]
        FROM roles r WHERE r.organization_id = ? ORDER BY r.is_admin DESC, r.archived_at IS NOT NULL, r.name`
     )
     .all(ctx.org)) as { id: number; name: string; description: string | null; is_admin: number; archived_at: string | null; users: number }[]
-  const perms = (await ctx.db.prepare('SELECT role_id, permission FROM role_permissions WHERE organization_id = ?').all(ctx.org)) as { role_id: number; permission: string }[]
+  const perms = (await ctx.db.prepare('SELECT role_id, permission FROM role_permissions WHERE organization_id = ?').all(ctx.org)) as {
+    role_id: number
+    permission: string
+  }[]
   return roles.map((r) => ({
     id: r.id,
     name: r.name,
@@ -143,12 +153,18 @@ export async function saveRole(ctx: Ctx, r: { id: number | null; name: string; d
       for (const p of before) if (!permissions.includes(p) && !user.permissions.includes(p)) throw new AppError('cannot_grant_permission', { permission: p })
       await ctx.db.prepare('UPDATE roles SET name = ?, description = ? WHERE id = ?').run(name, r.description?.trim() || null, id)
       await ctx.db.prepare('DELETE FROM role_permissions WHERE role_id = ? AND organization_id = ?').run(id, ctx.org)
-      if (permissions.length) await ctx.db.query('INSERT INTO role_permissions (organization_id, role_id, permission) VALUES ?', [permissions.map((p) => [ctx.org, id, p])])
+      if (permissions.length)
+        await ctx.db.query('INSERT INTO role_permissions (organization_id, role_id, permission) VALUES ?', [permissions.map((p) => [ctx.org, id, p])])
     } else {
       await assertRoleSlot(ctx)
       id = await insertRole(ctx.db, ctx.org, { name, description: r.description?.trim() || null, isAdmin: false, permissions })
     }
-    await audit(ctx, { action: r.id ? 'update' : 'create', entity: 'role', entityId: id, details: { name, before: r.id ? before : undefined, after: permissions } })
+    await audit(ctx, {
+      action: r.id ? 'update' : 'create',
+      entity: 'role',
+      entityId: id,
+      details: { name, before: r.id ? before : undefined, after: permissions }
+    })
     return id
   })()
 }
@@ -158,7 +174,9 @@ export async function archiveRole(ctx: Ctx, id: number) {
   await ctx.db.transaction(async () => {
     const role = await getRole(ctx, id)
     assert(!role.is_admin, 'admin_role_locked')
-    const used = (await ctx.db.prepare('SELECT COUNT(*) AS n FROM users WHERE organization_id = ? AND role_id = ? AND active = 1').get(ctx.org, id)) as { n: number }
+    const used = (await ctx.db.prepare('SELECT COUNT(*) AS n FROM users WHERE organization_id = ? AND role_id = ? AND active = 1').get(ctx.org, id)) as {
+      n: number
+    }
     assert(used.n === 0, 'role_in_use', { count: used.n })
     await ctx.db.prepare('UPDATE roles SET archived_at = ? WHERE id = ?').run(ctx.now().toISOString(), id)
     await audit(ctx, { action: 'archive', entity: 'role', entityId: id, details: { name: role.name } })
@@ -177,7 +195,9 @@ export async function assertCanAssignRole(ctx: Ctx, roleId: number) {
 }
 
 export async function assertCanManageUser(ctx: Ctx, userId: number) {
-  const row = (await ctx.db.prepare('SELECT role_id FROM users WHERE id = ? AND organization_id = ?').get(userId, ctx.org)) as { role_id: number | null } | undefined
+  const row = (await ctx.db.prepare('SELECT role_id FROM users WHERE id = ? AND organization_id = ?').get(userId, ctx.org)) as
+    | { role_id: number | null }
+    | undefined
   assert(row, 'not_found')
   const target = await rolePermissions(ctx.db, ctx.org, row.role_id)
   for (const p of target.permissions) if (!ctx.user!.permissions.includes(p)) throw new AppError('no_permission')

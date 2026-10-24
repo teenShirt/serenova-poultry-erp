@@ -73,7 +73,15 @@ export async function listOrders(ctx: Ctx, f: { openOnly?: boolean } = {}): Prom
     const all = lines.every((l) => l.received >= l.quantity - 1e-9)
     const any = lines.some((l) => l.received > 0)
     const status: PurchaseOrder['status'] = h.status !== 'open' ? h.status : all ? 'received' : any ? 'partial' : 'open'
-    out.push({ ...h, status, lines, total: round(lines.reduce((s, l) => s + l.quantity * (l.unitCost ?? 0), 0), 2) })
+    out.push({
+      ...h,
+      status,
+      lines,
+      total: round(
+        lines.reduce((s, l) => s + l.quantity * (l.unitCost ?? 0), 0),
+        2
+      )
+    })
   }
   return f.openOnly ? out.filter((o) => o.status === 'open' || o.status === 'partial') : out
 }
@@ -97,7 +105,9 @@ export async function createOrder(ctx: Ctx, o: PurchaseOrderInput): Promise<{ id
     for (const l of o.lines) {
       assert(l.quantity > 0, 'quantity_positive')
       await getItem(ctx, l.itemId)
-      await ctx.db.prepare('INSERT INTO purchase_order_lines (organization_id, po_id, item_id, quantity, unit_cost) VALUES (?, ?, ?, ?, ?)').run(ctx.org, id, l.itemId, l.quantity, l.unitCost)
+      await ctx.db
+        .prepare('INSERT INTO purchase_order_lines (organization_id, po_id, item_id, quantity, unit_cost) VALUES (?, ?, ?, ?, ?)')
+        .run(ctx.org, id, l.itemId, l.quantity, l.unitCost)
     }
     await audit(ctx, { action: 'create', entity: 'purchase_order', entityId: id, details: { poNo, ...o } })
     return { id, poNo }
@@ -109,7 +119,9 @@ export async function closeOrder(ctx: Ctx, id: number, status: 'closed' | 'cance
   requirePermission(ctx, 'purchases.record')
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
-    const po = (await ctx.db.prepare('SELECT status FROM purchase_orders WHERE id = ? AND organization_id = ?').get(id, ctx.org)) as { status: string } | undefined
+    const po = (await ctx.db.prepare('SELECT status FROM purchase_orders WHERE id = ? AND organization_id = ?').get(id, ctx.org)) as
+      | { status: string }
+      | undefined
     assert(po, 'not_found')
     assert(po.status === 'open', 'order_not_open')
     if (status === 'cancelled') {
@@ -139,9 +151,9 @@ export async function createReceipt(ctx: Ctx, r: ReceiptInput): Promise<{ id: nu
     // The same form sent twice (double click, retry after a lost reply) is recorded once.
     const clientRef = r.clientRef?.trim() || null
     if (clientRef) {
-      const dup = (await ctx.db.prepare('SELECT id, grn_no AS grnNo, status FROM goods_receipts WHERE organization_id = ? AND client_ref = ?').get(ctx.org, clientRef)) as
-        | { id: number; grnNo: string; status: 'submitted' | 'posted' }
-        | undefined
+      const dup = (await ctx.db
+        .prepare('SELECT id, grn_no AS grnNo, status FROM goods_receipts WHERE organization_id = ? AND client_ref = ?')
+        .get(ctx.org, clientRef)) as { id: number; grnNo: string; status: 'submitted' | 'posted' } | undefined
       if (dup) return dup
     }
     await assertDateWritable(ctx, r.date)
@@ -149,19 +161,22 @@ export async function createReceipt(ctx: Ctx, r: ReceiptInput): Promise<{ id: nu
     let warehouseId = r.warehouseId ?? null
     let poLines = new Map<number, { item_id: number; quantity: number }>()
     if (r.poId) {
-      const po = (await ctx.db.prepare('SELECT supplier_id, warehouse_id, status FROM purchase_orders WHERE id = ? AND organization_id = ?').get(r.poId, ctx.org)) as
-        | { supplier_id: number; warehouse_id: number; status: string }
-        | undefined
+      const po = (await ctx.db
+        .prepare('SELECT supplier_id, warehouse_id, status FROM purchase_orders WHERE id = ? AND organization_id = ?')
+        .get(r.poId, ctx.org)) as { supplier_id: number; warehouse_id: number; status: string } | undefined
       assert(po, 'not_found')
       assert(po.status === 'open', 'order_not_open')
       assert(!supplierId || supplierId === po.supplier_id, 'supplier_mismatch')
       supplierId = po.supplier_id
       warehouseId ??= po.warehouse_id
       poLines = new Map(
-        ((await ctx.db.prepare('SELECT id, item_id, quantity FROM purchase_order_lines WHERE po_id = ?').all(r.poId)) as { id: number; item_id: number; quantity: number }[]).map((l) => [
-          l.id,
-          l
-        ])
+        (
+          (await ctx.db.prepare('SELECT id, item_id, quantity FROM purchase_order_lines WHERE po_id = ?').all(r.poId)) as {
+            id: number
+            item_id: number
+            quantity: number
+          }[]
+        ).map((l) => [l.id, l])
       )
     }
     if (supplierId) assert(await ctx.db.prepare('SELECT 1 AS x FROM suppliers WHERE id = ? AND organization_id = ?').get(supplierId, ctx.org), 'not_found')
@@ -171,12 +186,29 @@ export async function createReceipt(ctx: Ctx, r: ReceiptInput): Promise<{ id: nu
     const grnNo = await nextNumber(ctx, 'GRN', 'goods_receipts', 'grn_no', r.date)
     const now = ctx.now().toISOString()
     const id = Number(
-      (await ctx.db
-        .prepare(
-          `INSERT INTO goods_receipts (organization_id, grn_no, receipt_date, supplier_id, warehouse_id, po_id, invoice_no, delivery_note, vehicle, notes,
+      (
+        await ctx.db
+          .prepare(
+            `INSERT INTO goods_receipts (organization_id, grn_no, receipt_date, supplier_id, warehouse_id, po_id, invoice_no, delivery_note, vehicle, notes,
              status, client_ref, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run(ctx.org, grnNo, r.date, supplierId, store, r.poId ?? null, r.invoiceNo?.trim() || null, r.deliveryNote?.trim() || null, r.vehicle?.trim() || null, r.notes?.trim() || null, status, clientRef, user.id, now)).lastInsertRowid
+          )
+          .run(
+            ctx.org,
+            grnNo,
+            r.date,
+            supplierId,
+            store,
+            r.poId ?? null,
+            r.invoiceNo?.trim() || null,
+            r.deliveryNote?.trim() || null,
+            r.vehicle?.trim() || null,
+            r.notes?.trim() || null,
+            status,
+            clientRef,
+            user.id,
+            now
+          )
+      ).lastInsertRowid
     )
     const received = r.poId ? await receivedByPoLine(ctx, r.poId) : new Map<number, number>()
     for (const l of r.lines) {
@@ -217,7 +249,9 @@ export async function createReceipt(ctx: Ctx, r: ReceiptInput): Promise<{ id: nu
 /** Posts a receipt's accepted quantities to stock, exactly once (the source link is unique per line). */
 async function postReceipt(ctx: Ctx, id: number) {
   const g = (await ctx.db
-    .prepare('SELECT g.grn_no, g.receipt_date, g.warehouse_id, s.name AS supplier FROM goods_receipts g LEFT JOIN suppliers s ON s.id = g.supplier_id WHERE g.id = ?')
+    .prepare(
+      'SELECT g.grn_no, g.receipt_date, g.warehouse_id, s.name AS supplier FROM goods_receipts g LEFT JOIN suppliers s ON s.id = g.supplier_id WHERE g.id = ?'
+    )
     .get(id)) as { grn_no: string; receipt_date: string; warehouse_id: number; supplier: string | null }
   const day = (await ctx.db
     .prepare('SELECT d.id FROM farm_days d JOIN warehouses w ON w.farm_id = d.farm_id WHERE w.id = ? AND d.business_date = ?')
@@ -232,7 +266,21 @@ async function postReceipt(ctx: Ctx, id: number) {
         `INSERT INTO inventory_transactions (organization_id, item_id, warehouse_id, batch_id, txn_date, day_id, type, quantity, unit_cost, supplier, reference,
            source_type, source_id, recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, 'purchase', ?, ?, ?, ?, 'grn_line', ?, ?, ?)`
       )
-      .run(ctx.org, l.item_id, g.warehouse_id, l.batch_id, g.receipt_date, day?.id ?? null, round(Number(l.accepted), 3), l.unit_cost, g.supplier, g.grn_no, l.id, ctx.user?.id ?? null, ctx.now().toISOString())
+      .run(
+        ctx.org,
+        l.item_id,
+        g.warehouse_id,
+        l.batch_id,
+        g.receipt_date,
+        day?.id ?? null,
+        round(Number(l.accepted), 3),
+        l.unit_cost,
+        g.supplier,
+        g.grn_no,
+        l.id,
+        ctx.user?.id ?? null,
+        ctx.now().toISOString()
+      )
   }
 }
 
@@ -262,7 +310,9 @@ export async function rejectReceipt(ctx: Ctx, id: number, reason: string) {
   assert(reason.trim().length >= 3, 'reason_required')
   await ctx.db.transaction(async () => {
     const r = await ctx.db
-      .prepare("UPDATE goods_receipts SET status = 'rejected', cancelled_by = ?, cancelled_at = ?, cancel_reason = ? WHERE id = ? AND organization_id = ? AND status = 'submitted'")
+      .prepare(
+        "UPDATE goods_receipts SET status = 'rejected', cancelled_by = ?, cancelled_at = ?, cancel_reason = ? WHERE id = ? AND organization_id = ? AND status = 'submitted'"
+      )
       .run(user.id, ctx.now().toISOString(), reason.trim(), id, ctx.org)
     if (r.changes !== 1) {
       assert(await ctx.db.prepare('SELECT 1 AS x FROM goods_receipts WHERE id = ? AND organization_id = ?').get(id, ctx.org), 'not_found')
@@ -299,7 +349,19 @@ export async function cancelReceipt(ctx: Ctx, id: number, reason: string) {
           `INSERT INTO inventory_transactions (organization_id, item_id, warehouse_id, batch_id, txn_date, type, quantity, reference, notes, source_type, source_id,
              recorded_by, created_at) VALUES (?, ?, ?, ?, ?, 'reversal', ?, ?, ?, 'grn_line', ?, ?, ?)`
         )
-        .run(ctx.org, p.item_id, g.warehouse_id, p.batch_id, today, -Number(p.quantity), g.grn_no, `Cancelled: ${reason.trim()}`, p.source_id, user.id, ctx.now().toISOString())
+        .run(
+          ctx.org,
+          p.item_id,
+          g.warehouse_id,
+          p.batch_id,
+          today,
+          -Number(p.quantity),
+          g.grn_no,
+          `Cancelled: ${reason.trim()}`,
+          p.source_id,
+          user.id,
+          ctx.now().toISOString()
+        )
     }
     await ctx.db
       .prepare("UPDATE goods_receipts SET status = 'cancelled', cancelled_by = ?, cancelled_at = ?, cancel_reason = ? WHERE id = ?")
@@ -332,7 +394,14 @@ export async function listReceipts(ctx: Pick<Ctx, 'db' | 'org'>, from: string, t
   const out: GoodsReceipt[] = []
   for (const h of heads) {
     const lines = (await lineStmt.all(h.id)) as GoodsReceiptLine[]
-    out.push({ ...h, lines, totalCost: round(lines.reduce((s, l) => s + (l.quantity - l.rejectedQty - l.damagedQty) * (l.unitCost ?? 0), 0), 2) })
+    out.push({
+      ...h,
+      lines,
+      totalCost: round(
+        lines.reduce((s, l) => s + (l.quantity - l.rejectedQty - l.damagedQty) * (l.unitCost ?? 0), 0),
+        2
+      )
+    })
   }
   return out
 }

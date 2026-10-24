@@ -205,7 +205,12 @@ export function LanguageSwitch({ dark }: { dark?: boolean }) {
   return (
     <div className="lang-switch" style={dark ? undefined : { background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
       {opts.map((o) => (
-        <button key={o.v} className={lang === o.v ? 'on' : ''} style={dark || lang === o.v ? undefined : { color: 'var(--text-2)' }} onClick={() => setLanguage(o.v).catch(fail)}>
+        <button
+          key={o.v}
+          className={lang === o.v ? 'on' : ''}
+          style={dark || lang === o.v ? undefined : { color: 'var(--text-2)' }}
+          onClick={() => setLanguage(o.v).catch(fail)}
+        >
           {o.label}
         </button>
       ))}
@@ -346,7 +351,13 @@ function Shell() {
           </div>
         )}
         <SubscriptionBanner />
-        <TopBar onSearch={() => setPalette(true)} onLogout={logout} onMenu={() => setCollapsed(!collapsed)} userName={user.displayName} role={user.roleName ?? t('auth.role.' + user.role)} />
+        <TopBar
+          onSearch={() => setPalette(true)}
+          onLogout={logout}
+          onMenu={() => setCollapsed(!collapsed)}
+          userName={user.displayName}
+          role={user.roleName ?? t('auth.role.' + user.role)}
+        />
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/flow" element={<FlowPage />} />
@@ -403,7 +414,19 @@ function SubscriptionBanner() {
   return <div className={`sub-banner ${s.readOnly ? 'bad' : s.effective === 'trial' ? 'info' : 'warn'}`}>{text}</div>
 }
 
-function TopBar({ onSearch, onLogout, onMenu, userName, role }: { onSearch: () => void; onLogout: () => void; onMenu: () => void; userName: string; role: string }) {
+function TopBar({
+  onSearch,
+  onLogout,
+  onMenu,
+  userName,
+  role
+}: {
+  onSearch: () => void
+  onLogout: () => void
+  onMenu: () => void
+  userName: string
+  role: string
+}) {
   const { t, status } = useApp()
   const nav = useNavigate()
   const { quick } = useVisibleNav()
@@ -478,7 +501,15 @@ function TopBar({ onSearch, onLogout, onMenu, userName, role }: { onSearch: () =
                   className={`alert-row ${a.severity}`}
                   onClick={() => {
                     setMenu(null)
-                    nav(a.code === 'pending_signups' ? '/admin' : a.code.includes('stock') || a.code.startsWith('medicine') ? '/inventory' : a.code === 'backup_failed' ? '/backup' : '/')
+                    nav(
+                      a.code === 'pending_signups'
+                        ? '/admin'
+                        : a.code.includes('stock') || a.code.startsWith('medicine')
+                          ? '/inventory'
+                          : a.code === 'backup_failed'
+                            ? '/backup'
+                            : '/'
+                    )
                   }}
                 >
                   <i />
@@ -565,7 +596,14 @@ function CommandPalette({ onClose }: { onClose: () => void }) {
         <div className="palette-list" role="listbox">
           {entries.length === 0 && <div className="menu-empty">{t('common.noData')}</div>}
           {entries.map((e, i) => (
-            <button key={e.to + e.label} role="option" aria-selected={i === active} className={i === active ? 'on' : ''} onMouseEnter={() => setActive(i)} onClick={() => go(e.to)}>
+            <button
+              key={e.to + e.label}
+              role="option"
+              aria-selected={i === active}
+              className={i === active ? 'on' : ''}
+              onMouseEnter={() => setActive(i)}
+              onClick={() => go(e.to)}
+            >
               <e.icon size={18} />
               <span className="grow">{e.label}</span>
               <small>{e.hint}</small>

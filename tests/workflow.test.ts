@@ -218,10 +218,50 @@ describe('feed and inventory', () => {
 
   it('records purchases, and low stock is flagged', async () => {
     const f = await makeFarm()
-    await recordTxn(f.worker, { itemId: f.feedId, type: 'purchase', quantity: 1000, date: D1, batchNo: null, expiryDate: null, unitCost: 150, supplier: 'Mill', reference: 'INV-1', notes: null, cageId: null })
+    await recordTxn(f.worker, {
+      itemId: f.feedId,
+      type: 'purchase',
+      quantity: 1000,
+      date: D1,
+      batchNo: null,
+      expiryDate: null,
+      unitCost: 150,
+      supplier: 'Mill',
+      reference: 'INV-1',
+      notes: null,
+      cageId: null
+    })
     expect(await itemBalance(f.worker, f.feedId)).toBe(6000)
-    expect(await code(() => recordTxn(f.worker, { itemId: f.feedId, type: 'adjustment', quantity: -5700, date: D1, batchNo: null, expiryDate: null, unitCost: null, supplier: null, reference: null, notes: 'stock count', cageId: null }))).toBe('no_permission')
-    await recordTxn(f.admin, { itemId: f.feedId, type: 'adjustment', quantity: -5700, date: D1, batchNo: null, expiryDate: null, unitCost: null, supplier: null, reference: null, notes: 'stock count', cageId: null })
+    expect(
+      await code(() =>
+        recordTxn(f.worker, {
+          itemId: f.feedId,
+          type: 'adjustment',
+          quantity: -5700,
+          date: D1,
+          batchNo: null,
+          expiryDate: null,
+          unitCost: null,
+          supplier: null,
+          reference: null,
+          notes: 'stock count',
+          cageId: null
+        })
+      )
+    ).toBe('no_permission')
+    await recordTxn(f.admin, {
+      itemId: f.feedId,
+      type: 'adjustment',
+      quantity: -5700,
+      date: D1,
+      batchNo: null,
+      expiryDate: null,
+      unitCost: null,
+      supplier: null,
+      reference: null,
+      notes: 'stock count',
+      cageId: null
+    })
     expect((await balances(f.worker, 'feed'))[0]).toMatchObject({ balance: 300, isLow: true })
   })
 })
@@ -244,9 +284,33 @@ describe('medicine', () => {
     const f = await makeFarm()
     await startDay(f.worker, { date: D1, corrections: [], acknowledgeWarnings: false })
     const batch = (await listBatches(f.worker, { itemId: f.medId }))[0]
-    await addTreatment(f.worker, { date: D1, cageId: f.cageIds[0], itemId: f.medId, batchId: batch.id, quantity: 250, administeredAt: '09:00', reason: 'Vet instruction', prescribedBy: 'Dr. Perera', notes: null })
+    await addTreatment(f.worker, {
+      date: D1,
+      cageId: f.cageIds[0],
+      itemId: f.medId,
+      batchId: batch.id,
+      quantity: 250,
+      administeredAt: '09:00',
+      reason: 'Vet instruction',
+      prescribedBy: 'Dr. Perera',
+      notes: null
+    })
     expect((await listBatches(f.worker, { itemId: f.medId }))[0].balance).toBe(750)
-    expect(await code(() => addTreatment(f.worker, { date: D1, cageId: f.cageIds[0], itemId: f.medId, batchId: batch.id, quantity: 800, administeredAt: null, reason: 'Vet instruction', prescribedBy: null, notes: null }))).toBe('insufficient_stock')
+    expect(
+      await code(() =>
+        addTreatment(f.worker, {
+          date: D1,
+          cageId: f.cageIds[0],
+          itemId: f.medId,
+          batchId: batch.id,
+          quantity: 800,
+          administeredAt: null,
+          reason: 'Vet instruction',
+          prescribedBy: null,
+          notes: null
+        })
+      )
+    ).toBe('insufficient_stock')
     expect((await getOverview(f.worker, D1)).cages[0].medicineUses).toBe(1)
   })
 })
@@ -300,7 +364,9 @@ describe('closing and amending', () => {
     const d2 = await getOverview(f.admin, D2)
     expect(d2.cages[0].opening).toBe(995)
     expect(d2.totals.closing).toBe(9995)
-    const v = (await f.db.prepare("SELECT MAX(version) v FROM day_snapshots s JOIN farm_days d ON d.id=s.day_id WHERE d.business_date=? AND kind='close'").get(D2)) as { v: number }
+    const v = (await f.db
+      .prepare("SELECT MAX(version) v FROM day_snapshots s JOIN farm_days d ON d.id=s.day_id WHERE d.business_date=? AND kind='close'")
+      .get(D2)) as { v: number }
     expect(v.v).toBe(2) // later closed day re-snapshotted
     const amend = (await f.db.prepare("SELECT COUNT(*) n FROM audit_log WHERE action IN ('start_amendment','finish_amendment')").get()) as { n: number }
     expect(amend.n).toBe(2)

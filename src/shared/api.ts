@@ -1,4 +1,17 @@
-import type { PurchaseOrder, PurchaseOrderInput, ReceiptLineInput, StockCountInput, StockCountRow, StoreBalance, TaskEvent, TaskInput, TaskReportRow, TaskRow, TransferInput, Warehouse } from './stores'
+import type {
+  PurchaseOrder,
+  PurchaseOrderInput,
+  ReceiptLineInput,
+  StockCountInput,
+  StockCountRow,
+  StoreBalance,
+  TaskEvent,
+  TaskInput,
+  TaskReportRow,
+  TaskRow,
+  TransferInput,
+  Warehouse
+} from './stores'
 import type { MovementPage, OrganizationOverview } from './overview'
 import type { FarmRow, FlockDetail, FlockInput, FlockSummary, HouseRow, ReminderDue, ReminderRow } from './flocks'
 import type { OrgSummary, Plan, PlatformMetrics, PlatformStatus, PlatformUser, SubscriptionChange } from './platform'
@@ -198,7 +211,10 @@ export interface Api {
     out: DayOverview
   }
   'days.overview': { in: DateArg; out: DayOverview }
-  'days.list': { in: { from: string; to: string }; out: { date: string; status: 'in_progress' | 'closed'; amendmentOpen: number; closedAt: string | null; amendments: number }[] }
+  'days.list': {
+    in: { from: string; to: string }
+    out: { date: string; status: 'in_progress' | 'closed'; amendmentOpen: number; closedAt: string | null; amendments: number }[]
+  }
   'days.latest': { in: void; out: { date: string; status: 'in_progress' | 'closed' } | null }
   'days.correctOpening': { in: { date: string; cageId: number; opening: number; reason: string }; out: void }
   'days.confirmMortality': { in: { date: string; cageIds: number[] }; out: void }
@@ -208,18 +224,34 @@ export interface Api {
   'days.close': { in: { date: string; comment: string | null }; out: { overview: DayOverview } }
   'days.startAmendment': { in: { date: string; reason: string }; out: void }
   'days.finishAmendment': { in: { date: string; comment: string | null }; out: DayOverview }
-  'days.amendments': { in: DateArg; out: { id: number; reason: string; openedAt: string; closedAt: string | null; openedBy: string | null; closedBy: string | null }[] }
+  'days.amendments': {
+    in: DateArg
+    out: { id: number; reason: string; openedAt: string; closedAt: string | null; openedBy: string | null; closedBy: string | null }[]
+  }
 
   'eggs.list': { in: { date: string; cageId?: number }; out: EggCollection[] }
   'eggs.save': {
-    in: { expectedId: number | null; date: string; cageId: number; session: EggSession; collectedAt: string | null; good: number; damaged: number; rejected: number; notes: string | null }
+    in: {
+      expectedId: number | null
+      date: string
+      cageId: number
+      session: EggSession
+      collectedAt: string | null
+      good: number
+      damaged: number
+      rejected: number
+      notes: string | null
+    }
     out: number
   }
   'eggs.delete': { in: WithReason; out: void }
 
   'flock.list': { in: { date: string; cageId?: number }; out: FlockMovement[] }
   'flock.listRange': { in: Range; out: FlockMovement[] }
-  'flock.add': { in: { date: string; cageId: number; type: 'death' | 'removal' | 'addition'; quantity: number; reason: string | null; notes: string | null }; out: number }
+  'flock.add': {
+    in: { date: string; cageId: number; type: 'death' | 'removal' | 'addition'; quantity: number; reason: string | null; notes: string | null }
+    out: number
+  }
   'flock.transfer': { in: { date: string; fromCageId: number; toCageId: number; quantity: number; reason: string | null; notes: string | null }; out: string }
   'flock.delete': { in: WithReason; out: void }
 
@@ -265,13 +297,31 @@ export interface Api {
 
   'medicine.treatments': { in: Range; out: Treatment[] }
   'medicine.addTreatment': {
-    in: { date: string; cageId: number | null; itemId: number; batchId: number | null; quantity: number; administeredAt: string | null; reason: string; prescribedBy: string | null; notes: string | null }
+    in: {
+      date: string
+      cageId: number | null
+      itemId: number
+      batchId: number | null
+      quantity: number
+      administeredAt: string | null
+      reason: string
+      prescribedBy: string | null
+      notes: string | null
+    }
     out: number
   }
   'medicine.deleteTreatment': { in: WithReason; out: void }
   'medicine.healthEvents': { in: Range; out: HealthEvent[] }
   'medicine.addHealthEvent': {
-    in: { date: string; cageId: number | null; eventTime: string | null; category: string; severity: 'low' | 'medium' | 'high'; description: string; actionTaken: string | null }
+    in: {
+      date: string
+      cageId: number | null
+      eventTime: string | null
+      category: string
+      severity: 'low' | 'medium' | 'high'
+      description: string
+      actionTaken: string | null
+    }
     out: number
   }
   'medicine.deleteHealthEvent': { in: WithReason; out: void }
@@ -281,7 +331,10 @@ export interface Api {
   'inventory.updateItem': { in: { id: number; item: ItemInputDto }; out: void }
   'inventory.balances': { in: { category?: InventoryCategory; warehouseId?: number | null }; out: InventoryBalance[] }
   'inventory.batches': { in: { itemId?: number; onlyInStock?: boolean; warehouseId?: number | null }; out: InventoryBatch[] }
-  'inventory.txns': { in: { itemId?: number; category?: InventoryCategory; from?: string; to?: string; limit?: number; warehouseId?: number | null }; out: InventoryTxn[] }
+  'inventory.txns': {
+    in: { itemId?: number; category?: InventoryCategory; from?: string; to?: string; limit?: number; warehouseId?: number | null }
+    out: InventoryTxn[]
+  }
   'inventory.record': {
     in: {
       itemId: number
@@ -334,7 +387,10 @@ export interface Api {
   'stores.count': { in: StockCountInput; out: number }
   'stores.counts': { in: { from: string; to: string }; out: StockCountRow[] }
   /** Stock movements in the farm's stores, newest first, one page at a time */
-  'stores.movements': { in: { from: string; to: string; warehouseId?: number | null; itemId?: number | null; type?: string | null; page: number; pageSize?: number }; out: MovementPage }
+  'stores.movements': {
+    in: { from: string; to: string; warehouseId?: number | null; itemId?: number | null; type?: string | null; page: number; pageSize?: number }
+    out: MovementPage
+  }
   /** Every active farm of the organization side by side, with totals (closed days only) */
   'overview.organization': { in: { from: string; to: string }; out: OrganizationOverview }
 
@@ -351,7 +407,10 @@ export interface Api {
   'sales.stock': { in: void; out: EggStock & { outstanding: number } }
   'sales.list': { in: { from: string; to: string; customerId?: number | null; unpaidOnly?: boolean }; out: EggDispatch[] }
   'sales.dispatch': { in: DispatchDto; out: { id: number; dispatchNo: string } }
-  'sales.addPayment': { in: { dispatchId: number; date: string; amount: number; method: 'cash' | 'bank' | 'cheque' | 'other'; reference: string | null }; out: void }
+  'sales.addPayment': {
+    in: { dispatchId: number; date: string; amount: number; method: 'cash' | 'bank' | 'cheque' | 'other'; reference: string | null }
+    out: void
+  }
   'sales.cancel': { in: { id: number; reason: string }; out: void }
   'sales.adjust': { in: { date: string; grade: 'good' | 'cracked'; quantity: number; reason: string }; out: number }
   'sales.adjustments': { in: { from: string; to: string }; out: EggStoreAdjustment[] }
@@ -375,7 +434,17 @@ export interface Api {
   'platform.metrics': { in: void; out: PlatformMetrics }
   'platform.organizations': { in: void; out: OrgSummary[] }
   'platform.createOrganization': {
-    in: { name: string; location: string; timezone: string; language: Language; adminEmail: string; adminName: string; adminPassword: string; planId: number; trialDays: number }
+    in: {
+      name: string
+      location: string
+      timezone: string
+      language: Language
+      adminEmail: string
+      adminName: string
+      adminPassword: string
+      planId: number
+      trialDays: number
+    }
     out: { id: number; code: string; recoveryCode: string }
   }
   'platform.setOrganizationStatus': { in: { id: number; status: 'active' | 'suspended' | 'archived'; reason: string }; out: void }

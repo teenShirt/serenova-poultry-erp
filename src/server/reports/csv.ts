@@ -51,15 +51,51 @@ export async function buildCsv(ctx: Ctx, kind: CsvKind, from: string, to: string
         ['ov.lowStock', (r) => r.lowStockItems],
         ['ov.expiring', (r) => r.expiringBatches]
       ]
-      return { name: stem, csv: toCsv(cols.map(([k]) => t(k)), o.farms.map((r) => cols.map(([, get]) => get(r)))) }
+      return {
+        name: stem,
+        csv: toCsv(
+          cols.map(([k]) => t(k)),
+          o.farms.map((r) => cols.map(([, get]) => get(r)))
+        )
+      }
     }
     case 'production': {
       const s = await dailySeries(ctx, from, to)
       return {
         name: stem,
         csv: toCsv(
-          ['common.date', 'common.status', 'ov.opening', 'ov.closing', 'ov.eggs', 'ov.good', 'ov.damaged', 'ov.rejected', 'ov.layingPct', 'ov.deaths', 'ov.culls', 'ov.feedKg', 'ov.feedPerBird', 'ov.waterL'].map(t),
-          s.map((p) => [p.date, t('status.' + p.status), p.opening, p.closing, p.eggs, p.good, p.damaged, p.rejected, p.productionPct, p.deaths, p.removals, p.feedKg, p.feedPerHenG, p.waterLitres])
+          [
+            'common.date',
+            'common.status',
+            'ov.opening',
+            'ov.closing',
+            'ov.eggs',
+            'ov.good',
+            'ov.damaged',
+            'ov.rejected',
+            'ov.layingPct',
+            'ov.deaths',
+            'ov.culls',
+            'ov.feedKg',
+            'ov.feedPerBird',
+            'ov.waterL'
+          ].map(t),
+          s.map((p) => [
+            p.date,
+            t('status.' + p.status),
+            p.opening,
+            p.closing,
+            p.eggs,
+            p.good,
+            p.damaged,
+            p.rejected,
+            p.productionPct,
+            p.deaths,
+            p.removals,
+            p.feedKg,
+            p.feedPerHenG,
+            p.waterLitres
+          ])
         )
       }
     }
@@ -67,25 +103,75 @@ export async function buildCsv(ctx: Ctx, kind: CsvKind, from: string, to: string
       const rows: Cell[][] = []
       for (let page = 1; page <= 200; page++) {
         const p = await movementsPage(ctx, { from, to, warehouseId: f.warehouseId, page, pageSize: 500 })
-        for (const r of p.rows) rows.push([r.date, r.store, r.counterpart, r.item, r.batchNo, t('txn.' + r.type), r.quantity, r.unit, r.reference, r.notes, r.by])
+        for (const r of p.rows)
+          rows.push([r.date, r.store, r.counterpart, r.item, r.batchNo, t('txn.' + r.type), r.quantity, r.unit, r.reference, r.notes, r.by])
         if (p.page * p.pageSize >= p.total) break
       }
       return {
         name: stem,
-        csv: toCsv(['common.date', 'stores.store', 'ov.otherStore', 'inv.item', 'inv.batchNo', 'ov.movement', 'common.quantity', 'common.unit', 'ov.reference', 'common.notes', 'common.recordedBy'].map(t), rows)
+        csv: toCsv(
+          [
+            'common.date',
+            'stores.store',
+            'ov.otherStore',
+            'inv.item',
+            'inv.batchNo',
+            'ov.movement',
+            'common.quantity',
+            'common.unit',
+            'ov.reference',
+            'common.notes',
+            'common.recordedBy'
+          ].map(t),
+          rows
+        )
       }
     }
     case 'receipts': {
       const rows: Cell[][] = []
       for (const g of await listReceipts(ctx, from, to)) {
         for (const l of g.lines) {
-          rows.push([g.grnNo, g.date, t('pur.status.' + g.status), g.supplierName, g.warehouseName, g.poNo, g.invoiceNo, l.itemName, l.batchNo, l.orderedQty, l.quantity, l.rejectedQty, l.damagedQty, l.quantity - l.rejectedQty - l.damagedQty, l.unit, l.unitCost])
+          rows.push([
+            g.grnNo,
+            g.date,
+            t('pur.status.' + g.status),
+            g.supplierName,
+            g.warehouseName,
+            g.poNo,
+            g.invoiceNo,
+            l.itemName,
+            l.batchNo,
+            l.orderedQty,
+            l.quantity,
+            l.rejectedQty,
+            l.damagedQty,
+            l.quantity - l.rejectedQty - l.damagedQty,
+            l.unit,
+            l.unitCost
+          ])
         }
       }
       return {
         name: stem,
         csv: toCsv(
-          ['pur.grn', 'common.date', 'common.status', 'pur.supplier', 'stores.store', 'po.no', 'pur.invoice', 'inv.item', 'inv.batchNo', 'ov.ordered', 'pur.delivered', 'pur.rejected', 'pur.damaged', 'ov.accepted', 'common.unit', 'inv.unitCost'].map(t),
+          [
+            'pur.grn',
+            'common.date',
+            'common.status',
+            'pur.supplier',
+            'stores.store',
+            'po.no',
+            'pur.invoice',
+            'inv.item',
+            'inv.batchNo',
+            'ov.ordered',
+            'pur.delivered',
+            'pur.rejected',
+            'pur.damaged',
+            'ov.accepted',
+            'common.unit',
+            'inv.unitCost'
+          ].map(t),
           rows
         )
       }
@@ -105,7 +191,21 @@ export async function buildCsv(ctx: Ctx, kind: CsvKind, from: string, to: string
       ])
       return {
         name: stem,
-        csv: toCsv(['task.due', 'task.task', 'task.category', 'task.priority', 'task.assignee', 'task.where', 'common.status', 'ov.completedBy', 'ov.completedAt', 'ov.verifiedBy'].map(t), rows)
+        csv: toCsv(
+          [
+            'task.due',
+            'task.task',
+            'task.category',
+            'task.priority',
+            'task.assignee',
+            'task.where',
+            'common.status',
+            'ov.completedBy',
+            'ov.completedAt',
+            'ov.verifiedBy'
+          ].map(t),
+          rows
+        )
       }
     }
   }

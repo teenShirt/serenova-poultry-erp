@@ -44,9 +44,15 @@ describe('signing in with an email address', () => {
   it('an email address can belong to only one account on the platform', async () => {
     const f = await makeFarm()
     const g = await makeFarm({ db: f.db, name: 'Other Farm', domain: 'other.farm' })
-    expect(await code(() => createUser(g.admin, { email: 'worker@test.farm', displayName: 'X', password: 'abcdef', roleId: g.roles.worker }))).toBe('email_taken')
-    expect(await code(() => updateUser(g.admin, { id: g.worker.user!.id, email: 'Worker@Test.Farm', displayName: 'W', roleId: g.roles.worker, active: true }))).toBe('email_taken')
-    expect(await code(() => createUser(g.admin, { email: 'not-an-address', displayName: 'X', password: 'abcdef', roleId: g.roles.worker }))).toBe('invalid_email')
+    expect(await code(() => createUser(g.admin, { email: 'worker@test.farm', displayName: 'X', password: 'abcdef', roleId: g.roles.worker }))).toBe(
+      'email_taken'
+    )
+    expect(
+      await code(() => updateUser(g.admin, { id: g.worker.user!.id, email: 'Worker@Test.Farm', displayName: 'W', roleId: g.roles.worker, active: true }))
+    ).toBe('email_taken')
+    expect(await code(() => createUser(g.admin, { email: 'not-an-address', displayName: 'X', password: 'abcdef', roleId: g.roles.worker }))).toBe(
+      'invalid_email'
+    )
   })
 
   it('a suspended organization cannot sign in', async () => {
@@ -82,7 +88,9 @@ describe('self sign-up', () => {
     expect((await listUsers(f.admin)).some((u) => u.email === 'kamal@test.farm')).toBe(false)
     expect(await code(() => rejectSignup(f.admin, f.worker.user!.id))).toBe('not_pending')
 
-    expect(await code(() => signup(f.anon, { organizationCode: 'no-such-org', email: 'x@y.z', displayName: 'X', password: 'abcdef' }))).toBe('organization_not_found')
+    expect(await code(() => signup(f.anon, { organizationCode: 'no-such-org', email: 'x@y.z', displayName: 'X', password: 'abcdef' }))).toBe(
+      'organization_not_found'
+    )
     await saveSettings(f.admin, { allowSignup: false })
     expect(await code(() => join('sunil@test.farm'))).toBe('signup_disabled')
   })
@@ -138,7 +146,12 @@ describe('password reset with recovery code', () => {
 
   it('users and administrators can issue a new code, which replaces the old one', async () => {
     const f = await makeFarm()
-    const { recoveryCode: created } = await createUser(f.admin, { email: 'ruwan@test.farm', displayName: 'Ruwan', password: 'ruwan123', roleId: f.roles.worker })
+    const { recoveryCode: created } = await createUser(f.admin, {
+      email: 'ruwan@test.farm',
+      displayName: 'Ruwan',
+      password: 'ruwan123',
+      roleId: f.roles.worker
+    })
     const ruwan: Ctx = { ...f.admin, user: (await login(f.anon, 'ruwan@test.farm', 'ruwan123')).user }
     expect(await code(() => newOwnRecoveryCode(ruwan, 'wrong'))).toBe('wrong_password')
     const { recoveryCode: own } = await newOwnRecoveryCode(ruwan, 'ruwan123')
@@ -173,7 +186,9 @@ describe('upgrade from a version 1 database', () => {
     const other = await openTestDb()
     await completeSetup({ db: other, now: () => NOW }, setupInput())
     const hash = ((await other.prepare("SELECT password_hash FROM users WHERE username='admin'").get()) as { password_hash: string }).password_hash
-    await db.prepare("INSERT INTO users (username, display_name, password_hash, role, active, created_at) VALUES ('admin','Admin',?, 'admin', 1, 'x')").run(hash)
+    await db
+      .prepare("INSERT INTO users (username, display_name, password_hash, role, active, created_at) VALUES ('admin','Admin',?, 'admin', 1, 'x')")
+      .run(hash)
 
     expect(await migrate(db)).toEqual({ from: 1, to: latestSchemaVersion() })
     const anon: AnonCtx = { db, now: () => NOW }

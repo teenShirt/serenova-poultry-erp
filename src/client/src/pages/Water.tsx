@@ -41,7 +41,17 @@ export function WaterPage() {
       for (const c of cages) {
         const r = records?.find((x) => x.cageId === c.cageId)
         const hasMeter = cageList.find((x) => x.id === c.cageId)?.hasWaterMeter ?? true
-        if (r) next[c.cageId] = { id: r.id, method: r.method, opening: r.openingReading, closing: r.closingReading, litres: r.litres, meterReset: r.meterReset, notes: r.notes ?? '', dirty: false }
+        if (r)
+          next[c.cageId] = {
+            id: r.id,
+            method: r.method,
+            opening: r.openingReading,
+            closing: r.closingReading,
+            litres: r.litres,
+            meterReset: r.meterReset,
+            notes: r.notes ?? '',
+            dirty: false
+          }
         else {
           const opening = hasMeter ? await call('water.suggestOpening', { date: workDate, cageId: c.cageId }) : null
           next[c.cageId] = { id: null, method: hasMeter ? 'meter' : 'manual', opening, closing: null, litres: null, meterReset: false, notes: '', dirty: false }
@@ -56,15 +66,29 @@ export function WaterPage() {
   }, [records, overview?.dayId, cages.length, cageList, workDate])
 
   const upd = (cageId: number, p: Partial<Row>) => setRows((x) => ({ ...x, [cageId]: { ...x[cageId], ...p, dirty: true } }))
-  const calc = (r: Row) => waterConsumption({ method: r.method, openingReading: r.opening, closingReading: r.closing, litres: r.litres, meterReset: r.meterReset })
-  const dirty = Object.entries(rows).filter(([, r]) => r.dirty && !r.meterReset && (r.method === 'manual' ? r.litres !== null : r.closing !== null || r.opening !== null))
+  const calc = (r: Row) =>
+    waterConsumption({ method: r.method, openingReading: r.opening, closingReading: r.closing, litres: r.litres, meterReset: r.meterReset })
+  const dirty = Object.entries(rows).filter(
+    ([, r]) => r.dirty && !r.meterReset && (r.method === 'manual' ? r.litres !== null : r.closing !== null || r.opening !== null)
+  )
 
   const saveAll = async () => {
     setBusy(true)
     let saved = 0
     for (const [cageId, r] of dirty) {
       try {
-        await call('water.save', { expectedId: r.id, date: workDate, cageId: Number(cageId), method: r.method, openingReading: r.opening, closingReading: r.closing, litres: r.method === 'manual' ? r.litres : null, meterReset: false, correctionReason: null, notes: nz(r.notes) })
+        await call('water.save', {
+          expectedId: r.id,
+          date: workDate,
+          cageId: Number(cageId),
+          method: r.method,
+          openingReading: r.opening,
+          closingReading: r.closing,
+          litres: r.method === 'manual' ? r.litres : null,
+          meterReset: false,
+          correctionReason: null,
+          notes: nz(r.notes)
+        })
         saved++
       } catch (e) {
         fail(e)
@@ -85,7 +109,11 @@ export function WaterPage() {
         <DayGate overview={overview} />
         <div className="grid stats">
           <Stat label={t('dash.waterToday')} value={tot?.waterLitres === null || !tot ? '—' : `${num(tot.waterLitres)} L`} />
-          <Stat label={t('common.hens')} value={tot ? num(tot.closing) : '—'} sub={tot && tot.waterLitres !== null && tot.avgHens > 0 ? `${num((tot.waterLitres * 1000) / tot.avgHens, 0)} ml / ${t('common.hens')}` : undefined} />
+          <Stat
+            label={t('common.hens')}
+            value={tot ? num(tot.closing) : '—'}
+            sub={tot && tot.waterLitres !== null && tot.avgHens > 0 ? `${num((tot.waterLitres * 1000) / tot.avgHens, 0)} ml / ${t('common.hens')}` : undefined}
+          />
         </div>
         <Notice tone="info">{t('water.note')}</Notice>
         {overview?.dayId && (
@@ -134,8 +162,26 @@ export function WaterPage() {
                             onChange={(m) => writable && upd(c.cageId, { method: m })}
                           />
                         </td>
-                        <td style={{ width: 130 }}>{r.method === 'meter' ? <NumInput decimals disabled={!writable} value={r.opening} onChange={(v) => upd(c.cageId, { opening: v })} /> : '—'}</td>
-                        <td style={{ width: 130 }}>{r.method === 'meter' ? <NumInput decimals disabled={!writable} value={r.closing} invalid={res.error === 'closing_below_opening'} onChange={(v) => upd(c.cageId, { closing: v })} /> : '—'}</td>
+                        <td style={{ width: 130 }}>
+                          {r.method === 'meter' ? (
+                            <NumInput decimals disabled={!writable} value={r.opening} onChange={(v) => upd(c.cageId, { opening: v })} />
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td style={{ width: 130 }}>
+                          {r.method === 'meter' ? (
+                            <NumInput
+                              decimals
+                              disabled={!writable}
+                              value={r.closing}
+                              invalid={res.error === 'closing_below_opening'}
+                              onChange={(v) => upd(c.cageId, { closing: v })}
+                            />
+                          ) : (
+                            '—'
+                          )}
+                        </td>
                         <td className="num" style={{ width: 130 }}>
                           {r.method === 'manual' ? (
                             <NumInput decimals disabled={!writable} value={r.litres} onChange={(v) => upd(c.cageId, { litres: v })} />
@@ -178,8 +224,14 @@ export function WaterPage() {
           <RangePicker days={days} onChange={setDays} />
         </div>
         <div className="grid cols-2">
-          <TimeChart title={t('chart.waterDaily')} data={series ?? []} series={[{ key: 'waterLitres', label: t('chart.waterDaily'), color: SERIES.blue }]} unit="L" note={t('chart.missingDays')} />
-          <CageBars title={t('chart.waterCage')} data={(comparison ?? [])} valueKey="waterLitres" label={t('col.water')} unit="L" />
+          <TimeChart
+            title={t('chart.waterDaily')}
+            data={series ?? []}
+            series={[{ key: 'waterLitres', label: t('chart.waterDaily'), color: SERIES.blue }]}
+            unit="L"
+            note={t('chart.missingDays')}
+          />
+          <CageBars title={t('chart.waterCage')} data={comparison ?? []} valueKey="waterLitres" label={t('col.water')} unit="L" />
         </div>
       </div>
       {reset && rows[reset.cageId] && <MeterReset date={workDate} cage={reset} row={rows[reset.cageId]} onClose={() => setReset(null)} />}
@@ -218,7 +270,18 @@ function MeterReset({ date, cage, row, onClose }: { date: string; cage: { cageId
             disabled={!ok}
             onClick={async () => {
               try {
-                await call('water.save', { expectedId: row.id, date, cageId: cage.cageId, method: 'meter', openingReading: opening, closingReading: closing, litres, meterReset: true, correctionReason: reason.trim(), notes: null })
+                await call('water.save', {
+                  expectedId: row.id,
+                  date,
+                  cageId: cage.cageId,
+                  method: 'meter',
+                  openingReading: opening,
+                  closingReading: closing,
+                  litres,
+                  meterReset: true,
+                  correctionReason: reason.trim(),
+                  notes: null
+                })
                 toast('success', t('common.saved'))
                 onClose()
               } catch (e) {

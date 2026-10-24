@@ -61,7 +61,12 @@ function StockTab() {
     <Card
       title={t('stores.stockTitle')}
       actions={
-        <select className="select" value={warehouseId ?? ''} onChange={(e) => setWarehouseId(e.target.value ? Number(e.target.value) : null)} style={{ maxWidth: 260 }}>
+        <select
+          className="select"
+          value={warehouseId ?? ''}
+          onChange={(e) => setWarehouseId(e.target.value ? Number(e.target.value) : null)}
+          style={{ maxWidth: 260 }}
+        >
           <option value="">{t('stores.allStores')}</option>
           {own.map((w) => (
             <option key={w.id} value={w.id}>
@@ -182,13 +187,22 @@ function StoresTab() {
       title={t('stores.stores')}
       actions={
         can('stores.manage') ? (
-          <button className="btn primary" disabled={atLimit} title={atLimit ? t('stores.atLimit', { n: sub!.limits.maxWarehouses }) : undefined} onClick={() => setEditing('new')}>
+          <button
+            className="btn primary"
+            disabled={atLimit}
+            title={atLimit ? t('stores.atLimit', { n: sub!.limits.maxWarehouses }) : undefined}
+            onClick={() => setEditing('new')}
+          >
             <Plus size={18} /> {t('stores.add')}
           </button>
         ) : undefined
       }
     >
-      {sub && <div className="muted small" style={{ marginBottom: 8 }}>{t('stores.usage', { used, max: sub.limits.maxWarehouses, plan: sub.planName })}</div>}
+      {sub && (
+        <div className="muted small" style={{ marginBottom: 8 }}>
+          {t('stores.usage', { used, max: sub.limits.maxWarehouses, plan: sub.planName })}
+        </div>
+      )}
       <table className="data">
         <thead>
           <tr>
@@ -290,7 +304,12 @@ function TransferDialog({ onClose }: { onClose: () => void }) {
   const [lines, setLines] = useState<{ itemId: number; quantity: number; batchNo: string | null }[]>([])
   const [date, setDate] = useState(status.today)
   const [notes, setNotes] = useState('')
-  const valid = fromId && to && fromId !== to && lines.length > 0 && lines.every((l) => l.quantity > 0 && l.quantity <= (available.find((b) => b.itemId === l.itemId)?.balance ?? 0))
+  const valid =
+    fromId &&
+    to &&
+    fromId !== to &&
+    lines.length > 0 &&
+    lines.every((l) => l.quantity > 0 && l.quantity <= (available.find((b) => b.itemId === l.itemId)?.balance ?? 0))
   return (
     <Modal
       wide
@@ -361,7 +380,11 @@ function TransferDialog({ onClose }: { onClose: () => void }) {
               return (
                 <tr key={i}>
                   <td>
-                    <select className="select" value={l.itemId} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, itemId: Number(e.target.value) } : x)))}>
+                    <select
+                      className="select"
+                      value={l.itemId}
+                      onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, itemId: Number(e.target.value) } : x)))}
+                    >
                       {available.map((a) => (
                         <option key={a.itemId} value={a.itemId}>
                           {a.itemName}
@@ -376,7 +399,11 @@ function TransferDialog({ onClose }: { onClose: () => void }) {
                     <NumInput decimals value={l.quantity || null} onChange={(v) => setLines(lines.map((x, j) => (j === i ? { ...x, quantity: v ?? 0 } : x)))} />
                   </td>
                   <td style={{ width: 160 }}>
-                    <input className="input" value={l.batchNo ?? ''} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, batchNo: nz(e.target.value) } : x)))} />
+                    <input
+                      className="input"
+                      value={l.batchNo ?? ''}
+                      onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, batchNo: nz(e.target.value) } : x)))}
+                    />
                   </td>
                 </tr>
               )
@@ -384,7 +411,11 @@ function TransferDialog({ onClose }: { onClose: () => void }) {
           </tbody>
         </table>
         <div>
-          <button className="btn sm" disabled={!available.length} onClick={() => setLines([...lines, { itemId: available[0].itemId, quantity: 0, batchNo: null }])}>
+          <button
+            className="btn sm"
+            disabled={!available.length}
+            onClick={() => setLines([...lines, { itemId: available[0].itemId, quantity: 0, batchNo: null }])}
+          >
             <Plus size={16} /> {t('pur.addLine')}
           </button>
         </div>
@@ -498,12 +529,17 @@ function MovementsTab() {
   const [itemId, setItemId] = useState<number | null>(null)
   const [type, setType] = useState<TxnType | null>(null)
   const [page, setPage] = useState(1)
-  const { data } = useLoad(() => call('stores.movements', { from, to, warehouseId, itemId, type, page, pageSize: 50 }), [from, to, warehouseId, itemId, type, page])
+  const { data } = useLoad(
+    () => call('stores.movements', { from, to, warehouseId, itemId, type, page, pageSize: 50 }),
+    [from, to, warehouseId, itemId, type, page]
+  )
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
-  const reset = <T,>(set: (v: T) => void) => (v: T) => {
-    set(v)
-    setPage(1)
-  }
+  const reset =
+    <T,>(set: (v: T) => void) =>
+    (v: T) => {
+      set(v)
+      setPage(1)
+    }
   return (
     <Card title={t('ov.movements')} actions={<CsvButton kind="movements" from={from} to={to} warehouseId={warehouseId} />}>
       <div className="form-grid" style={{ marginBottom: 12 }}>

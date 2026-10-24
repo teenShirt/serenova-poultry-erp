@@ -247,7 +247,9 @@ export async function foreignKeyProblems(db: DB, orgId?: number): Promise<string
   for (const fk of await links(db, orgId !== undefined)) {
     const org = orgId !== undefined ? 'AND x.organization_id = ?' : ''
     const r = (await db
-      .prepare(`SELECT COUNT(*) AS n FROM ${fk.table} x LEFT JOIN ${fk.parent} p ON p.id = x.${fk.column} WHERE x.${fk.column} IS NOT NULL AND p.id IS NULL ${org}`)
+      .prepare(
+        `SELECT COUNT(*) AS n FROM ${fk.table} x LEFT JOIN ${fk.parent} p ON p.id = x.${fk.column} WHERE x.${fk.column} IS NOT NULL AND p.id IS NULL ${org}`
+      )
       .get(...(orgId !== undefined ? [orgId] : []))) as { n: number }
     if (r.n > 0) problems.push(`${fk.table}.${fk.column}: ${r.n} broken link(s)`)
   }
@@ -276,7 +278,13 @@ export async function restoreDatabase(db: DB, data: BackupData) {
   })()
 }
 
-async function insertRows(db: DB, table: string, src: { columns: string[]; rows: unknown[][] } | undefined, value: (column: string, v: unknown, row: unknown[], cols: string[]) => unknown, extra: Record<string, unknown> = {}) {
+async function insertRows(
+  db: DB,
+  table: string,
+  src: { columns: string[]; rows: unknown[][] } | undefined,
+  value: (column: string, v: unknown, row: unknown[], cols: string[]) => unknown,
+  extra: Record<string, unknown> = {}
+) {
   if (!src || src.rows.length === 0) return
   const target = new Set(await tableColumns(db, table))
   const keep = src.columns.map((c, i) => [c, i] as const).filter(([c]) => target.has(c) && !(c in extra))
@@ -368,7 +376,11 @@ export async function restoreOrganization(db: DB, orgId: number, data: BackupDat
       // Desktop backups have no farms: their cages and days go to the organization's first farm.
       const farm = hasFarms
         ? null
-        : ((await db.prepare("SELECT id FROM farms WHERE organization_id = ? AND status = 'active' ORDER BY id LIMIT 1").get(orgId)) as { id: number } | undefined)?.id
+        : (
+            (await db.prepare("SELECT id FROM farms WHERE organization_id = ? AND status = 'active' ORDER BY id LIMIT 1").get(orgId)) as
+              | { id: number }
+              | undefined
+          )?.id
       if (!hasFarms && !farm) throw new Error('no_farm')
 
       // Backups from before stores existed: each farm gets its main store, and the stock goes to the first farm's.
@@ -460,7 +472,9 @@ export async function listBackupRuns(db: DB, orgId: number | null, limit = 50): 
 
 export async function lastBackup(db: DB, orgId: number | null, kind?: 'auto' | 'manual') {
   return (await db
-    .prepare(`SELECT status, message, created_at AS createdAt FROM backup_runs WHERE organization_id <=> ? ${kind ? 'AND kind = ?' : ''} ORDER BY id DESC LIMIT 1`)
+    .prepare(
+      `SELECT status, message, created_at AS createdAt FROM backup_runs WHERE organization_id <=> ? ${kind ? 'AND kind = ?' : ''} ORDER BY id DESC LIMIT 1`
+    )
     .get(...(kind ? [orgId, kind] : [orgId]))) as { status: 'ok' | 'failed'; message: string | null; createdAt: string } | undefined
 }
 

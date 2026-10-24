@@ -51,11 +51,26 @@ export const PERMISSION_GROUPS: { key: string; permissions: Permission[] }[] = [
   { key: 'day', permissions: ['day.start', 'day.backfill', 'day.correct_opening', 'day.approve_issues', 'day.comment', 'day.close', 'day.amend'] },
   { key: 'records', permissions: ['eggs.record', 'feed.record', 'water.record', 'water.meter_reset', 'flock.record', 'medicine.record'] },
   { key: 'flocks', permissions: ['flocks.manage'] },
-  { key: 'stores', permissions: ['inventory.record', 'inventory.adjust', 'inventory.transfer', 'inventory.manage_items', 'stores.manage', 'purchases.record', 'purchases.approve', 'purchases.cancel'] },
+  {
+    key: 'stores',
+    permissions: [
+      'inventory.record',
+      'inventory.adjust',
+      'inventory.transfer',
+      'inventory.manage_items',
+      'stores.manage',
+      'purchases.record',
+      'purchases.approve',
+      'purchases.cancel'
+    ]
+  },
   { key: 'tasks', permissions: ['tasks.manage'] },
   { key: 'sales', permissions: ['sales.record', 'sales.cancel', 'sales.adjust_store'] },
   { key: 'reports', permissions: ['reports.view', 'reports.export', 'audit.view'] },
-  { key: 'admin', permissions: ['cages.manage', 'farms.manage', 'users.manage', 'roles.manage', 'settings.manage', 'backup.create', 'backup.restore', 'database.manage'] }
+  {
+    key: 'admin',
+    permissions: ['cages.manage', 'farms.manage', 'users.manage', 'roles.manage', 'settings.manage', 'backup.create', 'backup.restore', 'database.manage']
+  }
 ]
 
 /**
@@ -163,13 +178,34 @@ export const DUTY_PERMISSION: Record<Duty, Permission> = {
 export const ROLE_TEMPLATES: { key: string; permissions: Permission[] }[] = [
   {
     key: 'farm_manager',
-    permissions: PERMISSIONS.filter((p) => !['users.manage', 'roles.manage', 'settings.manage', 'farms.manage', 'backup.restore', 'database.manage'].includes(p))
+    permissions: PERMISSIONS.filter(
+      (p) => !['users.manage', 'roles.manage', 'settings.manage', 'farms.manage', 'backup.restore', 'database.manage'].includes(p)
+    )
   },
-  { key: 'farm_supervisor', permissions: ['day.start', 'day.approve_issues', 'day.comment', 'eggs.record', 'feed.record', 'water.record', 'flock.record', 'medicine.record', 'reports.view'] },
+  {
+    key: 'farm_supervisor',
+    permissions: [
+      'day.start',
+      'day.approve_issues',
+      'day.comment',
+      'eggs.record',
+      'feed.record',
+      'water.record',
+      'flock.record',
+      'medicine.record',
+      'reports.view'
+    ]
+  },
   { key: 'poultry_technician', permissions: ['day.start', 'eggs.record', 'feed.record', 'water.record', 'flock.record'] },
   { key: 'veterinarian', permissions: ['medicine.record', 'flock.record', 'flocks.manage', 'reports.view'] },
-  { key: 'storekeeper', permissions: ['inventory.record', 'inventory.adjust', 'inventory.transfer', 'inventory.manage_items', 'purchases.record', 'feed.record', 'reports.view'] },
-  { key: 'purchasing_officer', permissions: ['purchases.record', 'purchases.approve', 'purchases.cancel', 'inventory.record', 'reports.view', 'reports.export'] },
+  {
+    key: 'storekeeper',
+    permissions: ['inventory.record', 'inventory.adjust', 'inventory.transfer', 'inventory.manage_items', 'purchases.record', 'feed.record', 'reports.view']
+  },
+  {
+    key: 'purchasing_officer',
+    permissions: ['purchases.record', 'purchases.approve', 'purchases.cancel', 'inventory.record', 'reports.view', 'reports.export']
+  },
   { key: 'accountant', permissions: ['sales.record', 'sales.cancel', 'reports.view', 'reports.export', 'audit.view'] },
   { key: 'report_viewer', permissions: ['reports.view', 'reports.export'] },
   { key: 'general_employee', permissions: ['eggs.record', 'feed.record', 'water.record'] }

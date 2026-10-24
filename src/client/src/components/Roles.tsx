@@ -40,7 +40,11 @@ export function RolesCard() {
               <tr key={r.id} className={r.archived ? 'muted' : undefined}>
                 <td>
                   <strong>{r.name}</strong>
-                  {r.archived && <span className="badge" style={{ marginLeft: 6 }}>{t('role.archived')}</span>}
+                  {r.archived && (
+                    <span className="badge" style={{ marginLeft: 6 }}>
+                      {t('role.archived')}
+                    </span>
+                  )}
                   {r.description && <div className="small muted">{r.description}</div>}
                 </td>
                 <td className="small">
@@ -169,7 +173,11 @@ function RoleForm({ role, onClose }: { role: RoleRow | null; onClose: () => void
               {g.permissions.map((p) => {
                 const allowed = can(p)
                 return (
-                  <label key={p} className={`duty ${perms.includes(p) ? 'done' : ''}`} style={{ cursor: allowed ? 'pointer' : 'not-allowed', opacity: allowed ? 1 : 0.55 }}>
+                  <label
+                    key={p}
+                    className={`duty ${perms.includes(p) ? 'done' : ''}`}
+                    style={{ cursor: allowed ? 'pointer' : 'not-allowed', opacity: allowed ? 1 : 0.55 }}
+                  >
                     <span className="check">
                       <input type="checkbox" checked={perms.includes(p)} disabled={!allowed} onChange={() => toggle(p)} />
                       <strong>{t('perm.' + p)}</strong>

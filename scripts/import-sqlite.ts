@@ -73,7 +73,13 @@ try {
           orgId = org.id
         } else {
           const name = check.farmName ?? 'Imported farm'
-          let code = name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 36) || 'farm'
+          let code =
+            name
+              .toLowerCase()
+              .normalize('NFKD')
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '')
+              .slice(0, 36) || 'farm'
           for (let n = 2; await db.prepare('SELECT 1 AS x FROM organizations WHERE code = ?').get(code); n++) code = `${code.replace(/-\d+$/, '')}-${n}`
           const at = new Date().toISOString()
           orgId = (await db.prepare('INSERT INTO organizations (code, name, created_at) VALUES (?, ?, ?)').run(code, name, at)).lastInsertRowid
@@ -85,8 +91,15 @@ try {
           if (taken) throw new Error(`${e} is already used by an account of another organization`)
         }
         await restoreOrganization(db, orgId, check.data!, { emails })
-        await audit({ db, org: orgId, user: null, now: () => new Date() }, { action: 'restored_from_backup', entity: 'backup', details: { from: file, importedFrom: 'desktop' } })
-        const counts = (await db.prepare('SELECT (SELECT COUNT(*) FROM farm_days WHERE organization_id = ?) AS days, (SELECT COUNT(*) FROM users WHERE organization_id = ?) AS users, (SELECT COUNT(*) FROM users WHERE organization_id = ? AND email IS NULL) AS noEmail').get(orgId, orgId, orgId)) as { days: number; users: number; noEmail: number }
+        await audit(
+          { db, org: orgId, user: null, now: () => new Date() },
+          { action: 'restored_from_backup', entity: 'backup', details: { from: file, importedFrom: 'desktop' } }
+        )
+        const counts = (await db
+          .prepare(
+            'SELECT (SELECT COUNT(*) FROM farm_days WHERE organization_id = ?) AS days, (SELECT COUNT(*) FROM users WHERE organization_id = ?) AS users, (SELECT COUNT(*) FROM users WHERE organization_id = ? AND email IS NULL) AS noEmail'
+          )
+          .get(orgId, orgId, orgId)) as { days: number; users: number; noEmail: number }
         console.log(`Imported: ${counts.days} days, ${counts.users} accounts.`)
         if (counts.noEmail) console.log(`${counts.noEmail} account(s) have no email address yet: an administrator can add one under Settings → Users.`)
         console.log('Each account keeps its desktop password and signs in with its email address.')
