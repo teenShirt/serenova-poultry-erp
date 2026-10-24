@@ -1,0 +1,114 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><style>
+@page { size: A4; margin: 16mm 14mm; }
+body { font-family: "Nirmala UI", "Iskoola Pota", "Segoe UI", Arial, sans-serif; color: #1f2a24; font-size: 11.5px; line-height: 1.55; }
+h1 { color: #1f5c39; font-size: 24px; border-bottom: 3px solid #2f7d4f; padding-bottom: 6px; }
+h2 { color: #1f5c39; font-size: 17px; margin-top: 22px; border-left: 5px solid #2f7d4f; padding-left: 8px; break-after: avoid; }
+h3 { color: #2f7d4f; font-size: 14px; margin-top: 14px; break-after: avoid; }
+table { border-collapse: collapse; width: 100%; margin: 8px 0; break-inside: avoid; }
+th, td { border: 1px solid #cfd8d3; padding: 5px 7px; text-align: left; vertical-align: top; }
+th { background: #e8f2ec; }
+blockquote { background: #fff4e5; border-left: 4px solid #e9a23b; margin: 10px 0; padding: 8px 12px; }
+code { background: #f1f4f2; padding: 1px 4px; border-radius: 3px; font-family: Consolas, monospace; }
+hr { border: 0; border-top: 1px solid #cfd8d3; }</style></head><body><h1>Poultry Farm Manager — User Manual</h1>
+<p>Version 1.4 · For farm owners, managers and workers</p>
+<hr>
+<h2>1. What this program does</h2>
+<p>Poultry Farm Manager keeps the daily records of your farm on this computer:</p>
+<ul><li>live hens in every cage (deaths, removals, additions and transfers),</li><li>eggs collected (good, damaged and rejected) and egg production %,</li><li>feed, water and medicine used,</li><li>store stock (feed, medicines and other supplies),</li><li>start-of-day and end-of-day reports (PDF and Excel), weekly and monthly summaries.</li></ul>
+<p>It works <strong>without internet</strong>. All records are stored on this computer, so <strong>make regular backups</strong> (see section 11).</p>
+<h2>2. Users and passwords</h2>
+<p>There are two kinds of users:</p>
+<table><thead><tr><th>User type</th><th>Can do</th></tr></thead><tbody><tr><td><strong>Administrator</strong> (manager / owner)</td><td>Everything: settings, users, cages, corrections, closing days, amendments, restoring backups.</td></tr><tr><td><strong>Data entry</strong> (worker)</td><td>Start a day, enter eggs, feed, water, deaths and medicine, make backups.</td></tr></tbody></table>
+<ul><li>Each person should have their own user name. Every change is recorded with the name of the person who made it.</li><li>To add a worker: <strong>Settings → Users → Add user</strong>.</li><li>To change your own password: <strong>Settings → Change my password</strong>.</li><li>If a worker forgets a password, an administrator can use <strong>Reset password</strong>. Keep the administrator password safe.</li></ul>
+<h3>2.1 Creating your own account (sign up)</h3>
+<ol><li>On the sign-in screen click <strong>Create an account</strong>.</li><li>Enter your full name, a user name and a password (twice), then click <strong>Send request</strong>.</li><li>Your <strong>recovery code</strong> is shown (for example <code>K7MQ-4XRT-9PWD</code>). <strong>Write it down</strong> and keep it safe, then tick <em>I have written down the code</em>.</li><li>Ask the administrator to approve you. Until then you cannot sign in.</li></ol>
+<p>The administrator sees waiting requests on the dashboard and in <strong>Settings → Users</strong>, chooses <em>Data entry</em> or <em>Administrator</em>, and clicks <strong>Approve</strong> (or <strong>Reject</strong>). Sign-up can be switched off in <strong>Settings → Farm</strong>.</p>
+<h3>2.2 Forgot your password?</h3>
+<ol><li>On the sign-in screen click <strong>Forgot password?</strong>.</li><li>Enter your user name, your <strong>recovery code</strong> and a new password (twice), then click <strong>Reset password</strong>.</li><li>A <strong>new recovery code</strong> is shown — the old one no longer works. Write the new one down.</li></ol>
+<p>Every user receives a recovery code when the account is created (the administrator's code is shown at the end of the first-time setup). If a code is lost, create a new one in <strong>Settings → Change my password → Create a new recovery code</strong>, or ask an administrator (the shield icon in <strong>Settings → Users</strong>). After 5 wrong passwords or codes the account is locked for 15 minutes.</p>
+<h2>3. Language</h2>
+<p>Click <strong>සිංහල</strong> or <strong>English</strong> at the bottom-left of the screen (or on the sign-in screen). The choice is remembered.</p>
+<h2>4. First-time setup</h2>
+<p>When the program is opened for the first time it asks for:</p>
+<ol><li><strong>Farm details</strong> — farm name, location, time zone (Sri Lanka: <em>Asia/Colombo</em>) and the first day you will record (usually today).</li><li><strong>Cages &amp; hens</strong> — the name of each cage and the number of live hens in it <strong>now</strong>.</li><li><strong>Starting stock</strong> — feed and medicine in the store today. Medicines need a batch number and expiry date.</li><li><strong>Administrator</strong> — the manager's user name and password.</li></ol>
+<blockquote><strong>Try it first:</strong> on the first screen you can choose <strong>Explore with sample data</strong>. This opens a separate demonstration farm with a red "DEMONSTRATION DATA" bar. Demo records are kept in a different file and can never mix with your real records. Click <strong>Exit demo</strong> to leave it.</blockquote>
+<h2>5. The daily routine</h2>
+<p>Every day follows the same steps:</p>
+<ol><li><strong>Morning — Start the day</strong> (<em>Daily Operations</em>).</li><li><strong>During the day — enter records</strong>: eggs (each collection), feed, water, deaths and treatments.</li><li><strong>Evening — review and close the day</strong> (<em>Daily Operations</em>, administrator).</li></ol>
+<h3>5.1 Starting the day</h3>
+<p>Open <strong>Daily Operations</strong>. The date at the top is today. Click <strong>Start day</strong>.</p>
+<ul><li>The opening hen count of each cage is <strong>carried forward automatically</strong> from yesterday's closing count.</li><li>Store stock is also carried forward.</li><li>If the previous day was not closed, or days were missed, a yellow warning is shown. Read it, tick <em>I understand and want to continue</em>, then start.</li><li>An administrator can correct an opening count after a physical recount. A <strong>reason is required</strong> and is kept in the history.</li></ul>
+<p>A day can be: <strong>Not started</strong>, <strong>In progress</strong>, <strong>Ready to close</strong> or <strong>Closed</strong>.</p>
+<h3>5.2 Changing the date</h3>
+<p>Use the date box at the top-right of each screen. The arrows go to the previous and next day. <strong>Today</strong> returns to the current date.</p>
+<h2>6. Egg collection</h2>
+<p>Open <strong>Egg Collection</strong>.</p>
+<ol><li>Choose the <strong>collection session</strong> (Morning, Midday, Evening or Extra).</li><li>For each cage type <strong>Good eggs</strong>, <strong>Cracked / damaged</strong> and <strong>Other rejected</strong>.</li><li>Click <strong>Save</strong>. Rows you changed are highlighted until saved.</li></ol>
+<ul><li>Each cage can have <strong>one record per session</strong>, so the same collection can never be counted twice. To correct a number, change it and save again.</li><li><strong>Collected</strong> = good + damaged + rejected. <strong>Saleable</strong> = good eggs.</li><li><strong>Egg production %</strong> = eggs collected ÷ average live hens × 100. The average is (opening hens + closing hens) ÷ 2. An administrator can change this in <em>Settings → Calculations</em>.</li></ul>
+<h2>7. Feed</h2>
+<p>Open <strong>Feed Management</strong>, choose the feed type, then for each cage enter what you know:</p>
+<table><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody><tr><td>Feed at cage (start)</td><td>Feed left in the feeder from yesterday (filled in automatically if counted yesterday).</td></tr><tr><td>Issued from store</td><td>Feed taken from the store to the cage. This is deducted from store stock <strong>once</strong>.</td></tr><tr><td>Returned unused</td><td>Feed brought back to the store (added back to stock).</td></tr><tr><td>Spilled / wasted</td><td>Feed that fell or spoiled — it is <strong>not</strong> counted as eaten.</td></tr><tr><td>Feed at cage (end)</td><td>Feed left in the feeder at the end of the day, if you count it.</td></tr><tr><td>Measured consumption</td><td>If you weigh exactly what was eaten.</td></tr></tbody></table>
+<p>How consumption is worked out:</p>
+<ol><li><strong>Measured</strong> — if measured consumption is entered, it is used.</li><li><strong>Calculated from counts</strong> — if start and end feed at the cage are both counted: start + issued − returned − wasted − end.</li><li><strong>Estimate</strong> — otherwise: issued − returned − wasted. Estimates are marked with <strong><code>*</code></strong> and "Estimate". The program never assumes that all issued feed was eaten.</li></ol>
+<h2>8. Water</h2>
+<p>Open <strong>Water Management</strong>. For each cage either:</p>
+<ul><li>enter the <strong>meter reading at start and end</strong> (litres used = end − start; the start reading is filled from yesterday's end reading), or</li><li>choose <strong>Entered manually</strong> and type the litres used.</li></ul>
+<p>If the end reading is lower than the start reading the program will not save it. If the meter was reset or replaced, an administrator clicks the spanner icon and records the reason and the litres used.</p>
+<p>The program does not measure water by itself; it uses the numbers you enter.</p>
+<h2>9. Hen mortality and flock balance</h2>
+<p>Open <strong>Hen Mortality</strong>.</p>
+<ul><li><strong>Record movement</strong> — deaths, removals (culls or sales, with a reason) or additions (new hens, with a reason).</li><li><strong>Transfer between cages</strong> — moves hens from one cage to another. The farm total does not change.</li><li>The balance for each cage is: <strong>Closing = Opening + Added + Moved in − Moved out − Deaths − Removed</strong>. A cage can never go below zero.</li><li><strong>Mortality %</strong> = deaths ÷ opening hens × 100.</li><li>At the end of the day, confirm for each cage that all deaths were recorded (<strong>Confirm deaths recorded</strong>), even if there were none.</li></ul>
+<h2>10. Medicine and health</h2>
+<p>Open <strong>Medicine &amp; Health</strong>.</p>
+<ul><li><strong>Record treatment</strong> — choose the medicine and batch, the cage (or the whole farm), quantity, time, reason and who prescribed or approved it. The quantity is deducted from that batch.</li><li><strong>Record health event</strong> — observations, vaccinations, veterinary visits, suspected illness. These do not change stock.</li><li>The <strong>Medicine batches</strong> tab shows stock and expiry dates. Expired and soon-to-expire batches are also shown on the dashboard.</li></ul>
+<blockquote>The program does <strong>not</strong> prescribe medicines or suggest doses. Record treatments exactly as instructed by the farm manager or veterinarian.</blockquote>
+<h2>11. Closing the day</h2>
+<p>In the evening an administrator opens <strong>Daily Operations</strong> and checks the <strong>End-of-day review</strong>: every cage with opening hens, deaths, closing hens, eggs, feed, water and medicine.</p>
+<p>The <strong>closing checklist</strong> lists anything that needs attention:</p>
+<ul><li><strong>Red items</strong> (for example, deaths not confirmed, feed figures that do not add up) must be fixed.</li><li><strong>Yellow items</strong> (for example, a missing water record or unusually high mortality) can be fixed, or accepted with <strong>Accept with reason</strong> if there is a genuine reason. When several cages have the same problem, <strong>Accept all … with one reason</strong> saves time.</li><li><strong>Blue items</strong> are information only.</li></ul>
+<p>When nothing is left, the status becomes <strong>Ready to close</strong>. Add manager comments if needed and click <strong>Close day</strong>. The program:</p>
+<ol><li>saves a closing snapshot,</li><li>saves the end-of-day PDF report in <em>Documents\Poultry Farm Manager\Reports</em>,</li><li>updates the dashboard,</li><li>records who closed the day and when,</li><li>protects the day's records from changes.</li></ol>
+<p>Missing figures are never invented: they stay "Not recorded" in the report, and accepted items are listed with their reasons.</p>
+<p><strong>Leave in progress</strong> — if you cannot finish, simply leave the day open and continue tomorrow; nothing is lost.</p>
+<h3>11.1 Correcting a closed day (amendment)</h3>
+<p>If a mistake is found later, an administrator opens the day and clicks <strong>Amend closed day</strong>, enters the reason, makes the corrections and clicks <strong>Finish amendment</strong>. The program recalculates the following days' opening hen counts and keeps a full history of the amendment.</p>
+<h2>12. Dashboard</h2>
+<p>The dashboard shows today's figures, store stock, cages with missing records, and alerts (low stock, expiring medicines, high mortality, production drops, failed backups). Use the cage list and the 7 / 30 / 90-day buttons to change the charts. Gaps in charts mean the day was not recorded.</p>
+<p>Alerts about production or mortality are <strong>information only</strong>; they are not a diagnosis of the cause.</p>
+<h2>13. Reports</h2>
+<p>Open <strong>Reports &amp; Analytics</strong>.</p>
+<ul><li><strong>Daily reports</strong> — Start-of-day (opening hens, store stock, pending tasks) and End-of-day (final figures) as PDF or Excel.</li><li><strong>Weekly / monthly summary</strong> — choose This week, Last week, This month, Last month or any dates.</li><li><strong>Cage comparison</strong> — compares cages over a period.</li><li><strong>Audit history</strong> (administrator) — every change, who made it and why.</li></ul>
+<p>Reports are saved where you choose; recent reports can be opened again from the list.</p>
+<h2>14. Inventory</h2>
+<p>Open <strong>Inventory</strong>. Stock is never changed directly — every change is a <strong>movement</strong> that is kept forever: purchase, receipt, issue, usage, return, wastage, expired write-off, or (administrator) adjustment with a reason after a stock count.</p>
+<p>Set a <strong>low-stock level</strong> for each item to get a warning before you run out. Feed issued in Feed Management and medicines used in treatments are deducted automatically.</p>
+<h2>15. Cage management</h2>
+<p>Administrators can rename cages, add new cages or make a cage inactive (it is then left out of new days; its history is kept). The starting number of hens cannot be changed after days have been recorded — use an opening correction in Daily Operations instead.</p>
+<h2>16. Backup and restore</h2>
+<h3>Why</h3>
+<p>All records are on this computer. If the computer is damaged or stolen, only a backup can bring them back.</p>
+<h3>Automatic backups</h3>
+<p>By default a backup is made every 24 hours into <em>Documents\Poultry Farm Manager\Backups</em>, keeping the last 14. Change this in <strong>Backup &amp; Restore → Automatic backups</strong>. If an automatic backup fails, a red warning appears on the dashboard.</p>
+<h3>Manual backup (recommended weekly, to a USB drive)</h3>
+<ol><li>Insert the USB drive.</li><li>Open <strong>Backup &amp; Restore</strong> and click <strong>Back up to a folder / USB drive…</strong>.</li><li>Choose the USB drive and click <em>Select Folder</em>.</li><li>Wait for "Backup saved". Keep the USB drive in a safe place away from the computer.</li></ol>
+<p>Backup files are named like <code>PoultryFarm-20261013-180000-manual.pfmbackup</code>. Each backup is checked for damage before it is reported as successful.</p>
+<h3>Restoring a backup (administrator)</h3>
+<ol><li>Open <strong>Backup &amp; Restore → Choose backup file…</strong> and select the <code>.pfmbackup</code> file.</li><li>The program checks the file and shows the farm name and the last recorded day.</li><li>Type <strong>RESTORE</strong> and click <strong>Replace current data with this backup</strong>.</li><li>A safety backup of the current data is made first, then the backup is restored. Sign in again.</li></ol>
+<p>To move the farm to a <strong>new computer</strong>: install the program on the new computer, complete a quick setup or explore the demo, sign in as administrator and restore your latest backup.</p>
+<h2>17. Troubleshooting</h2>
+<table><thead><tr><th>Problem</th><th>What to do</th></tr></thead><tbody><tr><td>"This day has not been started"</td><td>Go to <strong>Daily Operations</strong> and click <strong>Start day</strong>.</td></tr><tr><td>"This day is closed"</td><td>Records of closed days are protected. An administrator can use <strong>Amend closed day</strong>.</td></tr><tr><td>Cannot close the day</td><td>Look at the closing checklist. Fix red items; fix yellow items or accept them with a reason. Only administrators can close.</td></tr><tr><td>"Not enough … in stock"</td><td>Record the purchase or receipt in <strong>Inventory</strong> first, then enter the usage again.</td></tr><tr><td>End meter reading lower than start</td><td>Check the reading. If the meter was reset or replaced, an administrator records it with the spanner icon.</td></tr><tr><td>Forgot password</td><td>Ask an administrator to reset it in <strong>Settings → Users</strong>. If the only administrator forgot the password, contact your support person.</td></tr><tr><td>Backup failed</td><td>Check that the backup folder or USB drive exists and has free space. Choose another folder in <strong>Backup &amp; Restore</strong>.</td></tr><tr><td>Program says data was created by a newer version</td><td>Install the latest version of the program.</td></tr><tr><td>Program will not start</td><td>Restart the computer. If it still fails, contact support and tell them the data folder shown in <strong>Settings → Farm</strong> (normally <code>%APPDATA%\Poultry Farm Manager\data</code>). Do <strong>not</strong> delete that folder.</td></tr></tbody></table>
+<h2>18. Updating and uninstalling</h2>
+<ul><li><strong>Automatic updates:</strong> when the computer is connected to the internet, the program checks for a new version. An administrator sees a blue bar: <em>Version … is available</em> → <strong>Download update</strong> → <strong>Install and restart</strong>. A backup of the farm data is made first, then the program closes, updates and opens again. You can also check in <strong>Settings → Farm → Software updates</strong>, or switch automatic checks off there.</li><li><strong>Without internet</strong>, run the new setup file you receive on a USB drive. Your records are kept.</li><li><strong>Uninstalling</strong> removes the program but <strong>keeps your farm records</strong> in <code>%APPDATA%\Poultry Farm Manager\data</code>. Make a backup before uninstalling anyway.</li></ul>
+<h2>19. Admin portal and duties (administrators)</h2>
+<p>Open <strong>Admin portal</strong> (menu → System).</p>
+<ul><li><strong>Overview</strong> — active users, database size, last backup, database health, failed sign-ins, activity charts, and <strong>who looks after each cage</strong>.</li><li><strong>Users &amp; duties</strong> — approve or reject account requests, add users, reset passwords, issue recovery codes, and set <strong>duties</strong>: click the clipboard icon next to a user, tick the jobs they may do (start the day, eggs, feeding, water, deaths, medicine, store stock, receiving deliveries, egg sales, reports, backups) and choose <strong>the cages they look after</strong>.</li></ul>
+<p>  - A user only sees the menu pages for their duties and can only enter or change records for their own cages. They can still view figures.   - Each user's dashboard shows <strong>My duties today</strong>, ticked off automatically as the work is recorded.</p>
+<ul><li><strong>Database</strong> — where the data file is, its size and version, how many records each part holds, <strong>Check database now</strong> (full integrity check) and <strong>Optimise</strong>.</li><li><strong>Activity log</strong> — every change: who, when, what and why.</li></ul>
+<h2>20. Feed &amp; supplies received</h2>
+<p>Open <strong>Feed &amp; supplies in</strong>. Click <strong>Receive a delivery</strong>, choose the supplier (or add a new one with <strong>+</strong>), enter the invoice and vehicle number, and add one line per item (quantity, unit cost; batch and expiry for medicines). Saving adds the stock to the store once and gives the delivery a number such as <code>GRN-20261016-001</code>.</p>
+<p>The page shows feed received, purchase cost, feed in store and charts of feed received against feed issued to the cages. An administrator can cancel a delivery entered by mistake (the stock is removed again, unless it has already been used).</p>
+<h2>21. Egg store &amp; sales</h2>
+<p>Every good and cracked egg collected goes into the <strong>egg store</strong> automatically; rejected eggs do not. Open <strong>Egg store &amp; sales</strong>:</p>
+<ul><li><strong>Send eggs</strong> — choose the customer, enter good and cracked eggs with their price per egg (trays of 30 are shown to help), the amount paid now and how, vehicle and driver. You cannot send more eggs than the store holds. Each dispatch gets a number such as <code>DSP-20261016-001</code>.</li><li><strong>Record payment</strong> — for dispatches not fully paid. The <strong>Not fully paid</strong> tab lists what customers still owe.</li><li><strong>Store corrections</strong> (administrator) — eggs broken in the store (−) or found in a count (+), with a reason.</li><li>Charts show eggs in and out, eggs in store, sales and money received.</li></ul>
+<h2>22. Farm flow, quick search and the top bar</h2>
+<ul><li><strong>Farm flow</strong> shows the whole chain for 7, 30 or 90 days: feed received → feed in store → issued to cages → hens → eggs collected → eggs sent out → sales and money owed, with charts.</li><li><strong>Ctrl + K</strong> (or the search box at the top) — type part of a page or action name, e.g. "eggs" or "dispatch", and press Enter.</li><li><strong>New</strong> — quick actions: record eggs, a death, feed, a delivery or a dispatch.</li><li>The <strong>bell</strong> shows alerts (low stock, expiring medicine, unusual figures, account requests, failed backups).</li><li><strong>Collapse menu</strong> (bottom left) makes the menu narrow to give pages more room.</li></ul></body></html>
