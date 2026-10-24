@@ -61,6 +61,10 @@ npm run import-sqlite -- "C:\Users\<you>\AppData\Roaming\Poultry Farm Manager\da
 *staging* database first and compare day count, hen counts, stock balances and egg totals with the desktop screens →
 import into production → staff sign in with their email addresses. Keep the desktop data file untouched as a fallback.
 
+Rehearsed on 24 October 2026 on a copy of Madawala's desktop data (6 days): row counts in all 26 tables, egg,
+mortality, feed and opening-hen totals, stock per item, day status, password hashes, and each day's opening/closing
+hens and eggs as calculated by the web edition all matched the desktop data.
+
 ## What changed from the desktop edition
 
 | Desktop | Web |
