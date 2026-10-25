@@ -1512,7 +1512,35 @@ export const en = {
   'plat.h.backupFolder': '{mb} MB in {files} files',
   'plat.h.failedBackups': 'Failed backups (7 days)',
   'plat.h.jobFailures': 'Background job failures since the server started',
-  'plat.h.noJobFailures': 'None.'
+  'plat.h.noJobFailures': 'None.',
+  'env.staging': 'STAGING — test server, not real farm records',
+  'err.too_many_attempts': 'Too many attempts. Please wait {seconds} seconds and try again.',
+  'plat.releases': 'Releases',
+  'plat.h.restoreTest': 'Last restore test',
+  'plat.h.noRestoreTest': 'No restore test yet. Set RESTORE_TEST_DB_NAME and run npm run restore-test.',
+  'plat.h.security': 'Security events',
+  'plat.h.securityValue':
+    '{failed} failed farm sign-ins and {locked} locked accounts (24 h) · {platform} failed console sign-ins (24 h) · {limited} requests refused by the rate limit',
+  'rel.installed': 'Installed release',
+  'rel.environment': 'Environment',
+  'rel.env.development': 'Development',
+  'rel.env.staging': 'Staging',
+  'rel.env.production': 'Production',
+  'rel.schema': 'Database schema',
+  'rel.expected': 'expected v{n}',
+  'rel.latest': 'Latest approved release',
+  'rel.behind': 'This server runs an older release than v{latest}.',
+  'rel.howDeployed':
+    'Releases are deployed by the CI/CD pipeline after tests and approval (see docs/DEPLOYMENT.md). The console cannot install or change releases.',
+  'rel.history': 'Release history',
+  'rel.started': 'Deployed',
+  'rel.lastStart': 'Last start',
+  'rel.restarts': '{n} restarts',
+  'rel.restoreTests': 'Restore tests',
+  'rel.restoreHint':
+    'A backup counts as reliable once it has been restored: the newest whole-database backup is restored into a separate database every week and checked table by table.',
+  'rel.restoreStats': '{tables} tables, {rows} rows, {s} s',
+  'rel.notes': 'Release notes'
 } as const
 
 export type TranslationKey = keyof typeof en

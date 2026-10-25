@@ -1,0 +1,128 @@
+# Deploys tested releases: staging first (with smoke tests), then production after a person approves.
+#
+# - Runs only after CI has passed on `main` (or by hand, for a commit on `main` that passed CI).
+# - Production uses the GitHub environment "production": set "Required reviewers" on it so nobody
+#   deploys to production without an explicit approval.
+# - Nothing is deployed until the servers are configured (see docs/DEPLOYMENT.md): repository
+#   variables STAGING_HOST / PRODUCTION_HOST etc. and the SSH keys as environment secrets.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit on main to deploy (default: the newest)
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build release
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - id: sha
+        name: Choose the commit
+        run: echo "sha=${{ github.event.inputs.sha || github.event.workflow_run.head_sha || github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.sha.outputs.sha }}
+          fetch-depth: 0
+
+      - name: The commit must be on main and must have passed CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          git merge-base --is-ancestor "$SHA" origin/main || { echo "$SHA is not on main"; exit 1; }
+          ok=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$SHA&status=success" --jq '[.workflow_runs[] | select(.name == "CI")] | length')
+          [ "$ok" -gt 0 ] || { echo "CI has not passed for $SHA"; exit 1; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Package the release (no secrets, no data)
+        run: |
+          tar --exclude=./node_modules --exclude=./data --exclude=./.git --exclude='./.env*' -czf "/tmp/release-${{ steps.sha.outputs.sha }}.tgz" .
+          mv "/tmp/release-${{ steps.sha.outputs.sha }}.tgz" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release-${{ steps.sha.outputs.sha }}.tgz
+          retention-days: 30
+
+  staging:
+    name: Deploy to staging and smoke test
+    needs: build
+    if: vars.STAGING_HOST != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+      - name: Deploy
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ vars.STAGING_HOST }}
+          USER_NAME: ${{ vars.STAGING_USER }}
+          SHA: ${{ needs.build.outputs.sha }}
+        run: bash scripts/deploy/ship.sh
+      - name: Smoke test
+        run: node scripts/smoke-test.mjs "${{ vars.STAGING_URL }}" "${{ needs.build.outputs.version }}"
+
+  production:
+    name: Deploy to production (after approval)
+    needs: [build, staging]
+    if: vars.PRODUCTION_HOST != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+      - name: Deploy
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          HOST: ${{ vars.PRODUCTION_HOST }}
+          USER_NAME: ${{ vars.PRODUCTION_USER }}
+          SHA: ${{ needs.build.outputs.sha }}
+        run: bash scripts/deploy/ship.sh
+      - name: Post-deployment health check
+        run: node scripts/smoke-test.mjs "${{ vars.PRODUCTION_URL }}" "${{ needs.build.outputs.version }}"

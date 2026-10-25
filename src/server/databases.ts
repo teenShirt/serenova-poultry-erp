@@ -2,8 +2,10 @@ import mysql from 'mysql2/promise'
 import type { Pool } from 'mysql2/promise'
 import type { ServerConfig } from './config'
 import { createPool, DB, withDb } from './db/connection'
-import { createBackup } from './services/backup'
-import { migrate } from './db/migrations'
+import { configureBackupEncryption, createBackup } from './services/backup'
+import { currentSchemaVersion, migrate } from './db/migrations'
+import os from 'node:os'
+import { APP_VERSION } from './version'
 import { seedDemo } from './services/demo'
 
 export type Mode = 'farm' | 'demo'
@@ -21,6 +23,7 @@ export class Databases {
 
   /** Creates the databases if needed (and allowed), then brings their tables up to date. */
   static async open(cfg: ServerConfig): Promise<Databases> {
+    configureBackupEncryption(cfg.backupKey)
     await ensureDatabase(cfg, cfg.db.database, true)
     let demoOk = false
     if (cfg.demoDatabase) {
@@ -40,7 +43,16 @@ export class Databases {
       if (b.status !== 'ok') throw new Error(`Could not back up the database before upgrading it (schema v${from}): ${b.message}`)
       console.log(`Backed up ${db.name} (schema v${from}) before upgrading it: ${b.path}`)
     }
-    await dbs.with('farm', (db) => migrate(db, { beforeChanges: safetyBackup(db) }))
+    await dbs.with('farm', async (db) => {
+      try {
+        const m = await migrate(db, { beforeChanges: safetyBackup(db) })
+        await recordDeployment(db, cfg, { from: m.from, to: m.to, error: null })
+      } catch (e) {
+        // Recorded when the database can still take it (for the platform console), then the start fails.
+        await recordDeployment(db, cfg, { from: await currentSchemaVersion(db).catch(() => 0), to: 0, error: (e as Error).message }).catch(() => undefined)
+        throw e
+      }
+    })
     if (demoPool) await dbs.with('demo', (db) => migrate(db))
     return dbs
   }
@@ -107,4 +119,44 @@ async function ensureDatabase(cfg: ServerConfig, name: string, required: boolean
   } finally {
     await conn.end()
   }
+}
+
+/**
+ * Records the release this server started with (version, commit, environment, database upgrade).
+ * A restart of the same release only updates its last start.
+ */
+async function recordDeployment(db: DB, cfg: ServerConfig, r: { from: number; to: number; error: string | null }) {
+  const now = new Date().toISOString()
+  const last = (await db.prepare('SELECT id, version, release_sha, environment, status FROM deployments ORDER BY id DESC LIMIT 1').get()) as
+    | { id: number; version: string; release_sha: string | null; environment: string; status: string }
+    | undefined
+  if (
+    !r.error &&
+    last &&
+    last.status === 'ok' &&
+    last.version === APP_VERSION &&
+    last.release_sha === cfg.releaseSha &&
+    last.environment === cfg.environment &&
+    r.from === r.to
+  ) {
+    await db.prepare('UPDATE deployments SET last_started_at = ?, restarts = restarts + 1 WHERE id = ?').run(now, last.id)
+    return
+  }
+  await db
+    .prepare(
+      `INSERT INTO deployments (version, release_sha, environment, host, schema_from, schema_to, status, error, started_at, last_started_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      APP_VERSION,
+      cfg.releaseSha,
+      cfg.environment,
+      os.hostname().slice(0, 255),
+      r.from,
+      r.to,
+      r.error ? 'failed' : 'ok',
+      r.error?.slice(0, 4000) ?? null,
+      now,
+      now
+    )
 }

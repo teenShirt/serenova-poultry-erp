@@ -1,0 +1,28 @@
+# systemd unit for Serenova Poultry ERP (copy to /etc/systemd/system/serenova.service).
+# The deployment workflow switches /opt/serenova/current to a new release and restarts this service.
+[Unit]
+Description=Serenova Poultry ERP
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=serenova
+Group=serenova
+WorkingDirectory=/opt/serenova/current
+# Settings and secrets (never in git), then the commit of the release being run.
+EnvironmentFile=/opt/serenova/shared/.env
+EnvironmentFile=-/opt/serenova/current/.release
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/server/index.js
+Restart=on-failure
+RestartSec=5
+# Hardening: the service only writes to its data folder.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/serenova/shared/data
+
+[Install]
+WantedBy=multi-user.target

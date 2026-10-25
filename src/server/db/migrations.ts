@@ -995,6 +995,41 @@ ALTER TABLE inventory_items
         )
       }
     }
+  },
+  {
+    version: 10,
+    name: 'release history and restore tests',
+    up: `
+-- Each release the server started with: version, commit, environment and database upgrade.
+CREATE TABLE deployments (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  version VARCHAR(32) NOT NULL,
+  release_sha VARCHAR(40),
+  environment VARCHAR(16) NOT NULL,
+  host VARCHAR(255),
+  schema_from INT NOT NULL,
+  schema_to INT NOT NULL,
+  status VARCHAR(8) NOT NULL CHECK (status IN ('ok','failed')),
+  error TEXT,
+  started_at VARCHAR(32) NOT NULL,
+  last_started_at VARCHAR(32) NOT NULL,
+  restarts INT NOT NULL DEFAULT 0
+) ${T};
+
+-- Backups restored into a separate database to prove they can be restored.
+CREATE TABLE restore_tests (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  at VARCHAR(32) NOT NULL,
+  backup_file VARCHAR(500) NOT NULL,
+  backup_created_at VARCHAR(32),
+  target_database VARCHAR(64) NOT NULL,
+  status VARCHAR(8) NOT NULL CHECK (status IN ('ok','failed')),
+  duration_ms INT NOT NULL,
+  tables_checked INT NOT NULL DEFAULT 0,
+  rows_checked INT NOT NULL DEFAULT 0,
+  problems TEXT
+) ${T};
+`
   }
 ]
 
@@ -1043,7 +1078,7 @@ const DECIMAL_COLUMNS: Record<string, Record<string, string>> = {
 }
 
 /** Platform tables: only in whole-database backups, never in (or restored from) an organization's backup. */
-export const PLATFORM_TABLES = ['platform_users', 'plans', 'subscriptions', 'platform_audit'] as const
+export const PLATFORM_TABLES = ['platform_users', 'plans', 'subscriptions', 'platform_audit', 'deployments', 'restore_tests'] as const
 
 /** Tables holding farm data, parents before children (the order used by backup and restore). */
 export const DATA_TABLES = [

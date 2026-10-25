@@ -23,6 +23,13 @@ import { applyRetention, createBackup, inspectBackup, isDesktopBackup, lastBacku
 import { renderXlsx } from './reports/render'
 import { buildCsv } from './reports/csv'
 import { recordJobFailure } from './jobs'
+import { RateLimiter } from './rate-limit'
+import { configProblems } from './config'
+import { currentSchemaVersion, latestSchemaVersion } from './db/migrations'
+import { restoreTestDue, runRestoreTest } from './services/restore-test'
+import { audit } from './services/audit'
+
+const RATE_LIMITED = new Set(['auth.login', 'platform.login', 'auth.signup', 'auth.resetWithCode', 'setup.complete'])
 import { CSV_KINDS, type CsvKind } from '@shared/overview'
 import { addDays, isIsoDate } from '@shared/dates'
 import { requirePermission } from './services/roles'
@@ -40,11 +47,19 @@ function readCookie(req: Request, name: string): string | undefined {
 }
 
 export async function createServer(cfg: ServerConfig) {
+  const problems = configProblems(cfg)
+  if (problems.length) throw new Error(`Unsafe settings for a ${cfg.environment} server:\n - ${problems.join('\n - ')}`)
   const dbs = await Databases.open(cfg)
+  const authLimiter = new RateLimiter(cfg.authRequestsPerMinute)
   const sessions = new Sessions(dbs, cfg.sessionIdleHours)
   const restoreTokens = new RestoreTokens()
   const handlers = createHandlers({ cfg, dbs, restoreTokens })
-  const platformHandlers = createPlatformHandlers(APP_VERSION, cfg.backupDir)
+  const platformHandlers = createPlatformHandlers(APP_VERSION, cfg.backupDir, {
+    environment: cfg.environment,
+    releaseSha: cfg.releaseSha,
+    securityEvents: () => authLimiter.refused,
+    changelogPath: path.join(projectRoot, 'CHANGELOG.md')
+  })
 
   const cookie = (req: Request, value: string | null) => {
     const secure = cfg.secureCookies || req.secure ? '; Secure' : ''
@@ -126,7 +141,27 @@ export async function createServer(cfg: ServerConfig) {
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('X-Frame-Options', 'SAMEORIGIN')
     res.setHeader('Referrer-Policy', 'same-origin')
+    // Browsers keep to HTTPS for a year once they have seen it served securely.
+    if (cfg.secureCookies) res.setHeader('Strict-Transport-Security', 'max-age=31536000')
     next()
+  })
+
+  // Liveness: the process answers. Readiness: the database answers and is at this release's schema.
+  // Neither shows anything private (used by the deployment's checks and by monitoring).
+  app.get('/healthz', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ status: 'ok' })
+  })
+  app.get('/readyz', async (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
+    const base = { version: APP_VERSION, release: cfg.releaseSha, environment: cfg.environment, expectedSchema: latestSchemaVersion() }
+    try {
+      const schema = await dbs.with('farm', (db) => currentSchemaVersion(db))
+      const ready = schema === latestSchemaVersion()
+      res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'schema_mismatch', schema, ...base })
+    } catch {
+      res.status(503).json({ status: 'database_unavailable', ...base })
+    }
   })
 
   // Data-changing requests must come from the app's own pages: browsers will not send this header
@@ -142,6 +177,15 @@ export async function createServer(cfg: ServerConfig) {
   app.post('/api/call/:method', sameOrigin, express.json({ limit: '2mb' }), async (req, res) => {
     const input = (req.body as { input?: unknown } | undefined)?.input
     const method = String(req.params['method'])
+    // Sign-in, sign-up, password reset and first-run setup: a limited number of tries per minute from one address.
+    if (RATE_LIMITED.has(method)) {
+      const wait = authLimiter.hit(`${req.ip ?? 'unknown'}:${method}`)
+      if (wait > 0) {
+        res.status(429).setHeader('Retry-After', String(wait))
+        res.json({ ok: false, code: 'too_many_attempts', params: { seconds: wait } })
+        return
+      }
+    }
     const out = await withRequest<ApiResponse<unknown>>(
       req,
       res,
@@ -172,6 +216,7 @@ export async function createServer(cfg: ServerConfig) {
       const model = await buildReport(ctx, spec.data)
       const data = await renderXlsx(model, (await getSettings(ctx)).language)
       await recordReport(ctx, spec.data, 'xlsx', `${model.fileStem}.xlsx`)
+      await audit(ctx, { action: 'export', entity: 'report', details: { format: 'xlsx', ...spec.data } })
       return { name: `${model.fileStem}.xlsx`, data }
     })
     res.attachment(file.name)
@@ -198,7 +243,9 @@ export async function createServer(cfg: ServerConfig) {
       if (kind === 'tasks') requirePermission(ctx, 'tasks.manage')
       if (kind === 'organization') requirePermission(ctx, 'reports.view')
       const warehouseId = Number(q('warehouseId')) || null
-      return buildCsv(ctx, kind as CsvKind, q('from'), q('to'), { warehouseId })
+      const csv = await buildCsv(ctx, kind as CsvKind, q('from'), q('to'), { warehouseId })
+      await audit(ctx, { action: 'export', entity: 'report', details: { format: 'csv', kind, from: q('from'), to: q('to'), warehouseId } })
+      return csv
     })
     res.attachment(`${out.name}.csv`)
     res.type('text/csv; charset=utf-8')
@@ -217,6 +264,7 @@ export async function createServer(cfg: ServerConfig) {
         .get(Number(req.params['id']), ctx.org)) as { path: string } | undefined
       const p = row?.path ? path.resolve(row.path) : null
       if (!p || path.dirname(p) !== path.resolve(cfg.backupDir) || !fs.existsSync(p)) throw new AppError('file_not_allowed')
+      await audit(ctx, { action: 'download_backup', entity: 'backup', details: { file: path.basename(p) } })
       return p
     })
     res.download(file, path.basename(file))
@@ -286,6 +334,8 @@ export async function createServer(cfg: ServerConfig) {
 /** Whole-database backups for the platform (all organizations): one a day, the last 14 kept. */
 const PLATFORM_BACKUP_HOURS = 24
 const PLATFORM_BACKUP_KEEP = 14
+/** How often the newest whole-database backup is test-restored (when RESTORE_TEST_DB_NAME is set). */
+const RESTORE_TEST_DAYS = 7
 
 /**
  * Automatic backups: each organization's records on its own schedule (Backup settings), plus a daily
@@ -318,7 +368,11 @@ function startSchedulers(cfg: ServerConfig, dbs: Databases, sessions: Sessions) 
         if (orgs.length && (await due(db, null, PLATFORM_BACKUP_HOURS))) {
           const info = await createBackup(db, cfg.backupDir, 'auto', { orgId: null })
           if (info.status === 'ok') applyRetention(cfg.backupDir, PLATFORM_BACKUP_KEEP, 'all')
-          else recordJobFailure('Automatic whole-database backup', new Error(info.message ?? 'failed'))
+          // Once a week the newest whole-database backup is test-restored into the separate restore-test database.
+          if (info.status === 'ok' && cfg.restoreTestDatabase && (await restoreTestDue(db, RESTORE_TEST_DAYS))) {
+            const r = await runRestoreTest(db, cfg)
+            if (r.status !== 'ok') recordJobFailure('Restore test', new Error(r.problems.join('; ')))
+          } else recordJobFailure('Automatic whole-database backup', new Error(info.message ?? 'failed'))
         }
       } finally {
         await db.query("SELECT RELEASE_LOCK('pfm_auto_backup')")
@@ -341,7 +395,9 @@ async function main() {
   const cfg = loadConfig()
   const server = await createServer(cfg)
   const http = server.app.listen(cfg.port, cfg.host, () => {
-    console.log(`Poultry Farm Manager ${APP_VERSION} — http://${cfg.host === '0.0.0.0' ? 'localhost' : cfg.host}:${cfg.port}`)
+    console.log(
+      `Poultry Farm Manager ${APP_VERSION} (${cfg.environment}${cfg.releaseSha ? ', ' + cfg.releaseSha.slice(0, 7) : ''}) — http://${cfg.host === '0.0.0.0' ? 'localhost' : cfg.host}:${cfg.port}`
+    )
     console.log(`Farm data: ${server.dbs.location('farm')} · backups: ${cfg.backupDir}`)
   })
   const stop = () => {

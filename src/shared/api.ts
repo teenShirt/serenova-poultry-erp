@@ -14,7 +14,7 @@ import type {
 } from './stores'
 import type { MovementPage, OrganizationOverview } from './overview'
 import type { FarmRow, FlockDetail, FlockInput, FlockSummary, HouseRow, ReminderDue, ReminderRow } from './flocks'
-import type { OrgSummary, Plan, PlatformMetrics, PlatformStatus, PlatformUser, SubscriptionChange } from './platform'
+import type { OrgSummary, Plan, PlatformMetrics, PlatformReleases, PlatformStatus, PlatformUser, SubscriptionChange } from './platform'
 import type {
   AppStatus,
   AuditEntry,
@@ -451,6 +451,8 @@ export interface Api {
   'platform.plans': { in: void; out: Plan[] }
   'platform.savePlan': { in: Omit<Plan, 'id'> & { id: number | null }; out: number }
   'platform.setSubscription': { in: SubscriptionChange; out: void }
+  /** Installed version, release notes, release history and restore tests (read-only: releases are deployed by CI/CD) */
+  'platform.releases': { in: void; out: PlatformReleases }
 }
 
 export type ApiMethod = keyof Api
@@ -615,5 +617,6 @@ export const API_KIND: Record<ApiMethod, 'read' | 'write'> = {
   'platform.setOrganizationStatus': 'write',
   'platform.plans': 'read',
   'platform.savePlan': 'write',
-  'platform.setSubscription': 'write'
+  'platform.setSubscription': 'write',
+  'platform.releases': 'read'
 }

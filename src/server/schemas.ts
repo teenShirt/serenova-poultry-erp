@@ -492,6 +492,7 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
     modules: z.array(z.enum(MODULES)).max(MODULES.length),
     active: z.boolean()
   }),
+  'platform.releases': none,
   'platform.setSubscription': z.object({
     organizationId: id,
     planId: id,

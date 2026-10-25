@@ -445,6 +445,8 @@ export interface BackupFileCheck {
 }
 
 export interface AppStatus {
+  /** development, staging or production (staging shows a banner so test data is never mistaken for real) */
+  environment: 'development' | 'staging' | 'production'
   /** The platform has at least one organization (otherwise the first-run setup is shown) */
   setupComplete: boolean
   /** The signed-in user's organization and the farm they are working on */

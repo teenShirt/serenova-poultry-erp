@@ -70,7 +70,7 @@ function PlatformLogin({ onSignedIn }: { onSignedIn: () => void }) {
   )
 }
 
-type Tab = 'overview' | 'orgs' | 'plans'
+type Tab = 'overview' | 'orgs' | 'plans' | 'releases'
 
 function Console({ user, version, onSignedOut }: { user: PlatformUser; version: string; onSignedOut: () => void }) {
   const { t, fail } = useApp()
@@ -108,12 +108,14 @@ function Console({ user, version, onSignedOut }: { user: PlatformUser; version: 
           tabs={[
             { value: 'overview', label: t('plat.overview') },
             { value: 'orgs', label: t('plat.organizations') },
-            { value: 'plans', label: t('plat.plans') }
+            { value: 'plans', label: t('plat.plans') },
+            { value: 'releases', label: t('plat.releases') }
           ]}
         />
         {tab === 'overview' && <Overview />}
         {tab === 'orgs' && <Organizations />}
         {tab === 'plans' && <Plans />}
+        {tab === 'releases' && <Releases />}
         <div className="muted small">v{version}</div>
       </main>
     </div>
@@ -177,6 +179,21 @@ function Overview() {
           </dd>
           <dt>{t('plat.h.failedBackups')}</dt>
           <dd className={m.backups.failedLast7Days ? 'bad' : ''}>{m.backups.failedLast7Days}</dd>
+          <dt>{t('plat.h.restoreTest')}</dt>
+          <dd className={m.health.lastRestoreTest?.status === 'failed' ? 'bad' : ''}>
+            {m.health.lastRestoreTest
+              ? `${t('plat.backup.' + m.health.lastRestoreTest.status)} · ${dateTime(m.health.lastRestoreTest.at)}`
+              : t('plat.h.noRestoreTest')}
+          </dd>
+          <dt>{t('plat.h.security')}</dt>
+          <dd>
+            {t('plat.h.securityValue', {
+              failed: m.health.security.failedLogins24h,
+              locked: m.health.security.lockouts24h,
+              platform: m.health.security.platformFailedLogins24h,
+              limited: m.health.security.rateLimited.length
+            })}
+          </dd>
         </dl>
         <h3>{t('plat.h.jobFailures')}</h3>
         {m.health.jobFailures.length === 0 ? (
@@ -693,5 +710,122 @@ function PlanDialog({ plan, onClose }: { plan: Plan | null; onClose: () => void 
         {plan && <Notice tone="info">{t('plat.planEditHint')}</Notice>}
       </div>
     </Modal>
+  )
+}
+
+/**
+ * Releases: what is installed, the release notes, every deployment and the restore tests.
+ * Read-only by design: releases are deployed by the CI/CD pipeline, never from the browser.
+ */
+function Releases() {
+  const { t, date, dateTime, num } = useApp()
+  const { data: r } = useLoad(() => call('platform.releases'), [])
+  if (!r) return <div className="muted">{t('app.loading')}</div>
+  const behind = r.latestNoted && r.latestNoted !== r.current.version
+  return (
+    <div className="stack">
+      <Card title={t('rel.installed')}>
+        <dl className="kv">
+          <dt>{t('plat.h.version')}</dt>
+          <dd>
+            v{r.current.version} {r.current.release && <span className="muted small">({r.current.release.slice(0, 12)})</span>}
+          </dd>
+          <dt>{t('rel.environment')}</dt>
+          <dd>{t('rel.env.' + r.current.environment)}</dd>
+          <dt>{t('rel.schema')}</dt>
+          <dd className={r.current.schemaVersion !== r.current.expectedSchema ? 'bad' : ''}>
+            v{r.current.schemaVersion}
+            {r.current.schemaVersion !== r.current.expectedSchema && ` (${t('rel.expected', { n: r.current.expectedSchema })})`}
+          </dd>
+          <dt>{t('rel.latest')}</dt>
+          <dd>{r.latestNoted ? `v${r.latestNoted}` : '—'}</dd>
+        </dl>
+        {behind && <Notice tone="warn">{t('rel.behind', { latest: r.latestNoted! })}</Notice>}
+        <Notice tone="info">{t('rel.howDeployed')}</Notice>
+      </Card>
+      <Card title={t('rel.history')}>
+        {r.deployments.length === 0 ? (
+          <Empty text={t('common.noData')} />
+        ) : (
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>{t('rel.started')}</th>
+                  <th>{t('plat.h.version')}</th>
+                  <th>{t('rel.environment')}</th>
+                  <th>{t('rel.schema')}</th>
+                  <th>{t('plat.status')}</th>
+                  <th>{t('rel.lastStart')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {r.deployments.map((d, i) => (
+                  <tr key={i}>
+                    <td className="nowrap">{dateTime(d.startedAt)}</td>
+                    <td>
+                      v{d.version} {d.release && <span className="muted small">{d.release.slice(0, 7)}</span>}
+                      {d.host && <div className="muted small">{d.host}</div>}
+                    </td>
+                    <td>{t('rel.env.' + d.environment)}</td>
+                    <td>{d.schemaFrom === d.schemaTo ? `v${d.schemaTo}` : `v${d.schemaFrom} → v${d.schemaTo}`}</td>
+                    <td>
+                      <span className={`pill ${d.status === 'ok' ? 'good' : 'bad'}`}>{t('plat.backup.' + d.status)}</span>
+                      {d.error && <div className="small bad">{d.error}</div>}
+                    </td>
+                    <td className="nowrap">
+                      {dateTime(d.lastStartedAt)}
+                      {d.restarts > 0 && <div className="muted small">{t('rel.restarts', { n: d.restarts })}</div>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+      <Card title={t('rel.restoreTests')}>
+        <div className="muted small" style={{ marginBottom: 8 }}>
+          {t('rel.restoreHint')}
+        </div>
+        {r.restoreTests.length === 0 ? (
+          <Empty text={t('plat.h.noRestoreTest')} />
+        ) : (
+          <table className="data">
+            <tbody>
+              {r.restoreTests.map((x, i) => (
+                <tr key={i}>
+                  <td className="nowrap">{dateTime(x.at)}</td>
+                  <td>
+                    <span className={`pill ${x.status === 'ok' ? 'good' : 'bad'}`}>{t('plat.backup.' + x.status)}</span>
+                  </td>
+                  <td className="small">
+                    {x.backupFile.split(/[\\/]/).pop()}
+                    <div className="muted">{t('rel.restoreStats', { tables: x.tablesChecked, rows: num(x.rowsChecked), s: num(x.durationMs / 1000, 1) })}</div>
+                    {x.problems && (
+                      <div className="bad" style={{ whiteSpace: 'pre-wrap' }}>
+                        {x.problems}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+      <Card title={t('rel.notes')}>
+        {r.notes.map((n) => (
+          <div key={n.version} style={{ marginBottom: 14 }}>
+            <h3>
+              v{n.version} {n.date && <span className="muted small">{date(n.date)}</span>}
+            </h3>
+            <div className="small" style={{ whiteSpace: 'pre-wrap' }}>
+              {n.body}
+            </div>
+          </div>
+        ))}
+      </Card>
+    </div>
   )
 }

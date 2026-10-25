@@ -77,6 +77,7 @@ export function App() {
   if (!status) return <div className="page muted">{translate('si', 'app.loading')} / Loading…</div>
   return (
     <AppProvider initial={status}>
+      {status.environment === 'staging' && <div className="env-banner">{translate(status.settings.language, 'env.staging')}</div>}
       <Gate />
     </AppProvider>
   )

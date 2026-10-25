@@ -28,9 +28,21 @@ export type PlatformHandlers = { [M in PlatformMethod]: Handler<M> }
 
 const PUBLIC = new Set<PlatformMethod>(['platform.status', 'platform.login'])
 
-export function createPlatformHandlers(version: string, backupDir: string | null = null): PlatformHandlers {
+export interface PlatformEnv {
+  environment: 'development' | 'staging' | 'production'
+  releaseSha: string | null
+  securityEvents: () => { at: string; key: string }[]
+  changelogPath?: string
+}
+
+export function createPlatformHandlers(
+  version: string,
+  backupDir: string | null = null,
+  env: PlatformEnv = { environment: 'development', releaseSha: null, securityEvents: () => [] }
+): PlatformHandlers {
   return {
-    'platform.status': (_, ctx) => ({ user: ctx.platformUser, version, schemaVersion: latestSchemaVersion() }),
+    'platform.status': (_, ctx) => ({ user: ctx.platformUser, version, schemaVersion: latestSchemaVersion(), environment: env.environment }),
+    'platform.releases': (_, ctx) => platform.releases(ctx.db, { version, ...env }),
     'platform.login': async ({ email, password }, ctx) => {
       const user = await platform.platformLogin(ctx, email, password)
       // A platform session is never also an organization session.
@@ -46,7 +58,7 @@ export function createPlatformHandlers(version: string, backupDir: string | null
       ctx.session.platformUserId = null
       ctx.session.rotate = true
     },
-    'platform.metrics': (_, ctx) => platform.platformMetrics(ctx.db, today(ctx), { version, backupDir }),
+    'platform.metrics': (_, ctx) => platform.platformMetrics(ctx.db, today(ctx), { version, backupDir, securityEvents: env.securityEvents }),
     'platform.organizations': (_, ctx) => platform.listOrganizations(ctx.db, today(ctx)),
     'platform.createOrganization': (i, ctx) => platform.platformCreateOrganization(ctx, ctx.platformUser, i),
     'platform.setOrganizationStatus': ({ id, status, reason }, ctx) => platform.setOrganizationStatus(ctx.db, ctx.platformUser, id, status, reason, ctx.now()),

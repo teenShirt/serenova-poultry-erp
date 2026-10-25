@@ -43,7 +43,8 @@ import { approveReceipt, closeOrder, createOrder, listOrders, rejectReceipt } fr
 import { assertModule, assertWritable, getEntitlements, today } from './services/subscriptions'
 import type { RestoreTokens } from './uploads'
 
-export const APP_VERSION = '2.0.0'
+export { APP_VERSION } from './version'
+import { APP_VERSION } from './version'
 
 /**
  * What a signed-in request runs with: its organization and farm (from the session, never from the
@@ -182,6 +183,7 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     const org = scoped ? ((await ctx.db.prepare('SELECT code, name FROM organizations WHERE id = ?').get(scoped.org)) as { code: string; name: string }) : null
     const farm = scoped ? ((await ctx.db.prepare('SELECT id, name FROM farms WHERE id = ?').get(scoped.farm)) as { id: number; name: string }) : null
     return {
+      environment: cfg.environment,
       setupComplete: await platformHasOrganizations(ctx),
       organization: org,
       farm,

@@ -181,10 +181,20 @@ npm run reset-password -- <email address>  # set a new password when the recover
 npm run create-super-admin -- <email> "<name>"   # a platform administrator for the console at /#/platform
 ```
 
+## Deployment, recovery and security
+
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): environments, preparing a server, the staging → approval → production
+  workflow, health checks, database upgrades and rollback.
+- [docs/RECOVERY.md](docs/RECOVERY.md): what is backed up, encryption, restore drills (`npm run restore-test`),
+  restoring one organization or the whole database, recovery objectives.
+- [docs/SECURITY.md](docs/SECURITY.md): how sign-in, sessions, authorization, tenant isolation, secrets, backups
+  and auditing are handled.
+- [CHANGELOG.md](CHANGELOG.md): release history.
+
 ## Tests
 
 ```sh
-npm test         # 131 tests; a temporary MySQL 8.4 server is downloaded once and started automatically
+npm test         # 140 tests; a temporary MySQL 8.4 server is downloaded once and started automatically
 npm run typecheck
 npm run lint     # includes checks that every database call is awaited
 ```

@@ -8,7 +8,9 @@ import {
   type OrgSummary,
   type Plan,
   type PlatformMetrics,
+  type PlatformReleases,
   type PlatformUser,
+  type ReleaseNote,
   type SubscriptionChange,
   type SubscriptionStatus
 } from '@shared/platform'
@@ -19,7 +21,7 @@ import { AppError, assert } from '../errors'
 import { hashPassword, LOCK_MINUTES, MAX_ATTEMPTS, normalizeEmail, validatePassword, verifyPassword } from './auth'
 import { createOrganization } from './setup'
 import { getEntitlements, toPlan } from './subscriptions'
-import { currentSchemaVersion } from '../db/migrations'
+import { currentSchemaVersion, latestSchemaVersion } from '../db/migrations'
 import { recentJobFailures } from '../jobs'
 
 /**
@@ -258,13 +260,14 @@ export async function setSubscription(db: DB, actor: PlatformUser, c: Subscripti
 export async function platformMetrics(
   db: DB,
   today: string,
-  env: { version: string; backupDir: string | null } = { version: '', backupDir: null }
+  env: { version: string; backupDir: string | null; securityEvents?: () => { at: string; key: string }[] } = { version: '', backupDir: null }
 ): Promise<PlatformMetrics> {
   const orgs = await listOrganizations(db, today)
   const subscriptions = Object.fromEntries(SUBSCRIPTION_STATUSES.map((s) => [s, 0])) as Record<SubscriptionStatus, number>
   for (const o of orgs) subscriptions[o.entitlements.effective]++
   const n = async (sql: string, ...args: unknown[]) => ((await db.prepare(sql).get(...args)) as { n: number }).n
   const weekAgo = new Date(Date.parse(today) - 7 * 86400000).toISOString()
+  const dayAgo = new Date(Date.now() - 86400000).toISOString()
   const lastWhole = (await db
     .prepare('SELECT status, created_at AS createdAt FROM backup_runs WHERE organization_id IS NULL ORDER BY id DESC LIMIT 1')
     .get()) as { status: string; createdAt: string } | undefined
@@ -306,7 +309,16 @@ export async function platformMetrics(
         1
       ),
       ...folderSize(env.backupDir),
-      jobFailures: recentJobFailures()
+      jobFailures: recentJobFailures(),
+      security: {
+        failedLogins24h: await n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'login_failed' AND at >= ?", dayAgo),
+        lockouts24h: await n("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'account_locked' AND at >= ?", dayAgo),
+        platformFailedLogins24h: await n("SELECT COUNT(*) AS n FROM platform_audit WHERE action = 'platform_login_failed' AND at >= ?", dayAgo),
+        rateLimited: (env.securityEvents?.() ?? []).slice(0, 20)
+      },
+      lastRestoreTest:
+        ((await db.prepare('SELECT at, status FROM restore_tests ORDER BY id DESC LIMIT 1').get()) as { at: string; status: 'ok' | 'failed' } | undefined) ??
+        null
     }
   }
 }
@@ -326,4 +338,54 @@ function folderSize(dir: string | null): { backupFolderMb: number | null; backup
   } catch {
     return { backupFolderMb: null, backupFiles: null }
   }
+}
+
+/**
+ * What is installed and what has been deployed: version, commit, environment and schema, release
+ * notes from CHANGELOG.md, the release history and the restore tests. Read-only: releases are
+ * deployed by the CI/CD pipeline, never from the browser.
+ */
+export async function releases(
+  db: DB,
+  env: { version: string; environment: string; releaseSha: string | null; changelogPath?: string }
+): Promise<PlatformReleases> {
+  const notes = readChangelog(env.changelogPath)
+  return {
+    current: {
+      version: env.version,
+      release: env.releaseSha,
+      environment: env.environment,
+      schemaVersion: await currentSchemaVersion(db),
+      expectedSchema: latestSchemaVersion()
+    },
+    latestNoted: notes[0]?.version ?? null,
+    notes: notes.slice(0, 10),
+    deployments: (await db
+      .prepare(
+        `SELECT version, release_sha AS \`release\`, environment, host, schema_from AS schemaFrom, schema_to AS schemaTo, status, error,
+           started_at AS startedAt, last_started_at AS lastStartedAt, restarts FROM deployments ORDER BY id DESC LIMIT 30`
+      )
+      .all()) as PlatformReleases['deployments'],
+    restoreTests: (await db
+      .prepare(
+        `SELECT at, backup_file AS backupFile, backup_created_at AS backupCreatedAt, target_database AS targetDatabase, status, duration_ms AS durationMs,
+           tables_checked AS tablesChecked, rows_checked AS rowsChecked, problems FROM restore_tests ORDER BY id DESC LIMIT 10`
+      )
+      .all()) as PlatformReleases['restoreTests']
+  }
+}
+
+/** Sections "## [1.2.3] - 2026-10-24" of CHANGELOG.md, newest first. */
+export function readChangelog(file?: string): ReleaseNote[] {
+  if (!file || !fs.existsSync(file)) return []
+  const out: ReleaseNote[] = []
+  let cur: ReleaseNote | null = null
+  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const m = /^## \[?([0-9][^\]\s]*)\]?(?:\s*-\s*(\d{4}-\d{2}-\d{2}))?/.exec(line)
+    if (m) {
+      cur = { version: m[1], date: m[2] ?? null, body: '' }
+      out.push(cur)
+    } else if (cur) cur.body += line + '\n'
+  }
+  return out.map((n) => ({ ...n, body: n.body.trim() }))
 }

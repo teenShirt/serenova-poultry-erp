@@ -66,6 +66,44 @@ export interface PlatformStatus {
   user: PlatformUser | null
   version: string
   schemaVersion: number
+  environment: 'development' | 'staging' | 'production'
+}
+
+export interface ReleaseNote {
+  version: string
+  date: string | null
+  body: string
+}
+
+export interface PlatformReleases {
+  current: { version: string; release: string | null; environment: string; schemaVersion: number; expectedSchema: number }
+  /** The newest release described in CHANGELOG.md (the latest approved release) */
+  latestNoted: string | null
+  notes: ReleaseNote[]
+  deployments: {
+    version: string
+    release: string | null
+    environment: string
+    host: string | null
+    schemaFrom: number
+    schemaTo: number
+    status: 'ok' | 'failed'
+    error: string | null
+    startedAt: string
+    lastStartedAt: string
+    restarts: number
+  }[]
+  restoreTests: {
+    at: string
+    backupFile: string
+    backupCreatedAt: string | null
+    targetDatabase: string
+    status: 'ok' | 'failed'
+    durationMs: number
+    tablesChecked: number
+    rowsChecked: number
+    problems: string | null
+  }[]
 }
 
 export interface PlatformMetrics {
@@ -83,6 +121,9 @@ export interface PlatformMetrics {
     backupFiles: number | null
     /** Background job failures since the server started */
     jobFailures: { at: string; job: string; message: string }[]
+    /** Failed sign-ins and locked accounts in the last 24 hours, and requests refused by the sign-in rate limit since the server started */
+    security: { failedLogins24h: number; lockouts24h: number; platformFailedLogins24h: number; rateLimited: { at: string; key: string }[] }
+    lastRestoreTest: { at: string; status: 'ok' | 'failed' } | null
   }
 }
 

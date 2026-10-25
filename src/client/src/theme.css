@@ -674,3 +674,17 @@ table.mini td:first-child {
   color: var(--text-2);
   line-height: 1.6;
 }
+
+/* Staging servers say so on every page, so test data is never mistaken for real records. */
+.env-banner {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  padding: 4px 16px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  background: repeating-linear-gradient(45deg, #f5b400, #f5b400 12px, #ffd04d 12px, #ffd04d 24px);
+  color: #2a1d00;
+}

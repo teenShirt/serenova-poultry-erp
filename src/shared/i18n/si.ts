@@ -1512,5 +1512,33 @@ export const si: Record<TranslationKey, string> = {
   'plat.h.backupFolder': 'ගොනු {files} ක MB {mb}',
   'plat.h.failedBackups': 'අසාර්ථක උපස්ථ (දින 7)',
   'plat.h.jobFailures': 'සේවාදායකය ආරම්භ වූ දා සිට පසුබිම් කාර්ය අසාර්ථකත්වයන්',
-  'plat.h.noJobFailures': 'නැත.'
+  'plat.h.noJobFailures': 'නැත.',
+  'env.staging': 'පරීක්ෂණ සේවාදායකය — සැබෑ ගොවිපළ වාර්තා නොවේ',
+  'err.too_many_attempts': 'උත්සාහයන් වැඩියි. කරුණාකර තත්පර {seconds} ක් රැඳී නැවත උත්සාහ කරන්න.',
+  'plat.releases': 'නිකුතු',
+  'plat.h.restoreTest': 'අවසන් ප්‍රතිස්ථාපන පරීක්ෂාව',
+  'plat.h.noRestoreTest': 'තවම ප්‍රතිස්ථාපන පරීක්ෂාවක් නැත. RESTORE_TEST_DB_NAME සකසා npm run restore-test ධාවනය කරන්න.',
+  'plat.h.security': 'ආරක්ෂක සිදුවීම්',
+  'plat.h.securityValue':
+    'අසාර්ථක ගොවිපළ පිවිසුම් {failed} සහ අගුළු දැමූ ගිණුම් {locked} (පැය 24) · අසාර්ථක කොන්සෝල පිවිසුම් {platform} (පැය 24) · සීමාව නිසා ප්‍රතික්ෂේප කළ ඉල්ලීම් {limited}',
+  'rel.installed': 'ස්ථාපිත නිකුතුව',
+  'rel.environment': 'පරිසරය',
+  'rel.env.development': 'සංවර්ධන',
+  'rel.env.staging': 'පරීක්ෂණ',
+  'rel.env.production': 'නිෂ්පාදන',
+  'rel.schema': 'දත්ත සමුදා ව්‍යුහය',
+  'rel.expected': 'අපේක්ෂිත v{n}',
+  'rel.latest': 'නවතම අනුමත නිකුතුව',
+  'rel.behind': 'මෙම සේවාදායකය v{latest} ට වඩා පැරණි නිකුතුවක් ධාවනය කරයි.',
+  'rel.howDeployed':
+    'නිකුතු පරීක්ෂණ සහ අනුමැතියෙන් පසු CI/CD නල මාර්ගය මගින් ස්ථාපනය කෙරේ (docs/DEPLOYMENT.md බලන්න). කොන්සෝලයට නිකුතු ස්ථාපනය කිරීමට හෝ වෙනස් කිරීමට නොහැක.',
+  'rel.history': 'නිකුතු ඉතිහාසය',
+  'rel.started': 'ස්ථාපනය කළා',
+  'rel.lastStart': 'අවසන් ආරම්භය',
+  'rel.restarts': 'නැවත ආරම්භ {n}',
+  'rel.restoreTests': 'ප්‍රතිස්ථාපන පරීක්ෂණ',
+  'rel.restoreHint':
+    'උපස්ථයක් විශ්වාසදායක වන්නේ එය ප්‍රතිස්ථාපනය කළ පසුවයි: නවතම සම්පූර්ණ දත්ත සමුදා උපස්ථය සෑම සතියකම වෙනම දත්ත සමුදායකට ප්‍රතිස්ථාපනය කර වගුවෙන් වගුව පරීක්ෂා කෙරේ.',
+  'rel.restoreStats': 'වගු {tables}, පේළි {rows}, තත්පර {s}',
+  'rel.notes': 'නිකුතු සටහන්'
 }
