@@ -190,11 +190,12 @@ npm run create-super-admin -- <email> "<name>"   # a platform administrator for 
 - [docs/SECURITY.md](docs/SECURITY.md): how sign-in, sessions, authorization, tenant isolation, secrets, backups
   and auditing are handled.
 - [CHANGELOG.md](CHANGELOG.md): release history.
+- [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md): the acceptance criteria, how each is verified, and remaining limitations.
 
 ## Tests
 
 ```sh
-npm test         # 140 tests; a temporary MySQL 8.4 server is downloaded once and started automatically
+npm test         # 145 tests; a temporary MySQL 8.4 server is downloaded once and started automatically
 npm run typecheck
 npm run lint     # includes checks that every database call is awaited
 ```
