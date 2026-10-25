@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: Commit on main to deploy (default: the newest)
+        description: 'Commit on main to deploy (default: the newest)'
         required: false
 
 permissions:
