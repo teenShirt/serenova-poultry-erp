@@ -28,6 +28,7 @@ export const PERMISSIONS = [
   'stores.manage',
   'inventory.transfer',
   'tasks.manage',
+  'feeding.manage',
   'sales.record',
   'sales.cancel',
   'sales.adjust_store',
@@ -64,7 +65,7 @@ export const PERMISSION_GROUPS: { key: string; permissions: Permission[] }[] = [
       'purchases.cancel'
     ]
   },
-  { key: 'tasks', permissions: ['tasks.manage'] },
+  { key: 'tasks', permissions: ['tasks.manage', 'feeding.manage'] },
   { key: 'sales', permissions: ['sales.record', 'sales.cancel', 'sales.adjust_store'] },
   { key: 'reports', permissions: ['reports.view', 'reports.export', 'audit.view'] },
   {
@@ -137,6 +138,8 @@ export const PERMISSION_FOR_METHOD: Partial<Record<ApiMethod, Permission>> = {
   'stores.transfer': 'inventory.transfer',
   'stores.count': 'inventory.adjust',
   'tasks.save': 'tasks.manage',
+  'feeding.saveSchedule': 'feeding.manage',
+  'feeding.markFed': 'feed.record',
   'tasks.report': 'tasks.manage',
   'overview.organization': 'reports.view',
   'tasks.assignees': 'tasks.manage',

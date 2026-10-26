@@ -1030,6 +1030,55 @@ CREATE TABLE restore_tests (
   problems TEXT
 ) ${T};
 `
+  },
+  {
+    version: 11,
+    name: 'feeding schedules and egg withdrawal periods',
+    up: async (db) => {
+      await db.exec(`
+-- Egg withdrawal period of a medicine, from its label or the veterinarian (never filled in by the system).
+ALTER TABLE inventory_items ADD COLUMN egg_withdrawal_days INT NULL CHECK (egg_withdrawal_days IS NULL OR (egg_withdrawal_days >= 0 AND egg_withdrawal_days <= 365));
+
+-- Planned feeding times of a farm (all its cages, or one cage), with the planned quantity.
+CREATE TABLE feeding_schedules (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  farm_id INT NOT NULL,
+  cage_id INT,
+  at_time VARCHAR(5) NOT NULL,
+  item_id INT,
+  planned_kg DECIMAL(16,3) CHECK (planned_kg IS NULL OR planned_kg >= 0),
+  notes TEXT,
+  active TINYINT NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  created_at VARCHAR(32) NOT NULL,
+  UNIQUE KEY ux_feeding_schedules_org_id (organization_id, id),
+  CONSTRAINT fk_feedsch_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_feedsch_farm FOREIGN KEY (organization_id, farm_id) REFERENCES farms(organization_id, id),
+  CONSTRAINT fk_feedsch_cage FOREIGN KEY (organization_id, cage_id) REFERENCES cages(organization_id, id),
+  CONSTRAINT fk_feedsch_item FOREIGN KEY (organization_id, item_id) REFERENCES inventory_items(organization_id, id)
+) ${T};
+
+-- When each planned feeding was actually done (one entry per feeding and date).
+CREATE TABLE feeding_log (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  schedule_id INT NOT NULL,
+  feed_date DATE NOT NULL,
+  fed_at VARCHAR(5) NOT NULL,
+  note TEXT,
+  recorded_by INT,
+  created_at VARCHAR(32) NOT NULL,
+  UNIQUE KEY ux_feeding_log (schedule_id, feed_date),
+  CONSTRAINT fk_feedlog_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_feedlog_schedule FOREIGN KEY (organization_id, schedule_id) REFERENCES feeding_schedules(organization_id, id),
+  CONSTRAINT fk_feedlog_user FOREIGN KEY (organization_id, recorded_by) REFERENCES users(organization_id, id)
+) ${T};
+`)
+      await db.query(
+        `INSERT INTO role_permissions (organization_id, role_id, permission)
+         SELECT organization_id, role_id, 'feeding.manage' FROM role_permissions WHERE permission = 'cages.manage'`
+      )
+    }
   }
 ]
 
@@ -1125,7 +1174,9 @@ export const DATA_TABLES = [
   'stock_count_lines',
   'task_series',
   'tasks',
-  'task_events'
+  'task_events',
+  'feeding_schedules',
+  'feeding_log'
 ] as const
 
 export async function currentSchemaVersion(db: DB): Promise<number> {

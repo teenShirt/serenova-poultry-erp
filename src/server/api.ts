@@ -38,6 +38,7 @@ import * as adminSvc from './services/admin'
 import * as flocks from './services/flocks'
 import * as stores from './services/stores'
 import * as tasks from './services/tasks'
+import * as schedules from './services/schedules'
 import { movementsPage, organizationOverview } from './services/overview'
 import { approveReceipt, closeOrder, createOrder, listOrders, rejectReceipt } from './services/purchases'
 import { assertModule, assertWritable, getEntitlements, today } from './services/subscriptions'
@@ -356,6 +357,11 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     'medicine.treatments': ({ from, to, cageId }, ctx) => medicine.listTreatments(ctx, from, to, cageId),
     'medicine.addTreatment': (t, ctx) => medicine.addTreatment(ctx, t),
     'medicine.deleteTreatment': ({ id, reason }, ctx) => medicine.deleteTreatment(ctx, id, reason),
+    'feeding.schedules': (_, ctx) => schedules.listSchedules(ctx),
+    'feeding.saveSchedule': (s, ctx) => schedules.saveSchedule(ctx, s),
+    'feeding.status': ({ date }, ctx) => schedules.feedingStatus(ctx, date),
+    'feeding.markFed': ({ scheduleId, date, fedAt, note }, ctx) => schedules.markFed(ctx, scheduleId, date, fedAt, note),
+    'medicine.withdrawals': ({ date }, ctx) => schedules.activeWithdrawals(ctx, date),
     'medicine.healthEvents': ({ from, to, cageId }, ctx) => medicine.listHealthEvents(ctx, from, to, cageId),
     'medicine.addHealthEvent': (h, ctx) => medicine.addHealthEvent(ctx, h),
     'medicine.deleteHealthEvent': ({ id, reason }, ctx) => medicine.deleteHealthEvent(ctx, id, reason),
@@ -372,6 +378,11 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
       const d = await analytics.dashboard(ctx, date, ctx.mode === 'demo', (await status(ctx)).backupWarning)
       const pending = hasPermission(ctx.user, 'users.manage') ? await auth.countPendingSignups(ctx) : 0
       if (pending > 0) d.alerts.unshift({ code: 'pending_signups', severity: 'info', params: { count: pending } })
+      for (const w of await schedules.activeWithdrawals(ctx, date)) {
+        d.alerts.push({ code: 'egg_withdrawal', severity: 'warning', params: { cage: w.cageName ?? '—', item: w.item, date: w.eggsUsableFrom } })
+      }
+      const missed = (await schedules.feedingStatus(ctx, date)).filter((s) => s.state === 'missed').length
+      if (missed) d.alerts.push({ code: 'feeding_missed', severity: 'warning', params: { count: missed } })
       const overdue = await tasks.myOverdueCount(ctx)
       if (overdue > 0) d.alerts.push({ code: 'tasks_overdue', severity: 'warning', params: { count: overdue } })
       // Age reminders the organization set up (its own programme; never suggested by the system).

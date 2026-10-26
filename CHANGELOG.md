@@ -4,6 +4,18 @@ Release history of Serenova Poultry ERP. Each version is deployed from `main` by
 deployment workflow (see `docs/DEPLOYMENT.md`). The newest version listed here is the latest
 approved release; the platform console shows these notes.
 
+## [2.2.0] - 2026-10-25
+
+Feeding schedules and egg withdrawal periods.
+
+- Feeding schedules: planned feeding times per farm or cage with planned quantities; each feeding
+  is marked done with the actual time and shown as on time, late, missed, due or later; missed
+  feedings appear on the dashboard (Feed page).
+- Egg withdrawal periods: medicines can carry the withdrawal period from their label or the
+  veterinarian (never filled in by the system); after a treatment, the cage's eggs are shown as
+  held back until the period ends (Eggs and Sales pages, dashboard).
+- New permission "Plan feeding times", given to roles that manage cages.
+
 ## [2.1.0] - 2026-10-24
 
 Reliability and delivery.

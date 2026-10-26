@@ -347,9 +347,21 @@ function ItemForm({ item, onClose }: { item: InventoryBalance | null; onClose: (
           notes: item.notes,
           sku: item.sku,
           reorderLevel: item.reorderLevel,
-          defaultSupplierId: item.defaultSupplierId
+          defaultSupplierId: item.defaultSupplierId,
+          eggWithdrawalDays: item.eggWithdrawalDays
         }
-      : { category: 'feed', name: '', unit: 'kg', lowStockThreshold: null, active: true, notes: null, sku: null, reorderLevel: null, defaultSupplierId: null }
+      : {
+          category: 'feed',
+          name: '',
+          unit: 'kg',
+          lowStockThreshold: null,
+          active: true,
+          notes: null,
+          sku: null,
+          reorderLevel: null,
+          defaultSupplierId: null,
+          eggWithdrawalDays: null
+        }
   )
   const { data: suppliers } = useLoad(() => call('parties.list', { kind: 'supplier' }), [])
   const units = f.category === 'medicine' ? status.settings.medicineUnits : f.category === 'feed' ? ['kg'] : ['pcs', 'kg', 'L', 'boxes']
@@ -419,6 +431,11 @@ function ItemForm({ item, onClose }: { item: InventoryBalance | null; onClose: (
         <Field label={t('inv.lowThreshold')}>
           <NumInput decimals value={f.lowStockThreshold} onChange={(v) => setF({ ...f, lowStockThreshold: v })} />
         </Field>
+        {f.category === 'medicine' && (
+          <Field label={t('inv.withdrawalDays')} hint={t('inv.withdrawalHint')}>
+            <NumInput value={f.eggWithdrawalDays ?? null} onChange={(v) => setF({ ...f, eggWithdrawalDays: v })} />
+          </Field>
+        )}
         <Field label={t('inv.reorderLevel')} hint={t('inv.reorderHint')}>
           <NumInput decimals value={f.reorderLevel ?? null} onChange={(v) => setF({ ...f, reorderLevel: v })} />
         </Field>

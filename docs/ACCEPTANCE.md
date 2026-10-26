@@ -1,7 +1,7 @@
-# Acceptance report — release 2.1.0
+# Acceptance report — release 2.2.0
 
 Checked on 25 October 2026 against the acceptance criteria of the Serenova Poultry ERP brief.
-Automated tests: **145 passing** (`npm test`, MySQL 8.4), plus typecheck, lint, formatting, build,
+Automated tests: **148 passing** (`npm test`, MySQL 8.4), plus typecheck, lint, formatting, build,
 dependency audit and a staging-style start with smoke tests on every CI run.
 
 **Met** = verified by automated tests (or the rehearsal named). **Partly** = works, with the limits stated.
@@ -18,7 +18,7 @@ dependency audit and a staging-style start with smoke tests on every CI run.
 | 8 | Deactivated users cannot continue accessing protected resources | Met | `tenancy.test.ts` (the next request of a disabled account has no user), `accounts.test.ts` (a suspended organization cannot sign in), `subscriptions.test.ts` (suspending an organization ends its sessions) |
 | 9 | CRUD permissions are enforced for each module | Met | `acceptance.test.ts`: a role with no permissions is refused **every** request that needs one (all 70+ in `PERMISSION_FOR_METHOD`), also through the API; `erp.test.ts` for cage-level duties |
 | 10 | Hen age and flock calculations are correct | Met | `flocks.test.ts` (age rule: hatch day = day 0, completed weeks; estimated hatch date; stages; flock figures = its cages' records while placed) |
-| 11 | Feeding and medical schedules produce the correct reminders | Partly | Age reminders (the organization's own programme) due / overdue / done / skipped: `flocks.test.ts`; recurring feeding and vaccination **tasks** with overdue detection: `stores.test.ts`. Not yet: planned vs actual feeding *times*, and withdrawal periods for eggs after treatments |
+| 11 | Feeding and medical schedules produce the correct reminders | Met | `schedules.test.ts` (planned feeding times: on time / late / missed / due / later, missed feedings on the dashboard; egg withdrawal after a treatment for exactly the medicine's period and only the treated cage, none when the medicine has no period); age reminders: `flocks.test.ts`; recurring feeding and vaccination tasks: `stores.test.ts` |
 | 12 | Weekly tasks can be assigned, tracked and reported | Met | `stores.test.ts` (people and teams, start / complete with criteria / verify / cancel, history, weekly report, recurring occurrences made once). Attachments not supported yet |
 | 13 | GRN posting and inventory movements preserve stock accuracy | Met | `stores.test.ts` (partial receipts, rejects, no over-receipt, posted once even if sent twice, approval posts exactly once, cancellation reverses), `erp.test.ts` (stock added exactly once per line; a delivery whose stock was used cannot be cancelled), `backup.test.ts` (concurrent requests cannot spend the same stock) |
 | 14 | Warehouse transfers and adjustments are auditable | Met | `acceptance.test.ts` (transfers and counts in the activity history with who and what; every movement keeps its recorder), adjustments need a reason and permission (`workflow.test.ts`) |
@@ -39,8 +39,6 @@ records. The copy and the rehearsal database were deleted afterwards.
 
 ## Remaining limitations
 
-- Feeding schedules with planned vs actual times, and egg withdrawal periods after treatments, are not
-  built yet (use recurring feeding / vaccination tasks and age reminders meanwhile).
 - Task attachments are not supported (no file uploads apart from organization backups).
 - Stock statuses *reserved* and *quarantined* are not separate yet; stock counts on screen are by item
   (the server supports batches).

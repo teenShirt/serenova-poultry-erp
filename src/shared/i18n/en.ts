@@ -1540,7 +1540,32 @@ export const en = {
   'rel.restoreHint':
     'A backup counts as reliable once it has been restored: the newest whole-database backup is restored into a separate database every week and checked table by table.',
   'rel.restoreStats': '{tables} tables, {rows} rows, {s} s',
-  'rel.notes': 'Release notes'
+  'rel.notes': 'Release notes',
+  'perm.feeding.manage': 'Plan feeding times',
+  'table.feeding_schedules': 'Feeding schedules',
+  'table.feeding_log': 'Feedings done',
+  'alert.egg_withdrawal': 'Eggs of {cage} are under withdrawal after {item}: usable from {date}',
+  'alert.feeding_missed': '{count} planned feedings were missed',
+  'fsch.title': 'Feeding schedule',
+  'fsch.edit': 'Planned times',
+  'fsch.rule': 'On time = fed up to 30 minutes after the planned time; late after that; missed when nothing was recorded 60 minutes after it.',
+  'fsch.none': 'No feeding times planned for this farm.',
+  'fsch.allCages': 'All cages',
+  'fsch.fedAt': 'fed at {time}',
+  'fsch.markFed': 'Fed now',
+  'fsch.planned': 'Planned feeding times',
+  'fsch.add': 'Add feeding time',
+  'fsch.time': 'Time',
+  'fsch.plannedKg': 'Planned quantity (kg)',
+  'fsch.state.upcoming': 'Later',
+  'fsch.state.due': 'Due now',
+  'fsch.state.done': 'On time',
+  'fsch.state.late': 'Late',
+  'fsch.state.missed': 'Missed',
+  'wd.title': 'Egg withdrawal:',
+  'wd.line': '{cage} ({item}) — eggs usable from {date}',
+  'inv.withdrawalDays': 'Egg withdrawal period (days)',
+  'inv.withdrawalHint': 'From the product label or the veterinarian. Empty = none. The system never fills this in.'
 } as const
 
 export type TranslationKey = keyof typeof en

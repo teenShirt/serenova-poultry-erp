@@ -9,6 +9,7 @@ import { useApp, useLoad } from '../lib/app'
 import { Card, Empty, Field, Modal, Notice, NumInput, PageHeader, ReasonDialog, Seg, Tabs, nz } from '../components/ui'
 import { RangePicker, SERIES, TimeChart } from '../components/charts'
 import { Kpi } from '../components/Kpi'
+import { WithdrawalNotice } from '../components/Schedules'
 
 const TRAY = 30
 
@@ -47,6 +48,7 @@ export function SalesPage() {
         </button>
       </PageHeader>
       <div className="stack">
+        <WithdrawalNotice date={status.today} />
         <div className="grid stats">
           <Kpi
             icon={<Egg size={18} />}

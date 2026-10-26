@@ -69,7 +69,7 @@ describe('settings per environment', () => {
     expect(pkg.version).toBe(APP_VERSION)
     const notes = readChangelog(path.join(root, 'CHANGELOG.md'))
     expect(notes[0]).toMatchObject({ version: APP_VERSION })
-    expect(notes[0].body).toContain('Health checks')
+    expect(notes[0].body).toContain('Feeding schedules')
   })
 })
 

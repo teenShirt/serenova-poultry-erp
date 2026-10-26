@@ -8,7 +8,7 @@ import { getSettings } from './settings'
 import { requirePermission } from './roles'
 
 const itemCols = `id, category, name, unit, low_stock_threshold AS lowStockThreshold, active, notes, sku, reorder_level AS reorderLevel,
-  default_supplier_id AS defaultSupplierId`
+  default_supplier_id AS defaultSupplierId, egg_withdrawal_days AS eggWithdrawalDays`
 
 function toItem(r: Record<string, unknown>): InventoryItem {
   return { ...(r as unknown as InventoryItem), active: !!r.active }
@@ -75,6 +75,7 @@ export interface ItemInput {
   sku?: string | null
   reorderLevel?: number | null
   defaultSupplierId?: number | null
+  eggWithdrawalDays?: number | null
 }
 
 async function checkItemExtras(ctx: OrgCtx, i: ItemInput, id: number | null) {
@@ -97,8 +98,8 @@ export async function insertItemRaw(ctx: Ctx, i: ItemInput): Promise<number> {
   await checkItemExtras(ctx, i, null)
   const info = await ctx.db
     .prepare(
-      `INSERT INTO inventory_items (organization_id, category, sku, name, unit, low_stock_threshold, reorder_level, default_supplier_id, active, notes, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO inventory_items (organization_id, category, sku, name, unit, low_stock_threshold, reorder_level, default_supplier_id, egg_withdrawal_days, active, notes, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       ctx.org,
@@ -109,6 +110,7 @@ export async function insertItemRaw(ctx: Ctx, i: ItemInput): Promise<number> {
       i.lowStockThreshold,
       i.reorderLevel ?? null,
       i.defaultSupplierId ?? null,
+      i.category === 'medicine' ? (i.eggWithdrawalDays ?? null) : null,
       i.active ? 1 : 0,
       i.notes,
       ctx.now().toISOString()
@@ -137,11 +139,12 @@ export async function updateItem(ctx: Ctx, id: number, i: ItemInput) {
     const sku = i.sku === undefined ? before.sku : i.sku?.trim() || null
     const reorder = i.reorderLevel === undefined ? before.reorderLevel : i.reorderLevel
     const supplier = i.defaultSupplierId === undefined ? before.defaultSupplierId : i.defaultSupplierId
+    const withdrawal = i.category !== 'medicine' ? null : i.eggWithdrawalDays === undefined ? before.eggWithdrawalDays : i.eggWithdrawalDays
     await ctx.db
       .prepare(
-        'UPDATE inventory_items SET name = ?, unit = ?, low_stock_threshold = ?, active = ?, notes = ?, sku = ?, reorder_level = ?, default_supplier_id = ? WHERE id = ? AND organization_id = ?'
+        'UPDATE inventory_items SET name = ?, unit = ?, low_stock_threshold = ?, active = ?, notes = ?, sku = ?, reorder_level = ?, default_supplier_id = ?, egg_withdrawal_days = ? WHERE id = ? AND organization_id = ?'
       )
-      .run(i.name.trim(), i.unit.trim(), i.lowStockThreshold, i.active ? 1 : 0, i.notes, sku, reorder, supplier, id, ctx.org)
+      .run(i.name.trim(), i.unit.trim(), i.lowStockThreshold, i.active ? 1 : 0, i.notes, sku, reorder, supplier, withdrawal, id, ctx.org)
     await audit(ctx, { action: 'update', entity: 'inventory_item', entityId: id, details: { before, after: i } })
   })()
 }
@@ -187,7 +190,7 @@ export async function balances(ctx: OrgCtx, category?: InventoryCategory, asOf?:
   const rows = (await ctx.db
     .prepare(
       `SELECT i.id, i.category, i.name, i.unit, i.low_stock_threshold AS lowStockThreshold, i.active, i.notes, i.sku,
-         i.reorder_level AS reorderLevel, i.default_supplier_id AS defaultSupplierId,
+         i.reorder_level AS reorderLevel, i.default_supplier_id AS defaultSupplierId, i.egg_withdrawal_days AS eggWithdrawalDays,
          COALESCE((SELECT SUM(t.quantity) FROM inventory_transactions t WHERE t.item_id = i.id
            ${asOf ? 'AND t.txn_date <= ?' : ''} ${s.sql}), 0) AS balance
        FROM inventory_items i WHERE i.organization_id = ? ${category ? 'AND i.category = ?' : ''}

@@ -7,6 +7,7 @@ import { call } from '../lib/api'
 import { useApp, useLoad } from '../lib/app'
 import { Card, DateBar, DayGate, Empty, Field, Notice, NumInput, PageHeader, ReasonDialog, Stat, nz, useDay } from '../components/ui'
 import { RangePicker, SERIES, TimeChart } from '../components/charts'
+import { FeedingScheduleCard } from '../components/Schedules'
 
 function feedErrorKey(error: string | null) {
   return error === 'stock_imbalance' ? 'feed_stock_imbalance' : error === 'returned_exceeds_issued' ? 'feed_returned_exceeds_issued' : 'quantity_positive'
@@ -129,6 +130,7 @@ export function FeedPage() {
       </PageHeader>
       <div className="stack">
         <DayGate overview={overview} />
+        <FeedingScheduleCard date={workDate} />
         <div className="grid stats">
           <Stat
             label={t('dash.feedToday')}

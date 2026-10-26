@@ -291,6 +291,43 @@ export interface InventoryItem {
   sku: string | null
   reorderLevel: number | null
   defaultSupplierId: number | null
+  /** Egg withdrawal period of a medicine, in days (from its label or the veterinarian) */
+  eggWithdrawalDays: number | null
+}
+
+export interface FeedingSchedule {
+  id: number
+  /** null = all the farm's cages */
+  cageId: number | null
+  cageName: string | null
+  atTime: string
+  itemId: number | null
+  itemName: string | null
+  plannedKg: number | null
+  notes: string | null
+  active: boolean
+}
+
+export interface FeedingSlot {
+  scheduleId: number
+  atTime: string
+  cageId: number | null
+  cageName: string | null
+  itemName: string | null
+  plannedKg: number | null
+  fedAt: string | null
+  note: string | null
+  recordedBy: string | null
+  state: 'upcoming' | 'due' | 'done' | 'late' | 'missed'
+}
+
+export interface Withdrawal {
+  /** null = the whole farm */
+  cageId: number | null
+  cageName: string | null
+  item: string
+  treatedOn: string
+  eggsUsableFrom: string
 }
 
 export interface InventoryBalance extends InventoryItem {

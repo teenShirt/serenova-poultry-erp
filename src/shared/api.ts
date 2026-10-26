@@ -54,7 +54,10 @@ import type {
   Party,
   PurchasesDay,
   SalesDay,
-  WaterRecord
+  WaterRecord,
+  FeedingSchedule,
+  FeedingSlot,
+  Withdrawal
 } from './types'
 
 type DateArg = { date: string }
@@ -84,6 +87,7 @@ export interface ItemInputDto {
   sku?: string | null
   reorderLevel?: number | null
   defaultSupplierId?: number | null
+  eggWithdrawalDays?: number | null
 }
 
 export interface SetupDto {
@@ -311,6 +315,12 @@ export interface Api {
     out: number
   }
   'medicine.deleteTreatment': { in: WithReason; out: void }
+  'feeding.schedules': { in: void; out: FeedingSchedule[] }
+  'feeding.saveSchedule': { in: Omit<FeedingSchedule, 'cageName' | 'itemName' | 'id'> & { id: number | null }; out: number }
+  'feeding.status': { in: { date: string }; out: FeedingSlot[] }
+  'feeding.markFed': { in: { scheduleId: number; date: string; fedAt: string; note: string | null }; out: void }
+  /** Cages whose eggs are under a withdrawal period on the date */
+  'medicine.withdrawals': { in: { date: string }; out: Withdrawal[] }
   'medicine.healthEvents': { in: Range; out: HealthEvent[] }
   'medicine.addHealthEvent': {
     in: {
@@ -548,6 +558,11 @@ export const API_KIND: Record<ApiMethod, 'read' | 'write'> = {
   'medicine.treatments': 'read',
   'medicine.addTreatment': 'write',
   'medicine.deleteTreatment': 'write',
+  'feeding.schedules': 'read',
+  'feeding.saveSchedule': 'write',
+  'feeding.status': 'read',
+  'feeding.markFed': 'write',
+  'medicine.withdrawals': 'read',
   'medicine.healthEvents': 'read',
   'medicine.addHealthEvent': 'write',
   'medicine.deleteHealthEvent': 'write',

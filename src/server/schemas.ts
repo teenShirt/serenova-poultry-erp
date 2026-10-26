@@ -51,7 +51,8 @@ const itemInput = z.object({
   notes: optText(),
   sku: optText(64).optional(),
   reorderLevel: qty.nullable().optional(),
-  defaultSupplierId: id.nullable().optional()
+  defaultSupplierId: id.nullable().optional(),
+  eggWithdrawalDays: z.number().int().min(0).max(365).nullable().optional()
 })
 
 const settingsPatch = z
@@ -269,6 +270,19 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
     notes: optText()
   }),
   'medicine.deleteTreatment': withReason,
+  'feeding.schedules': none,
+  'feeding.saveSchedule': z.object({
+    id: id.nullable(),
+    cageId: id.nullable(),
+    atTime: z.string().regex(/^\d{2}:\d{2}$/),
+    itemId: id.nullable(),
+    plannedKg: qty.nullable(),
+    notes: optText(),
+    active: z.boolean()
+  }),
+  'feeding.status': z.object({ date }),
+  'feeding.markFed': z.object({ scheduleId: id, date, fedAt: z.string().regex(/^\d{2}:\d{2}$/), note: optText() }),
+  'medicine.withdrawals': z.object({ date }),
   'medicine.healthEvents': range,
   'medicine.addHealthEvent': z.object({
     date,

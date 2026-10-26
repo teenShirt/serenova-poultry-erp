@@ -5,6 +5,7 @@ import { EGG_SESSIONS, type EggCollection, type EggSession } from '@shared/types
 import { call } from '../lib/api'
 import { useApp, useLoad } from '../lib/app'
 import { Card, DateBar, DayGate, Empty, NumInput, PageHeader, ReasonDialog, Seg, nz, useDay } from '../components/ui'
+import { WithdrawalNotice } from '../components/Schedules'
 
 interface Row {
   id: number | null
@@ -84,6 +85,7 @@ export function EggsPage() {
       </PageHeader>
       <div className="stack">
         <DayGate overview={overview} />
+        <WithdrawalNotice date={workDate} />
         {overview && overview.dayId !== null && (
           <>
             <div className="grid stats">

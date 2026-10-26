@@ -21,6 +21,7 @@ import { mainStore } from '../src/server/services/inventory'
 import { createOrder } from '../src/server/services/purchases'
 import { countStock, saveWarehouse } from '../src/server/services/stores'
 import { saveTask } from '../src/server/services/tasks'
+import { saveSchedule } from '../src/server/services/schedules'
 import { RestoreTokens } from '../src/server/uploads'
 import { makeFarm, NOW } from './helpers'
 
@@ -182,7 +183,8 @@ async function twoOrganizations() {
     aStore,
     po: po.id,
     task,
-    taskBase
+    taskBase,
+    schedule: await saveSchedule(a.admin, { id: null, cageId: cage, atTime: '06:00', itemId: a.feedId, plannedKg: 100, notes: 'A feeding', active: true })
   }
   return { a, b, ids }
 }
@@ -386,6 +388,10 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       ['flocks.saveReminder', { id: ids.reminder, atWeek: 1, title: 'Taken over', instructions: null, active: false }],
       ['flocks.markReminder', { flockId: ids.flock, reminderId: ids.reminder, outcome: 'done', note: null }],
       ['flocks.markReminder', { flockId: ids.bFlock, reminderId: ids.reminder, outcome: 'done', note: null }],
+      ['feeding.saveSchedule', { id: ids.schedule, cageId: null, atTime: '05:00', itemId: null, plannedKg: null, notes: null, active: false }],
+      ['feeding.saveSchedule', { id: null, cageId: ids.cage, atTime: '05:00', itemId: null, plannedKg: null, notes: null, active: true }],
+      ['feeding.saveSchedule', { id: null, cageId: null, atTime: '05:00', itemId: a.feedId, plannedKg: null, notes: null, active: true }],
+      ['feeding.markFed', { scheduleId: ids.schedule, date: D, fedAt: '06:00', note: null }],
       ['stores.save', { id: ids.aStore, code: 'X', name: 'Taken over', active: false, notes: null }],
       ['stores.balances', { warehouseId: ids.aMain }],
       [
@@ -518,10 +524,13 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       ['inventory.txns', {}],
       ['stores.movements', { ...range, page: 1 }],
       ['stores.movements', { ...range, page: 1, warehouseId: ids.aMain, itemId: a.feedId }],
-      ['overview.organization', range]
+      ['overview.organization', range],
+      ['feeding.schedules', undefined],
+      ['feeding.status', { date: D }],
+      ['medicine.withdrawals', { date: D }]
     ] as [ApiMethod, unknown][]) {
       const text = await json(method, input)
-      for (const secret of ['a.farm', 'A Mill', 'A Buyer', 'Farm A', 'A-Flock', 'A House', 'A reminder', 'A Cold Room', 'A task', 'A count'])
+      for (const secret of ['a.farm', 'A Mill', 'A Buyer', 'Farm A', 'A-Flock', 'A House', 'A reminder', 'A Cold Room', 'A task', 'A count', 'A feeding'])
         expect(text, `${method} shows ${secret}`).not.toContain(secret)
     }
     // Asking for A's records by id gives nothing.
@@ -705,7 +714,12 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       'tasks.action',
       'tasks.assignees',
       'stores.movements',
-      'overview.organization'
+      'overview.organization',
+      'feeding.schedules',
+      'feeding.saveSchedule',
+      'feeding.status',
+      'feeding.markFed',
+      'medicine.withdrawals'
     ]
     // The console's platform.* requests are only for platform administrators (tests/subscriptions.test.ts).
     const all = (Object.keys(API_KIND) as ApiMethod[]).filter((m) => !m.startsWith('platform.'))
