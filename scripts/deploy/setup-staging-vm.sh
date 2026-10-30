@@ -5,6 +5,8 @@
 #   git clone https://github.com/teenShirt/serenova-poultry-erp.git && cd serenova-poultry-erp
 #   sudo RUNNER_TOKEN=<token> bash scripts/deploy/setup-staging-vm.sh
 #
+# Another site already on port 80? Add HTTP_PORT=8080 (or any free port) before "bash".
+#
 # RUNNER_TOKEN: GitHub → repository Settings → Actions → Runners → New self-hosted runner (Linux);
 # copy the value after --token (valid for one hour). Without it, everything except the runner is set up.
 #
@@ -23,9 +25,13 @@ REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 BASE=/opt/serenova
 RUNNER_DIR=/opt/actions-runner
 RUNNER_LABEL=serenova-staging
+# Port nginx serves the app on; set HTTP_PORT=8080 (say) when another site already uses port 80.
+HTTP_PORT="${HTTP_PORT:-80}"
 REPO_URL=https://github.com/teenShirt/serenova-poultry-erp
 SECRETS=/root/serenova-staging
 IP="$(hostname -I | awk '{print $1}')"
+URL="http://$IP"
+[[ "$HTTP_PORT" == 80 ]] || URL="$URL:$HTTP_PORT"
 export DEBIAN_FRONTEND=noninteractive
 
 log() { echo; echo "== $*"; }
@@ -102,18 +108,18 @@ SUDO
 chmod 440 /etc/sudoers.d/serenova-deploy
 visudo -cf /etc/sudoers.d/serenova-deploy
 
-log "nginx: http://$IP → the app"
-cat > /etc/nginx/sites-available/serenova <<'NGINX'
+log "nginx: $URL → the app"
+cat > /etc/nginx/sites-available/serenova <<NGINX
 server {
-    listen 80 default_server;
+    listen $HTTP_PORT default_server;
     server_name _;
     client_max_body_size 512m;
     location / {
         proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host \$http_host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 300s;
     }
 }
@@ -122,7 +128,7 @@ ln -sfn /etc/nginx/sites-available/serenova /etc/nginx/sites-enabled/serenova
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl reload nginx
-if ufw status 2> /dev/null | grep -q "Status: active"; then ufw allow 80/tcp; ufw allow OpenSSH; fi
+if ufw status 2> /dev/null | grep -q "Status: active"; then ufw allow "$HTTP_PORT/tcp"; ufw allow OpenSSH; fi
 
 log "Deploy key (the staging job signs in as deploy@127.0.0.1)"
 [[ -f "$SECRETS/deploy_key" ]] || ssh-keygen -q -t ed25519 -N "" -C "serenova-staging-deploy" -f "$SECRETS/deploy_key"
@@ -165,9 +171,9 @@ Secrets and variables → Actions → Variables:
   STAGING_RUNNER = $RUNNER_LABEL
   STAGING_HOST   = 127.0.0.1
   STAGING_USER   = deploy
-  STAGING_URL    = http://$IP
+  STAGING_URL    = $URL
 
-Then Actions → Deploy → Run workflow. Afterwards open http://$IP and finish the first-run setup
+Then Actions → Deploy → Run workflow. Afterwards open $URL and finish the first-run setup
 with the SETUP_KEY from $BASE/shared/.env   (sudo grep SETUP_KEY $BASE/shared/.env)
 
 Keep a copy of BACKUP_ENCRYPTION_KEY from that file somewhere apart from this VM.
