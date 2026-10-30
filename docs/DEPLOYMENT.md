@@ -56,6 +56,18 @@ the service account.
    `sudo systemctl restart serenova` and `sudo journalctl -u serenova` (a sudoers rule for exactly these).
 7. nginx: proxy `https://your-domain` to `http://127.0.0.1:3000`; set `TRUST_PROXY=1`.
 
+### Staging on a local VM (no public address, no domain)
+
+`scripts/deploy/setup-staging-vm.sh` does all of the above on an Ubuntu 24.04 VM, served over plain
+HTTP on the VM's address (`COOKIE_SECURE=false`, staging only). GitHub's machines cannot reach such a
+VM, so the script also installs a GitHub Actions runner on it with the label `serenova-staging`; set
+the variable `STAGING_RUNNER` to that label and the staging job runs there, deploying to
+`deploy@127.0.0.1`. The script prints the exact variables and secrets to enter.
+
+The repository is public: under Settings → Actions → General, set *Fork pull request workflows from
+outside collaborators* to **Require approval for all outside collaborators**, so nobody else's code can
+run on the VM's runner without your approval.
+
 ## Connecting GitHub (once)
 
 In the repository settings:

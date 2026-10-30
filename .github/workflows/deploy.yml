@@ -79,7 +79,8 @@ jobs:
     name: Deploy to staging and smoke test
     needs: build
     if: vars.STAGING_HOST != ''
-    runs-on: ubuntu-latest
+    # A staging VM without a public address runs this job on its own runner (STAGING_RUNNER = its label).
+    runs-on: ${{ vars.STAGING_RUNNER || 'ubuntu-latest' }}
     environment:
       name: staging
       url: ${{ vars.STAGING_URL }}
