@@ -62,7 +62,9 @@ the service account.
 HTTP on the VM's address (`COOKIE_SECURE=false`, staging only). GitHub's machines cannot reach such a
 VM, so the script also installs a GitHub Actions runner on it with the label `serenova-staging`; set
 the variable `STAGING_RUNNER` to that label and the staging job runs there, deploying to
-`deploy@127.0.0.1`. The script prints the exact variables and secrets to enter.
+`deploy@127.0.0.1`. The runner keeps its own copy of the deploy key and reads the VM's host key
+locally, so this environment needs no `DEPLOY_SSH_KEY` or `DEPLOY_KNOWN_HOSTS` secrets. The script
+prints the exact variables to enter.
 
 The repository is public: under Settings → Actions → General, set *Fork pull request workflows from
 outside collaborators* to **Require approval for all outside collaborators**, so nobody else's code can

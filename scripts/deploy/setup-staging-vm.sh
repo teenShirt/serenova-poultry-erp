@@ -139,6 +139,9 @@ grep -qF "$(cat "$SECRETS/deploy_key.pub")" /home/deploy/.ssh/authorized_keys ||
 chown deploy:deploy /home/deploy/.ssh/authorized_keys
 chmod 600 /home/deploy/.ssh/authorized_keys
 ssh-keyscan -t ed25519 127.0.0.1 2> /dev/null > "$SECRETS/known_hosts"
+# The runner on this VM uses its own copy of the key (ship.sh), so it never has to be stored in GitHub.
+install -d -m 700 -o github-runner -g github-runner /home/github-runner/.ssh
+install -m 600 -o github-runner -g github-runner "$SECRETS/deploy_key" /home/github-runner/.ssh/serenova_deploy_key
 
 if [[ -n "${RUNNER_TOKEN:-}" && ! -f "$RUNNER_DIR/.runner" ]]; then
   log "GitHub Actions runner (label $RUNNER_LABEL)"
@@ -164,9 +167,7 @@ cat <<DONE
 ==================================================================================================
 Staging VM ready. Now in GitHub → repository Settings:
 
-Environments → New environment "staging" → Environment secrets:
-  DEPLOY_SSH_KEY      = contents of $SECRETS/deploy_key        (sudo cat $SECRETS/deploy_key)
-  DEPLOY_KNOWN_HOSTS  = contents of $SECRETS/known_hosts       (sudo cat $SECRETS/known_hosts)
+Environments → New environment "staging" (no secrets needed: the runner here keeps the deploy key)
 
 Secrets and variables → Actions → Variables:
   STAGING_RUNNER = $RUNNER_LABEL
