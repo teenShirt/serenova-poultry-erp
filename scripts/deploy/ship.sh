@@ -3,7 +3,12 @@
 # Environment (set by .github/workflows/deploy.yml): SSH_KEY, KNOWN_HOSTS, HOST, USER_NAME, SHA.
 set -euo pipefail
 
-: "${SSH_KEY:?}" "${KNOWN_HOSTS:?}" "${HOST:?}" "${USER_NAME:?}" "${SHA:?}"
+: "${SSH_KEY:?}" "${HOST:?}" "${USER_NAME:?}" "${SHA:?}"
+if [[ -z "${KNOWN_HOSTS:-}" && ("$HOST" == 127.0.0.1 || "$HOST" == localhost) ]]; then
+  # A runner on the server itself deploys to this machine: its host key is read here, not over the network.
+  KNOWN_HOSTS="$HOST $(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)"
+fi
+: "${KNOWN_HOSTS:?}"
 mkdir -p ~/.ssh
 chmod 700 ~/.ssh
 printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
