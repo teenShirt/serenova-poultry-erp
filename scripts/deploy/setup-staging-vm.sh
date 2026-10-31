@@ -23,7 +23,8 @@ REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 [[ -f "$REPO_DIR/deploy/serenova.service" ]] || { echo "Run from a clone of the repository" >&2; exit 1; }
 
 BASE=/opt/serenova
-RUNNER_DIR=/opt/actions-runner
+# Its own folder: the VM may already have a runner for another repository in /opt/actions-runner.
+RUNNER_DIR=/opt/actions-runner-serenova-poultry
 RUNNER_LABEL=serenova-staging
 # Port nginx serves the app on; set HTTP_PORT=8080 (say) when another site already uses port 80.
 HTTP_PORT="${HTTP_PORT:-80}"
