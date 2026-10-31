@@ -346,13 +346,15 @@ function FlockView({ id, onClose, onEdit }: { id: number; onClose: () => void; o
               unit="g"
               digits={1}
             />
-            <TimeChart
-              title={t('flk.chartWater')}
-              data={series}
-              series={[{ key: 'waterLitres', label: t('flk.water'), color: SERIES.aqua }]}
-              unit="L"
-              digits={1}
-            />
+            {status.settings.waterTracking && (
+              <TimeChart
+                title={t('flk.chartWater')}
+                data={series}
+                series={[{ key: 'waterLitres', label: t('flk.water'), color: SERIES.aqua }]}
+                unit="L"
+                digits={1}
+              />
+            )}
           </div>
         ) : (
           <Empty text={t('flk.noDays')} />

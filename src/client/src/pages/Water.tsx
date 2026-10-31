@@ -147,6 +147,8 @@ export function WaterPage() {
                     if (!r) return null
                     const res = calc(r)
                     const record = records?.find((x) => x.id === r.id)
+                    // A saved record can only be changed with the "edit and delete records" permission.
+                    const dis = !writable || (r.id !== null && !can('records.edit'))
                     return (
                       <tr key={c.cageId} style={r.dirty ? { background: '#fffbea' } : undefined}>
                         <td>
@@ -159,21 +161,17 @@ export function WaterPage() {
                               { value: 'meter', label: t('water.method.meter') },
                               { value: 'manual', label: t('water.method.manual') }
                             ]}
-                            onChange={(m) => writable && upd(c.cageId, { method: m })}
+                            onChange={(m) => !dis && upd(c.cageId, { method: m })}
                           />
                         </td>
                         <td style={{ width: 130 }}>
-                          {r.method === 'meter' ? (
-                            <NumInput decimals disabled={!writable} value={r.opening} onChange={(v) => upd(c.cageId, { opening: v })} />
-                          ) : (
-                            '—'
-                          )}
+                          {r.method === 'meter' ? <NumInput decimals disabled={dis} value={r.opening} onChange={(v) => upd(c.cageId, { opening: v })} /> : '—'}
                         </td>
                         <td style={{ width: 130 }}>
                           {r.method === 'meter' ? (
                             <NumInput
                               decimals
-                              disabled={!writable}
+                              disabled={dis}
                               value={r.closing}
                               invalid={res.error === 'closing_below_opening'}
                               onChange={(v) => upd(c.cageId, { closing: v })}
@@ -184,7 +182,7 @@ export function WaterPage() {
                         </td>
                         <td className="num" style={{ width: 130 }}>
                           {r.method === 'manual' ? (
-                            <NumInput decimals disabled={!writable} value={r.litres} onChange={(v) => upd(c.cageId, { litres: v })} />
+                            <NumInput decimals disabled={dis} value={r.litres} onChange={(v) => upd(c.cageId, { litres: v })} />
                           ) : res.error === 'closing_below_opening' ? (
                             <span className="badge bad">!</span>
                           ) : (
@@ -193,7 +191,7 @@ export function WaterPage() {
                           {r.meterReset && <div className="badge warn">{t('water.meterReset').split('(')[0]}</div>}
                         </td>
                         <td>
-                          <input className="input" disabled={!writable} value={r.notes} onChange={(e) => upd(c.cageId, { notes: e.target.value })} />
+                          <input className="input" disabled={dis} value={r.notes} onChange={(e) => upd(c.cageId, { notes: e.target.value })} />
                         </td>
                         <td className="nowrap">
                           {can('water.meter_reset') && writable && r.method === 'meter' && (
@@ -201,7 +199,7 @@ export function WaterPage() {
                               <Wrench size={16} />
                             </button>
                           )}
-                          {record && writable && (
+                          {record && writable && can('records.edit') && (
                             <button className="icon-btn" title={t('common.delete')} onClick={() => setToDelete(record)}>
                               <Trash2 size={16} />
                             </button>

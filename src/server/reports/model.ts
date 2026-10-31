@@ -45,6 +45,21 @@ function issueText(lang: Language, i: DayIssue, cageName: string | null) {
   return cageName ? `${cageName}: ${msg}` : msg
 }
 
+/** A report without its water figures (for an organization that does not track water). */
+export function withoutWater(model: ReportModel, lang: Language): ReportModel {
+  const total = translate(lang, 'rep.totalWater')
+  const col = translate(lang, 'col.water')
+  const sections = model.sections.map((s): Section => {
+    if (s.kind === 'kv') return { ...s, pairs: s.pairs.filter(([k]) => k !== total) }
+    if (s.kind !== 'table') return s
+    const i = s.columns.indexOf(col)
+    if (i < 0) return s
+    const drop = <T>(a: T[] | undefined) => a?.filter((_, j) => j !== i)
+    return { ...s, columns: drop(s.columns)!, rows: s.rows.map((r) => drop(r)!), totals: drop(s.totals), numeric: drop(s.numeric) }
+  })
+  return { ...model, sections }
+}
+
 async function header(ctx: Ctx, lang: Language, isDemo: boolean) {
   const s = await getSettings(ctx)
   return {

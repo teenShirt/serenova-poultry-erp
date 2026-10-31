@@ -10,8 +10,8 @@ import { saveEggs } from '../src/server/services/eggs'
 import { saveFeed } from '../src/server/services/feed'
 import { addMovement } from '../src/server/services/flock'
 import { saveWater } from '../src/server/services/water'
-import { addHealthEvent, addTreatment } from '../src/server/services/medicine'
-import { listBatches } from '../src/server/services/inventory'
+import { addHealthEvent, addTreatment, saveSchedule as saveMedicineSchedule } from '../src/server/services/medicine'
+import { listBatches, recordTxn } from '../src/server/services/inventory'
 import { saveParty } from '../src/server/services/parties'
 import { createReceipt } from '../src/server/services/purchases'
 import { adjustEggStore, createDispatch } from '../src/server/services/sales'
@@ -184,7 +184,30 @@ async function twoOrganizations() {
     po: po.id,
     task,
     taskBase,
-    schedule: await saveSchedule(a.admin, { id: null, cageId: cage, atTime: '06:00', itemId: a.feedId, plannedKg: 100, notes: 'A feeding', active: true })
+    schedule: await saveSchedule(a.admin, { id: null, cageId: cage, atTime: '06:00', itemId: a.feedId, plannedKg: 100, notes: 'A feeding', active: true }),
+    medPlan: await saveMedicineSchedule(a.admin, {
+      id: null,
+      cageId: cage,
+      itemId: a.medId,
+      dose: null,
+      dueDate: D,
+      repeatDays: 7,
+      notes: 'A plan',
+      active: true
+    }),
+    txn: await recordTxn(a.admin, {
+      itemId: a.feedId,
+      type: 'purchase',
+      quantity: 5,
+      date: D,
+      batchNo: null,
+      expiryDate: null,
+      unitCost: null,
+      supplier: 'A Mill',
+      reference: null,
+      notes: null,
+      cageId: null
+    })
   }
   return { a, b, ids }
 }
@@ -392,6 +415,14 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       ['feeding.saveSchedule', { id: null, cageId: ids.cage, atTime: '05:00', itemId: null, plannedKg: null, notes: null, active: true }],
       ['feeding.saveSchedule', { id: null, cageId: null, atTime: '05:00', itemId: a.feedId, plannedKg: null, notes: null, active: true }],
       ['feeding.markFed', { scheduleId: ids.schedule, date: D, fedAt: '06:00', note: null }],
+      [
+        'medicine.saveSchedule',
+        { id: ids.medPlan, cageId: null, itemId: b.medId, dose: null, dueDate: D, repeatDays: null, notes: 'Taken over', active: false }
+      ],
+      ['medicine.saveSchedule', { id: null, cageId: ids.cage, itemId: b.medId, dose: null, dueDate: D, repeatDays: null, notes: null, active: true }],
+      ['medicine.saveSchedule', { id: null, cageId: null, itemId: a.medId, dose: null, dueDate: D, repeatDays: null, notes: null, active: true }],
+      ['inventory.updateTxn', { id: ids.txn, quantity: 1, unitCost: null, supplier: null, reference: null, notes: null, reason: 'Taken over' }],
+      ['inventory.deleteTxn', { id: ids.txn, reason: 'Taken over' }],
       ['stores.save', { id: ids.aStore, code: 'X', name: 'Taken over', active: false, notes: null }],
       ['stores.balances', { warehouseId: ids.aMain }],
       [
@@ -527,10 +558,25 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       ['overview.organization', range],
       ['feeding.schedules', undefined],
       ['feeding.status', { date: D }],
-      ['medicine.withdrawals', { date: D }]
+      ['medicine.withdrawals', { date: D }],
+      ['medicine.schedules', undefined],
+      ['medicine.dueSchedules', { date: D }]
     ] as [ApiMethod, unknown][]) {
       const text = await json(method, input)
-      for (const secret of ['a.farm', 'A Mill', 'A Buyer', 'Farm A', 'A-Flock', 'A House', 'A reminder', 'A Cold Room', 'A task', 'A count', 'A feeding'])
+      for (const secret of [
+        'a.farm',
+        'A Mill',
+        'A Buyer',
+        'Farm A',
+        'A-Flock',
+        'A House',
+        'A reminder',
+        'A Cold Room',
+        'A task',
+        'A count',
+        'A feeding',
+        'A plan'
+      ])
         expect(text, `${method} shows ${secret}`).not.toContain(secret)
     }
     // Asking for A's records by id gives nothing.
@@ -719,7 +765,12 @@ describe('tenant isolation (through the API, as the web server runs it)', () => 
       'feeding.saveSchedule',
       'feeding.status',
       'feeding.markFed',
-      'medicine.withdrawals'
+      'medicine.withdrawals',
+      'medicine.schedules',
+      'medicine.saveSchedule',
+      'medicine.dueSchedules',
+      'inventory.updateTxn',
+      'inventory.deleteTxn'
     ]
     // The console's platform.* requests are only for platform administrators (tests/subscriptions.test.ts).
     const all = (Object.keys(API_KIND) as ApiMethod[]).filter((m) => !m.startsWith('platform.'))

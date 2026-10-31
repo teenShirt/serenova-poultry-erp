@@ -26,7 +26,7 @@ import { DEFAULT_SETTINGS, getSettings, saveSettings } from './services/settings
 import { completeSetup, platformHasOrganizations } from './services/setup'
 import { DEMO_USERS } from './services/demo'
 import { createBackup, lastBackup, listBackupRuns, restoreOrganization } from './services/backup'
-import { dayReport, periodReport, type ReportModel } from './reports/model'
+import { dayReport, periodReport, withoutWater, type ReportModel } from './reports/model'
 import { renderHtml } from './reports/render'
 import { checkAccess, dutyTasks, setUserCages } from './services/duties'
 import { archiveRole, hasPermission, listRoles, saveRole, requirePermission } from './services/roles'
@@ -110,13 +110,11 @@ function validatePeriod(from: string, to: string) {
 }
 
 export async function buildReport(ctx: RequestCtx, spec: ReportSpec): Promise<ReportModel> {
-  const lang = (await getSettings(ctx)).language
+  const { language: lang, waterTracking } = await getSettings(ctx)
   const isDemo = ctx.mode === 'demo'
-  if (spec.kind === 'period') {
-    validatePeriod(spec.from, spec.to)
-    return periodReport(ctx, spec.from, spec.to, lang, isDemo)
-  }
-  return dayReport(ctx, spec.date, spec.kind, lang, isDemo)
+  if (spec.kind === 'period') validatePeriod(spec.from, spec.to)
+  const model = spec.kind === 'period' ? await periodReport(ctx, spec.from, spec.to, lang, isDemo) : await dayReport(ctx, spec.date, spec.kind, lang, isDemo)
+  return waterTracking ? model : withoutWater(model, lang)
 }
 
 /** Records a generated report in the history (shown under Reports → Recent). */
@@ -362,6 +360,9 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     'feeding.status': ({ date }, ctx) => schedules.feedingStatus(ctx, date),
     'feeding.markFed': ({ scheduleId, date, fedAt, note }, ctx) => schedules.markFed(ctx, scheduleId, date, fedAt, note),
     'medicine.withdrawals': ({ date }, ctx) => schedules.activeWithdrawals(ctx, date),
+    'medicine.schedules': (_, ctx) => medicine.listSchedules(ctx),
+    'medicine.saveSchedule': (s, ctx) => medicine.saveSchedule(ctx, s),
+    'medicine.dueSchedules': ({ date }, ctx) => medicine.dueSchedules(ctx, date),
     'medicine.healthEvents': ({ from, to, cageId }, ctx) => medicine.listHealthEvents(ctx, from, to, cageId),
     'medicine.addHealthEvent': (h, ctx) => medicine.addHealthEvent(ctx, h),
     'medicine.deleteHealthEvent': ({ id, reason }, ctx) => medicine.deleteHealthEvent(ctx, id, reason),
@@ -373,6 +374,8 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
     'inventory.batches': (f, ctx) => inventory.listBatches(ctx, f),
     'inventory.txns': (f, ctx) => inventory.listTxns(ctx, f),
     'inventory.record': (t, ctx) => inventory.recordTxn(ctx, t),
+    'inventory.updateTxn': (u, ctx) => inventory.updateTxn(ctx, u),
+    'inventory.deleteTxn': ({ id, reason }, ctx) => inventory.deleteTxn(ctx, id, reason),
 
     'analytics.dashboard': async ({ date }, ctx) => {
       const d = await analytics.dashboard(ctx, date, ctx.mode === 'demo', (await status(ctx)).backupWarning)
@@ -380,6 +383,17 @@ export function createHandlers({ cfg, dbs, restoreTokens }: ApiDeps): Handlers {
       if (pending > 0) d.alerts.unshift({ code: 'pending_signups', severity: 'info', params: { count: pending } })
       for (const w of await schedules.activeWithdrawals(ctx, date)) {
         d.alerts.push({ code: 'egg_withdrawal', severity: 'warning', params: { cage: w.cageName ?? '—', item: w.item, date: w.eggsUsableFrom } })
+      }
+      // Planned medicines, for whoever plans or gives them (due today or overdue; the Medicine page shows what is coming).
+      if (hasPermission(ctx.user, 'medicine.schedule') || hasPermission(ctx.user, 'medicine.record')) {
+        for (const m of await medicine.dueSchedules(ctx, date)) {
+          if (m.state === 'upcoming') continue
+          d.alerts.push({
+            code: m.state === 'due' ? 'medicine_due' : 'medicine_overdue',
+            severity: m.state === 'due' ? 'info' : 'warning',
+            params: { cage: m.cageName ?? '—', item: m.itemName, date: m.dueDate }
+          })
+        }
       }
       const missed = (await schedules.feedingStatus(ctx, date)).filter((s) => s.state === 'missed').length
       if (missed) d.alerts.push({ code: 'feeding_missed', severity: 'warning', params: { count: missed } })

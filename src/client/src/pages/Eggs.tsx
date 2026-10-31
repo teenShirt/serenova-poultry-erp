@@ -18,7 +18,7 @@ interface Row {
 }
 
 export function EggsPage() {
-  const { t, num, workDate, status, toast, fail } = useApp()
+  const { t, num, workDate, status, toast, fail, can } = useApp()
   const { overview, writable } = useDay(workDate)
   const { data: records } = useLoad(() => call('eggs.list', { date: workDate }), [workDate])
   const [session, setSession] = useState<EggSession>(() => (Number(timeInTimezone(status.settings.timezone).slice(0, 2)) < 12 ? 'morning' : 'evening'))
@@ -137,6 +137,8 @@ export function EggsPage() {
                         const r = rows[c.cageId]
                         if (!r) return null
                         const total = (r.good ?? 0) + (r.damaged ?? 0) + (r.rejected ?? 0)
+                        // A saved collection can only be changed with the "edit and delete records" permission.
+                        const locked = r.id !== null && !can('records.edit')
                         return (
                           <tr key={c.cageId} style={r.dirty ? { background: '#fffbea' } : undefined}>
                             <td>
@@ -148,20 +150,41 @@ export function EggsPage() {
                               )}
                             </td>
                             <td style={{ width: 140 }}>
-                              <NumInput value={r.good} onChange={(v) => upd(c.cageId, { good: v })} ariaLabel={`${c.name} ${t('eggs.good')}`} />
+                              <NumInput
+                                disabled={locked}
+                                value={r.good}
+                                onChange={(v) => upd(c.cageId, { good: v })}
+                                ariaLabel={`${c.name} ${t('eggs.good')}`}
+                              />
                             </td>
                             <td style={{ width: 130 }}>
-                              <NumInput value={r.damaged} onChange={(v) => upd(c.cageId, { damaged: v })} ariaLabel={`${c.name} ${t('eggs.damaged')}`} />
+                              <NumInput
+                                disabled={locked}
+                                value={r.damaged}
+                                onChange={(v) => upd(c.cageId, { damaged: v })}
+                                ariaLabel={`${c.name} ${t('eggs.damaged')}`}
+                              />
                             </td>
                             <td style={{ width: 130 }}>
-                              <NumInput value={r.rejected} onChange={(v) => upd(c.cageId, { rejected: v })} ariaLabel={`${c.name} ${t('eggs.rejected')}`} />
+                              <NumInput
+                                disabled={locked}
+                                value={r.rejected}
+                                onChange={(v) => upd(c.cageId, { rejected: v })}
+                                ariaLabel={`${c.name} ${t('eggs.rejected')}`}
+                              />
                             </td>
                             <td className="num">{r.good === null ? '—' : num(total)}</td>
                             <td style={{ width: 120 }}>
-                              <input className="input" type="time" value={r.time} onChange={(e) => upd(c.cageId, { time: e.target.value })} />
+                              <input className="input" type="time" disabled={locked} value={r.time} onChange={(e) => upd(c.cageId, { time: e.target.value })} />
                             </td>
                             <td>
-                              <input className="input" value={r.notes} maxLength={500} onChange={(e) => upd(c.cageId, { notes: e.target.value })} />
+                              <input
+                                className="input"
+                                disabled={locked}
+                                value={r.notes}
+                                maxLength={500}
+                                onChange={(e) => upd(c.cageId, { notes: e.target.value })}
+                              />
                             </td>
                           </tr>
                         )
@@ -206,7 +229,7 @@ export function EggsPage() {
                                 {r ? (
                                   <>
                                     {num(r.good + r.damaged + r.rejected)}
-                                    {writable && (
+                                    {writable && can('records.edit') && (
                                       <button className="icon-btn" title={t('common.delete')} onClick={() => setToDelete(r)}>
                                         <Trash2 size={14} />
                                       </button>

@@ -57,6 +57,8 @@ import type {
   WaterRecord,
   FeedingSchedule,
   FeedingSlot,
+  MedicineDue,
+  MedicineSchedule,
   Withdrawal
 } from './types'
 
@@ -321,6 +323,13 @@ export interface Api {
   'feeding.markFed': { in: { scheduleId: number; date: string; fedAt: string; note: string | null }; out: void }
   /** Cages whose eggs are under a withdrawal period on the date */
   'medicine.withdrawals': { in: { date: string }; out: Withdrawal[] }
+  'medicine.schedules': { in: void; out: MedicineSchedule[] }
+  'medicine.saveSchedule': {
+    in: Omit<MedicineSchedule, 'id' | 'cageName' | 'itemName' | 'unit' | 'lastDoneOn'> & { id: number | null }
+    out: number
+  }
+  /** Planned medicines overdue, due on the date or due in the next few days */
+  'medicine.dueSchedules': { in: { date: string }; out: MedicineDue[] }
   'medicine.healthEvents': { in: Range; out: HealthEvent[] }
   'medicine.addHealthEvent': {
     in: {
@@ -362,6 +371,12 @@ export interface Api {
     }
     out: number
   }
+  /** Corrects a stock movement entered by hand (not one made by a daily record, GRN, transfer or count) */
+  'inventory.updateTxn': {
+    in: { id: number; quantity: number; unitCost: number | null; supplier: string | null; reference: string | null; notes: string | null; reason: string }
+    out: void
+  }
+  'inventory.deleteTxn': { in: WithReason; out: void }
 
   'analytics.dashboard': { in: DateArg; out: DashboardData }
   'analytics.series': { in: Range; out: DailySeriesPoint[] }
@@ -563,6 +578,9 @@ export const API_KIND: Record<ApiMethod, 'read' | 'write'> = {
   'feeding.status': 'read',
   'feeding.markFed': 'write',
   'medicine.withdrawals': 'read',
+  'medicine.schedules': 'read',
+  'medicine.saveSchedule': 'write',
+  'medicine.dueSchedules': 'read',
   'medicine.healthEvents': 'read',
   'medicine.addHealthEvent': 'write',
   'medicine.deleteHealthEvent': 'write',
@@ -573,6 +591,8 @@ export const API_KIND: Record<ApiMethod, 'read' | 'write'> = {
   'inventory.batches': 'read',
   'inventory.txns': 'read',
   'inventory.record': 'write',
+  'inventory.updateTxn': 'write',
+  'inventory.deleteTxn': 'write',
   'analytics.dashboard': 'read',
   'analytics.series': 'read',
   'analytics.comparison': 'read',

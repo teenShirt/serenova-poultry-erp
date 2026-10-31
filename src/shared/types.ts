@@ -111,6 +111,10 @@ export interface FarmSettings {
   productionStages: ProductionStage[]
   /** Goods received notes wait for approval before their stock is posted */
   grnApprovalRequired: boolean
+  /** Water is recorded and checked; when off, water is hidden everywhere (its records are kept) */
+  waterTracking: boolean
+  /** Feed per bird per day (g): each cage's feed issued is filled in as its live birds × this */
+  feedGramsPerBird: number
   setupComplete: boolean
 }
 
@@ -328,6 +332,31 @@ export interface Withdrawal {
   item: string
   treatedOn: string
   eggsUsableFrom: string
+}
+
+/** A planned medicine routine: the next date it is due, for one cage or the whole farm, repeating or once. */
+export interface MedicineSchedule {
+  id: number
+  /** null = the whole farm */
+  cageId: number | null
+  cageName: string | null
+  itemId: number
+  itemName: string
+  unit: string
+  /** Planned quantity per treatment, as the veterinarian prescribed (optional) */
+  dose: number | null
+  dueDate: string
+  /** Repeats this many days after each treatment; null = once */
+  repeatDays: number | null
+  notes: string | null
+  active: boolean
+  lastDoneOn: string | null
+}
+
+export interface MedicineDue extends MedicineSchedule {
+  state: 'upcoming' | 'due' | 'overdue'
+  /** Days until the due date (negative when overdue) */
+  daysLeft: number
 }
 
 export interface InventoryBalance extends InventoryItem {

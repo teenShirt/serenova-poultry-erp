@@ -25,6 +25,8 @@ export const DEFAULT_SETTINGS: FarmSettings = {
   currency: 'Rs.',
   productionStages: DEFAULT_STAGES,
   grnApprovalRequired: false,
+  waterTracking: true,
+  feedGramsPerBird: 110,
   setupComplete: false
 }
 

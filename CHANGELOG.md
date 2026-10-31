@@ -4,6 +4,24 @@ Release history of Serenova Poultry ERP. Each version is deployed from `main` by
 deployment workflow (see `docs/DEPLOYMENT.md`). The newest version listed here is the latest
 approved release; the platform console shows these notes.
 
+## [2.3.0] - 2026-10-31
+
+Feed per bird, medicine plans, water tracking switch, and who may change records.
+
+- Feed: each cage's feed issued is filled in automatically as its live birds at the start of the day
+  × the feed per bird (110 g by default, Settings → Calculations); staff can change it before saving.
+  The Feed page shows the expected amount per cage.
+- Medicine plans: administrators plan the next date of a medicine for a cage or the whole farm, once
+  or repeating every N days (Medicine → Medicine plan). Reminders show from 3 days before; overdue
+  and due-today plans appear on the dashboard. Recording the treatment moves the plan to its next date.
+- Water tracking can be switched off (Settings → Calculations): water is then hidden from the menu,
+  the day checks, duties, reports, charts and CSV exports. Water already recorded is kept.
+- Changing or deleting a saved record (eggs, feed, water, deaths, treatments, health events) and
+  correcting or deleting a stock movement entered by hand now needs the new permission "Edit and
+  delete saved records". Everyone else can only add records. Only administrators hold it until an
+  administrator gives it to a role.
+- New permission "Plan medicine dates" (administrators only until given to a role).
+
 ## [2.2.0] - 2026-10-25
 
 Feeding schedules and egg withdrawal periods.

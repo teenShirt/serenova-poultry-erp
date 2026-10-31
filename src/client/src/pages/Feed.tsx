@@ -27,7 +27,10 @@ interface Row {
 }
 
 export function FeedPage() {
-  const { t, num, workDate, toast, fail } = useApp()
+  const { t, num, workDate, toast, fail, can, status } = useApp()
+  const perBird = status.settings.feedGramsPerBird
+  /** The day's feed for a cage: its live birds at the start of the day × the feed per bird, in kg. */
+  const expectedKg = (birds: number) => Math.round(birds * perBird) / 1000
   const { overview, writable } = useDay(workDate)
   const { data: items } = useLoad(() => call('inventory.balances', { category: 'feed' }), [])
   const feedItems = (items ?? []).filter((i) => i.active)
@@ -50,6 +53,12 @@ export function FeedPage() {
   useEffect(() => {
     if (!itemId || !overview?.dayId) return
     let alive = true
+    // The issued quantity is filled in automatically when the feed is counted in kg.
+    const inKg =
+      feedItems
+        .find((i) => i.id === itemId)
+        ?.unit.trim()
+        .toLowerCase() === 'kg'
     ;(async () => {
       const next: Record<number, Row> = {}
       for (const c of cages) {
@@ -69,17 +78,18 @@ export function FeedPage() {
           }
         } else {
           const suggested = await call('feed.suggestOpening', { date: workDate, cageId: c.cageId, itemId })
+          const auto = inKg && c.opening > 0 ? expectedKg(c.opening) : null
           next[c.cageId] = {
             id: null,
             openingStock: suggested,
-            issued: null,
+            issued: auto,
             returned: null,
             wasted: null,
             measured: null,
             closingStock: null,
             batchNo: '',
             notes: '',
-            dirty: false
+            dirty: auto !== null
           }
         }
       }
@@ -163,6 +173,7 @@ export function FeedPage() {
           >
             <div className="stack">
               <Notice tone="info">{t('feed.methodHelp')}</Notice>
+              <Notice tone="info">{t('feed.autoHelp', { g: num(perBird) })}</Notice>
               <div className="row">
                 <Field label={t('feed.type')}>
                   <select className="select" value={itemId ?? ''} onChange={(e) => setItemId(Number(e.target.value))} style={{ minWidth: 220 }}>
@@ -184,6 +195,7 @@ export function FeedPage() {
                   <thead>
                     <tr>
                       <th>{t('common.cage')}</th>
+                      <th className="num">{t('feed.expected', { g: num(perBird) })}</th>
                       <th className="num">{t('feed.openingStock')}</th>
                       <th className="num">{t('feed.issued')}</th>
                       <th className="num">{t('feed.returned')}</th>
@@ -201,12 +213,17 @@ export function FeedPage() {
                       if (!r) return null
                       const calc = feedConsumption(toInput(r))
                       const record = records?.find((x) => x.id === r.id)
-                      const dis = !writable
+                      // A saved record can only be changed with the "edit and delete records" permission.
+                      const dis = !writable || (r.id !== null && !can('records.edit'))
                       return (
                         <tr key={c.cageId} style={r.dirty ? { background: '#fffbea' } : undefined}>
                           <td>
                             <strong>{c.name}</strong>
+                            <div className="muted small">
+                              {num(c.opening)} {t('common.hens')}
+                            </div>
                           </td>
+                          <td className="num nowrap">{c.opening > 0 ? `${num(expectedKg(c.opening), 1)} kg` : '—'}</td>
                           <td style={{ width: 110 }}>
                             <NumInput decimals disabled={dis} value={r.openingStock} onChange={(v) => upd(c.cageId, { openingStock: v })} />
                           </td>
@@ -243,7 +260,7 @@ export function FeedPage() {
                             <input className="input" disabled={dis} value={r.batchNo} onChange={(e) => upd(c.cageId, { batchNo: e.target.value })} />
                           </td>
                           <td>
-                            {record && writable && (
+                            {record && writable && can('records.edit') && (
                               <button className="icon-btn" title={t('common.delete')} onClick={() => setToDelete(record)}>
                                 <Trash2 size={16} />
                               </button>

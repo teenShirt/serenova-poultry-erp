@@ -9,7 +9,7 @@ import { Card, CageSelect, DateBar, DayGate, Empty, Field, Modal, Notice, NumInp
 import { CageBars, RangePicker, SERIES, TimeChart } from '../components/charts'
 
 export function MortalityPage() {
-  const { t, num, workDate, fail } = useApp()
+  const { t, num, workDate, fail, can } = useApp()
   const { overview, writable } = useDay(workDate)
   const { data: moves } = useLoad(() => call('flock.list', { date: workDate }), [workDate])
   const [params, setParams] = useSearchParams()
@@ -149,7 +149,7 @@ export function MortalityPage() {
                       <td>{m.notes ?? ''}</td>
                       <td>{m.recordedBy}</td>
                       <td>
-                        {writable && (
+                        {writable && can('records.edit') && (
                           <button className="icon-btn" title={t('common.delete')} onClick={() => setToDelete(m)}>
                             <Trash2 size={16} />
                           </button>

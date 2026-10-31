@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { HeartPulse, Pill, Plus, Trash2 } from 'lucide-react'
+import { CalendarPlus, HeartPulse, Pencil, Pill, Plus, Trash2 } from 'lucide-react'
 import { addDays } from '@shared/dates'
-import type { HealthEvent, Treatment } from '@shared/types'
+import type { HealthEvent, MedicineDue, MedicineSchedule, Treatment } from '@shared/types'
 import { call } from '../lib/api'
 import { useApp, useLoad } from '../lib/app'
 import {
@@ -24,9 +24,9 @@ import {
 } from '../components/ui'
 
 export function MedicinePage() {
-  const { t, num, workDate, date, status } = useApp()
+  const { t, num, workDate, date, status, can } = useApp()
   const { overview, writable } = useDay(workDate)
-  const [tab, setTab] = useState<'treatments' | 'health' | 'stock'>('treatments')
+  const [tab, setTab] = useState<'treatments' | 'plan' | 'health' | 'stock'>('treatments')
   const from = addDays(workDate, -29)
   const { data: treatments } = useLoad(() => call('medicine.treatments', { from, to: workDate }), [workDate])
   const { data: events } = useLoad(() => call('medicine.healthEvents', { from, to: workDate }), [workDate])
@@ -44,11 +44,13 @@ export function MedicinePage() {
       <div className="stack">
         <Notice tone="warn">{t('med.disclaimer')}</Notice>
         <DayGate overview={overview} />
+        <DueMedicines date={workDate} />
         <Tabs
           value={tab}
           onChange={setTab}
           tabs={[
             { value: 'treatments', label: t('med.treatments') },
+            { value: 'plan', label: t('msch.title') },
             { value: 'health', label: t('med.health') },
             { value: 'stock', label: t('inv.batches') }
           ]}
@@ -102,7 +104,7 @@ export function MedicinePage() {
                         <td>{x.prescribedBy}</td>
                         <td>{x.recordedBy}</td>
                         <td>
-                          {x.date === workDate && writable && (
+                          {x.date === workDate && writable && can('records.edit') && (
                             <button className="icon-btn" title={t('common.delete')} onClick={() => setDelT(x)}>
                               <Trash2 size={16} />
                             </button>
@@ -116,6 +118,7 @@ export function MedicinePage() {
             )}
           </Card>
         )}
+        {tab === 'plan' && <MedicinePlan canEdit={can('medicine.schedule')} />}
         {tab === 'health' && (
           <Card
             title={`${t('med.health')} — ${t('common.last30')}`}
@@ -162,7 +165,7 @@ export function MedicinePage() {
                         <td>{h.actionTaken}</td>
                         <td>{h.recordedBy}</td>
                         <td>
-                          {h.date === workDate && writable && (
+                          {h.date === workDate && writable && can('records.edit') && (
                             <button className="icon-btn" title={t('common.delete')} onClick={() => setDelH(h)}>
                               <Trash2 size={16} />
                             </button>
@@ -346,6 +349,178 @@ function AddTreatment({ date, onClose }: { date: string; onClose: () => void }) 
         <Field label={t('common.notes')}>
           <textarea className="input" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={500} />
         </Field>
+      </div>
+    </Modal>
+  )
+}
+
+const DUE_TONE: Record<MedicineDue['state'], 'bad' | 'warn' | 'info'> = { overdue: 'bad', due: 'warn', upcoming: 'info' }
+
+/** Planned medicines overdue, due today or due in the next few days. */
+function DueMedicines({ date }: { date: string }) {
+  const { t, num, date: fmt } = useApp()
+  const { data } = useLoad(() => call('medicine.dueSchedules', { date }), [date])
+  if (!data?.length) return null
+  const worst = data.some((m) => m.state === 'overdue') ? 'bad' : data.some((m) => m.state === 'due') ? 'warn' : 'info'
+  return (
+    <Notice tone={worst}>
+      <strong>{t('msch.dueTitle')}</strong>
+      <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+        {data.map((m) => (
+          <li key={m.id}>
+            <span className={`badge ${DUE_TONE[m.state]}`}>{t('msch.state.' + m.state, { n: Math.abs(m.daysLeft) })}</span> {m.itemName}
+            {m.dose !== null && ` · ${num(m.dose, 2)} ${m.unit}`} · {m.cageName ?? t('fsch.allCages')} · {fmt(m.dueDate)}
+            {m.notes && <span className="muted"> · {m.notes}</span>}
+          </li>
+        ))}
+      </ul>
+    </Notice>
+  )
+}
+
+/** Every planned medicine routine of the farm; administrators plan and change them. */
+function MedicinePlan({ canEdit }: { canEdit: boolean }) {
+  const { t, num, date: fmt } = useApp()
+  const { data: plans } = useLoad(() => call('medicine.schedules'), [])
+  const [editing, setEditing] = useState<MedicineSchedule | 'new' | null>(null)
+  return (
+    <Card
+      title={t('msch.title')}
+      actions={
+        canEdit && (
+          <button className="btn primary" onClick={() => setEditing('new')}>
+            <CalendarPlus size={18} />
+            {t('msch.add')}
+          </button>
+        )
+      }
+    >
+      <div className="muted small" style={{ marginBottom: 8 }}>
+        {t('msch.rule')}
+      </div>
+      {!plans || plans.length === 0 ? (
+        <Empty text={t('msch.none')} />
+      ) : (
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>{t('msch.nextDue')}</th>
+                <th>{t('med.medicine')}</th>
+                <th className="num">{t('msch.dose')}</th>
+                <th>{t('common.cage')}</th>
+                <th>{t('msch.repeat')}</th>
+                <th>{t('msch.lastDone')}</th>
+                <th>{t('common.notes')}</th>
+                <th>{t('common.status')}</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {plans.map((p) => (
+                <tr key={p.id} className={p.active ? '' : 'muted'}>
+                  <td className="nowrap">{p.active ? fmt(p.dueDate) : '—'}</td>
+                  <td>{p.itemName}</td>
+                  <td className="num nowrap">{p.dose === null ? '—' : `${num(p.dose, 2)} ${p.unit}`}</td>
+                  <td>{p.cageName ?? t('fsch.allCages')}</td>
+                  <td>{p.repeatDays ? t('msch.everyDays', { n: p.repeatDays }) : t('msch.once')}</td>
+                  <td className="nowrap">{p.lastDoneOn ? fmt(p.lastDoneOn) : '—'}</td>
+                  <td>{p.notes}</td>
+                  <td>{p.active ? <span className="badge good">{t('common.active')}</span> : <span className="badge">{t('msch.finished')}</span>}</td>
+                  <td>
+                    {canEdit && (
+                      <button className="icon-btn" title={t('common.edit')} onClick={() => setEditing(p)}>
+                        <Pencil size={15} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {editing && <PlanForm plan={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
+    </Card>
+  )
+}
+
+function PlanForm({ plan, onClose }: { plan: MedicineSchedule | null; onClose: () => void }) {
+  const { t, toast, fail, workDate } = useApp()
+  const { data: cages } = useCages()
+  const { data: meds } = useLoad(() => call('inventory.items', { category: 'medicine' }), [])
+  const [f, setF] = useState({
+    cageId: plan?.cageId ?? null,
+    itemId: plan?.itemId ?? null,
+    dose: plan?.dose ?? null,
+    dueDate: plan?.dueDate ?? workDate,
+    repeatDays: plan?.repeatDays ?? null,
+    notes: plan?.notes ?? null,
+    active: plan?.active ?? true
+  })
+  const unit = meds?.find((m) => m.id === f.itemId)?.unit
+  return (
+    <Modal
+      title={plan ? `${t('msch.title')} — ${plan.itemName}` : t('msch.add')}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            {t('common.cancel')}
+          </button>
+          <button
+            className="btn primary"
+            disabled={!f.itemId || !f.dueDate}
+            onClick={async () => {
+              try {
+                await call('medicine.saveSchedule', { id: plan?.id ?? null, ...f, itemId: f.itemId! })
+                toast('success', t('common.saved'))
+                onClose()
+              } catch (e) {
+                fail(e)
+              }
+            }}
+          >
+            {t('common.save')}
+          </button>
+        </>
+      }
+    >
+      <div className="stack">
+        <Notice tone="warn">{t('med.disclaimer')}</Notice>
+        <div className="form-grid">
+          <Field label={t('med.medicine')} required>
+            <select className="select" value={f.itemId ?? ''} onChange={(e) => setF({ ...f, itemId: e.target.value ? Number(e.target.value) : null })}>
+              <option value="">—</option>
+              {meds
+                ?.filter((m) => m.active || m.id === f.itemId)
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+            </select>
+          </Field>
+          <Field label={t('common.cage')}>
+            <CageSelect cages={cages ?? []} value={f.cageId} onChange={(v) => setF({ ...f, cageId: v })} allowFarm />
+          </Field>
+          <Field label={t('msch.nextDue')} required>
+            <input className="input" type="date" value={f.dueDate} onChange={(e) => setF({ ...f, dueDate: e.target.value })} />
+          </Field>
+          <Field label={`${t('msch.dose')}${unit ? ` (${unit})` : ''}`}>
+            <NumInput decimals value={f.dose} onChange={(v) => setF({ ...f, dose: v })} />
+          </Field>
+          <Field label={t('msch.repeatDays')} hint={t('msch.repeatHint')}>
+            <NumInput value={f.repeatDays} onChange={(v) => setF({ ...f, repeatDays: v && v > 0 ? v : null })} />
+          </Field>
+        </div>
+        <Field label={t('common.notes')}>
+          <input className="input" value={f.notes ?? ''} maxLength={500} onChange={(e) => setF({ ...f, notes: nz(e.target.value) })} />
+        </Field>
+        <label className="check">
+          <input type="checkbox" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} />
+          {t('common.active')}
+        </label>
       </div>
     </Modal>
   )

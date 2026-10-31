@@ -361,6 +361,76 @@ export async function recordTxn(ctx: Ctx, t: TxnInput): Promise<number> {
 }
 
 /**
+ * A stock movement entered by hand in one of the farm's stores. Movements made by daily records,
+ * goods received notes, transfers and counts are changed through those records instead.
+ */
+async function manualTxn(ctx: Ctx, id: number) {
+  const row = (await ctx.db
+    .prepare(
+      `SELECT t.*, i.name AS item_name, i.unit FROM inventory_transactions t JOIN warehouses w ON w.id = t.warehouse_id
+       JOIN inventory_items i ON i.id = t.item_id WHERE t.id = ? AND t.organization_id = ? AND w.farm_id = ?`
+    )
+    .get(id, ctx.org, ctx.farm)) as
+    | (Record<string, unknown> & {
+        item_id: number
+        batch_id: number | null
+        warehouse_id: number
+        txn_date: string
+        day_id: number | null
+        type: TxnType
+        quantity: number
+        source_type: string | null
+        item_name: string
+        unit: string
+      })
+    | undefined
+  assert(row, 'not_found')
+  assert(row.source_type === null && !SYSTEM_TYPES.includes(row.type), 'txn_not_manual')
+  await assertDateWritable(ctx, row.txn_date)
+  return row
+}
+
+/** Corrects the quantity and details of a movement entered by hand; stock may not go below zero. */
+export async function updateTxn(
+  ctx: Ctx,
+  u: { id: number; quantity: number; unitCost: number | null; supplier: string | null; reference: string | null; notes: string | null; reason: string }
+) {
+  requireUser(ctx)
+  assert(u.reason.trim().length >= 3, 'reason_required')
+  await ctx.db.transaction(async () => {
+    const row = await manualTxn(ctx, u.id)
+    if (row.type === 'adjustment' || row.type === 'opening') assert(u.quantity !== 0 && Number.isFinite(u.quantity), 'quantity_required')
+    else assert(u.quantity > 0, 'quantity_positive')
+    const signed = round(DECREASING.includes(row.type) ? -Math.abs(u.quantity) : row.type === 'adjustment' ? u.quantity : Math.abs(u.quantity), 3)
+    await ctx.db
+      .prepare('UPDATE inventory_transactions SET quantity = ?, unit_cost = ?, supplier = ?, reference = ?, notes = ? WHERE id = ?')
+      .run(signed, u.unitCost, u.supplier, u.reference, u.notes, u.id)
+    if (signed < row.quantity) await assertNotNegative(ctx, row.item_id, row.batch_id, row.warehouse_id)
+    const { reason, ...after } = u
+    await audit(ctx, {
+      action: 'update',
+      entity: 'inventory_transaction',
+      entityId: u.id,
+      dayId: row.day_id,
+      reason,
+      details: { item: row.item_name, unit: row.unit, before: row, after: { ...after, quantity: signed } }
+    })
+  })()
+}
+
+/** Deletes a movement entered by hand; stock may not go below zero (e.g. a receipt already used). */
+export async function deleteTxn(ctx: Ctx, id: number, reason: string) {
+  requireUser(ctx)
+  assert(reason.trim().length >= 3, 'reason_required')
+  await ctx.db.transaction(async () => {
+    const row = await manualTxn(ctx, id)
+    await ctx.db.prepare('DELETE FROM inventory_transactions WHERE id = ?').run(id)
+    if (row.quantity > 0) await assertNotNegative(ctx, row.item_id, row.batch_id, row.warehouse_id)
+    await audit(ctx, { action: 'delete', entity: 'inventory_transaction', entityId: id, dayId: row.day_id, reason, details: row })
+  })()
+}
+
+/**
  * Keeps exactly one stock transaction for a source record (e.g. the feed issued on a feed record).
  * The UNIQUE(source_type, source_id, type) constraint makes double deduction impossible.
  */

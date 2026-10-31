@@ -1079,6 +1079,37 @@ CREATE TABLE feeding_log (
          SELECT organization_id, role_id, 'feeding.manage' FROM role_permissions WHERE permission = 'cages.manage'`
       )
     }
+  },
+  {
+    // The new permissions ('records.edit', 'medicine.schedule') are given to no existing role:
+    // only administrators hold them until an administrator gives them to a role.
+    version: 12,
+    name: 'medicine schedules',
+    up: `
+-- Planned medicine routines: the next date each is due, for one cage or the whole farm (cage_id NULL).
+CREATE TABLE medicine_schedules (
+  id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  farm_id INT NOT NULL,
+  cage_id INT,
+  item_id INT NOT NULL,
+  dose DECIMAL(16,3) CHECK (dose IS NULL OR dose >= 0),
+  due_date DATE NOT NULL,
+  repeat_days INT CHECK (repeat_days IS NULL OR (repeat_days >= 1 AND repeat_days <= 365)),
+  notes TEXT,
+  active TINYINT NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+  last_done_on DATE,
+  created_by INT,
+  created_at VARCHAR(32) NOT NULL,
+  UNIQUE KEY ux_medicine_schedules_org_id (organization_id, id),
+  KEY ix_medicine_schedules_due (organization_id, farm_id, active, due_date),
+  CONSTRAINT fk_medsch_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_medsch_farm FOREIGN KEY (organization_id, farm_id) REFERENCES farms(organization_id, id),
+  CONSTRAINT fk_medsch_cage FOREIGN KEY (organization_id, cage_id) REFERENCES cages(organization_id, id),
+  CONSTRAINT fk_medsch_item FOREIGN KEY (organization_id, item_id) REFERENCES inventory_items(organization_id, id),
+  CONSTRAINT fk_medsch_user FOREIGN KEY (organization_id, created_by) REFERENCES users(organization_id, id)
+) ${T};
+`
   }
 ]
 
@@ -1176,7 +1207,8 @@ export const DATA_TABLES = [
   'tasks',
   'task_events',
   'feeding_schedules',
-  'feeding_log'
+  'feeding_log',
+  'medicine_schedules'
 ] as const
 
 export async function currentSchemaVersion(db: DB): Promise<number> {

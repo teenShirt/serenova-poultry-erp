@@ -28,9 +28,11 @@ export function toCsv(header: string[], rows: Cell[][]): string {
 
 /** The rows of each CSV download (the signed-in user's organization, and the farm they work on). */
 export async function buildCsv(ctx: Ctx, kind: CsvKind, from: string, to: string, f: { warehouseId?: number | null }): Promise<{ name: string; csv: string }> {
-  const lang = (await getSettings(ctx)).language
+  const { language: lang, waterTracking } = await getSettings(ctx)
   const t = (k: string) => translate(lang, k)
   const stem = `${kind}-${from}-${to}`
+  // Without water tracking, the water column is left out.
+  const water = <T>(c: T[]) => (waterTracking ? c : c.slice(0, -1))
   switch (kind) {
     case 'organization': {
       const o = await organizationOverview(ctx, from, to)
@@ -45,7 +47,7 @@ export async function buildCsv(ctx: Ctx, kind: CsvKind, from: string, to: string
         ['ov.mortalityPct', (r) => r.mortalityPct],
         ['ov.feedKg', (r) => r.feedKg],
         ['ov.feedPerBird', (r) => r.feedPerBirdG],
-        ['ov.waterL', (r) => r.waterLitres],
+        ...(waterTracking ? [['ov.waterL', (r) => r.waterLitres] as [string, (r: (typeof o.farms)[number]) => Cell]] : []),
         ['ov.flocks', (r) => r.activeFlocks],
         ['ov.tasksOverdue', (r) => r.tasksOverdue],
         ['ov.lowStock', (r) => r.lowStockItems],
@@ -64,7 +66,7 @@ export async function buildCsv(ctx: Ctx, kind: CsvKind, from: string, to: string
       return {
         name: stem,
         csv: toCsv(
-          [
+          water([
             'common.date',
             'common.status',
             'ov.opening',
@@ -79,23 +81,25 @@ export async function buildCsv(ctx: Ctx, kind: CsvKind, from: string, to: string
             'ov.feedKg',
             'ov.feedPerBird',
             'ov.waterL'
-          ].map(t),
-          s.map((p) => [
-            p.date,
-            t('status.' + p.status),
-            p.opening,
-            p.closing,
-            p.eggs,
-            p.good,
-            p.damaged,
-            p.rejected,
-            p.productionPct,
-            p.deaths,
-            p.removals,
-            p.feedKg,
-            p.feedPerHenG,
-            p.waterLitres
-          ])
+          ]).map(t),
+          s.map((p) =>
+            water([
+              p.date,
+              t('status.' + p.status),
+              p.opening,
+              p.closing,
+              p.eggs,
+              p.good,
+              p.damaged,
+              p.rejected,
+              p.productionPct,
+              p.deaths,
+              p.removals,
+              p.feedKg,
+              p.feedPerHenG,
+              p.waterLitres
+            ])
+          )
         )
       }
     }

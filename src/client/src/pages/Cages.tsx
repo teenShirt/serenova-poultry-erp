@@ -35,7 +35,7 @@ export function CagesPage() {
                 <th className="num">{t('cage.initialHens')}</th>
                 <th className="num">{t('cage.capacity')}</th>
                 <th className="num">{t('cage.currentHens')}</th>
-                <th>{t('cage.hasMeter')}</th>
+                {status.settings.waterTracking && <th>{t('cage.hasMeter')}</th>}
                 <th>{t('common.status')}</th>
                 <th>{t('common.notes')}</th>
                 <th />
@@ -53,7 +53,7 @@ export function CagesPage() {
                     <td className="num">{num(c.initialHens)}</td>
                     <td className="num">{c.capacity === null ? '—' : num(c.capacity)}</td>
                     <td className="num">{live ? num(live.closing) : '—'}</td>
-                    <td>{c.hasWaterMeter ? t('common.yes') : t('common.no')}</td>
+                    {status.settings.waterTracking && <td>{c.hasWaterMeter ? t('common.yes') : t('common.no')}</td>}
                     <td>{c.active ? <span className="badge good">{t('common.active')}</span> : <span className="badge">{t('common.inactive')}</span>}</td>
                     <td className="muted">{c.notes}</td>
                     <td>
@@ -88,7 +88,7 @@ export function CagesPage() {
 }
 
 function CageForm({ cage, nextOrder, onClose }: { cage: (Cage & { hasHistory: boolean }) | null; nextOrder: number; onClose: () => void }) {
-  const { t, toast, fail } = useApp()
+  const { t, toast, fail, status } = useApp()
   const [f, setF] = useState<CageInputDto>(
     cage
       ? {
@@ -176,10 +176,12 @@ function CageForm({ cage, nextOrder, onClose }: { cage: (Cage & { hasHistory: bo
             </Field>
           )}
         </div>
-        <label className="check">
-          <input type="checkbox" checked={f.hasWaterMeter} onChange={(e) => setF({ ...f, hasWaterMeter: e.target.checked })} />
-          {t('cage.hasMeter')}
-        </label>
+        {status.settings.waterTracking && (
+          <label className="check">
+            <input type="checkbox" checked={f.hasWaterMeter} onChange={(e) => setF({ ...f, hasWaterMeter: e.target.checked })} />
+            {t('cage.hasMeter')}
+          </label>
+        )}
         <label className="check">
           <input type="checkbox" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} />
           {t('common.active')}

@@ -1,7 +1,7 @@
 {
   "name": "poultry-farm-manager-web",
   "productName": "Poultry Farm Manager",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Poultry farm management web application (Node.js + React + MySQL)",
   "license": "UNLICENSED",
   "private": true,

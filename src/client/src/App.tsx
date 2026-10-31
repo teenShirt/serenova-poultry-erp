@@ -116,6 +116,8 @@ interface NavItem {
   anyOf?: Permission[]
   /** Hidden unless the organization's plan includes this module */
   module?: Module
+  /** Hidden unless the organization tracks water (Settings) */
+  water?: boolean
 }
 
 /** The admin portal is shown to anyone who may manage users, the database or read the activity history. */
@@ -146,7 +148,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { to: '/tasks', key: 'nav.tasks', icon: ListChecks },
       { to: '/eggs', key: 'nav.eggs', icon: Egg, perm: 'eggs.record' },
       { to: '/feed', key: 'nav.feed', icon: Wheat, perm: 'feed.record' },
-      { to: '/water', key: 'nav.water', icon: Droplets, perm: 'water.record' },
+      { to: '/water', key: 'nav.water', icon: Droplets, perm: 'water.record', water: true },
       { to: '/mortality', key: 'nav.mortality', icon: TrendingDown, perm: 'flock.record' },
       { to: '/medicine', key: 'nav.medicine', icon: Pill, perm: 'medicine.record' }
     ]
@@ -188,9 +190,9 @@ const QUICK: { to: string; key: string; icon: LucideIcon; perm?: Permission; mod
 ]
 
 function useVisibleNav() {
-  const { can: allowed, hasModule } = useApp()
-  const can = (i: { perm?: Permission; anyOf?: Permission[]; module?: Module }) =>
-    (!i.module || hasModule(i.module)) && (i.anyOf ? i.anyOf.some(allowed) : !i.perm || allowed(i.perm))
+  const { can: allowed, hasModule, status } = useApp()
+  const can = (i: { perm?: Permission; anyOf?: Permission[]; module?: Module; water?: boolean }) =>
+    (!i.water || status.settings.waterTracking) && (!i.module || hasModule(i.module)) && (i.anyOf ? i.anyOf.some(allowed) : !i.perm || allowed(i.perm))
   return {
     groups: NAV.map((g) => ({ ...g, items: g.items.filter(can) })).filter((g) => g.items.length),
     quick: QUICK.filter(can)
@@ -365,7 +367,7 @@ function Shell() {
           <Route path="/daily" element={<DailyPage />} />
           <Route path="/eggs" element={<EggsPage />} />
           <Route path="/feed" element={<FeedPage />} />
-          <Route path="/water" element={<WaterPage />} />
+          {status.settings.waterTracking && <Route path="/water" element={<WaterPage />} />}
           <Route path="/medicine" element={<MedicinePage />} />
           <Route path="/mortality" element={<MortalityPage />} />
           <Route path="/purchases" element={<PurchasesPage />} />

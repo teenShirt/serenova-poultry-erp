@@ -19,6 +19,8 @@ export const PERMISSIONS = [
   'water.meter_reset',
   'flock.record',
   'medicine.record',
+  'medicine.schedule',
+  'records.edit',
   'inventory.record',
   'inventory.adjust',
   'inventory.manage_items',
@@ -50,7 +52,10 @@ export type Permission = (typeof PERMISSIONS)[number]
 /** How the permissions are grouped on the role screen. */
 export const PERMISSION_GROUPS: { key: string; permissions: Permission[] }[] = [
   { key: 'day', permissions: ['day.start', 'day.backfill', 'day.correct_opening', 'day.approve_issues', 'day.comment', 'day.close', 'day.amend'] },
-  { key: 'records', permissions: ['eggs.record', 'feed.record', 'water.record', 'water.meter_reset', 'flock.record', 'medicine.record'] },
+  {
+    key: 'records',
+    permissions: ['eggs.record', 'feed.record', 'water.record', 'water.meter_reset', 'flock.record', 'medicine.record', 'medicine.schedule', 'records.edit']
+  },
   { key: 'flocks', permissions: ['flocks.manage'] },
   {
     key: 'stores',
@@ -78,6 +83,7 @@ export const PERMISSION_GROUPS: { key: string; permissions: Permission[] }[] = [
  * The permission each request needs. Requests not listed only need a signed-in member of the
  * organization (reading, and actions on one's own account). Some services check further
  * permissions for particular cases (e.g. a stock adjustment, or a back-dated day).
+ * Deleting or changing a saved record needs 'records.edit': everyone else can only add records.
  */
 export const PERMISSION_FOR_METHOD: Partial<Record<ApiMethod, Permission>> = {
   'users.list': 'users.manage',
@@ -112,21 +118,24 @@ export const PERMISSION_FOR_METHOD: Partial<Record<ApiMethod, Permission>> = {
   'days.startAmendment': 'day.amend',
   'days.finishAmendment': 'day.amend',
   'eggs.save': 'eggs.record',
-  'eggs.delete': 'eggs.record',
+  'eggs.delete': 'records.edit',
   'feed.save': 'feed.record',
-  'feed.delete': 'feed.record',
+  'feed.delete': 'records.edit',
   'water.save': 'water.record',
-  'water.delete': 'water.record',
+  'water.delete': 'records.edit',
   'flock.add': 'flock.record',
   'flock.transfer': 'flock.record',
-  'flock.delete': 'flock.record',
+  'flock.delete': 'records.edit',
   'medicine.addTreatment': 'medicine.record',
-  'medicine.deleteTreatment': 'medicine.record',
+  'medicine.deleteTreatment': 'records.edit',
   'medicine.addHealthEvent': 'medicine.record',
-  'medicine.deleteHealthEvent': 'medicine.record',
+  'medicine.deleteHealthEvent': 'records.edit',
+  'medicine.saveSchedule': 'medicine.schedule',
   'inventory.createItem': 'inventory.manage_items',
   'inventory.updateItem': 'inventory.manage_items',
   'inventory.record': 'inventory.record',
+  'inventory.updateTxn': 'records.edit',
+  'inventory.deleteTxn': 'records.edit',
   'parties.saveSupplier': 'purchases.record',
   'purchases.create': 'purchases.record',
   'purchases.cancel': 'purchases.cancel',
@@ -182,7 +191,10 @@ export const ROLE_TEMPLATES: { key: string; permissions: Permission[] }[] = [
   {
     key: 'farm_manager',
     permissions: PERMISSIONS.filter(
-      (p) => !['users.manage', 'roles.manage', 'settings.manage', 'farms.manage', 'backup.restore', 'database.manage'].includes(p)
+      (p) =>
+        !['users.manage', 'roles.manage', 'settings.manage', 'farms.manage', 'backup.restore', 'database.manage', 'records.edit', 'medicine.schedule'].includes(
+          p
+        )
     )
   },
   {

@@ -237,7 +237,7 @@ function AnalyticsTab() {
                   <th className="num">{t('col.rejected')}</th>
                   <th className="num">{t('rep.avgProduction')}</th>
                   <th className="num">{t('col.feed')}</th>
-                  <th className="num">{t('col.water')}</th>
+                  {status.settings.waterTracking && <th className="num">{t('col.water')}</th>}
                   <th className="num">{t('col.deaths')}</th>
                   <th className="num">{t('flock.cumulative')} %</th>
                   <th className="num">{t('col.closing')}</th>
@@ -255,7 +255,7 @@ function AnalyticsTab() {
                     <td className="num">{num(c.rejected)}</td>
                     <td className="num">{c.avgProductionPct === null ? '—' : num(c.avgProductionPct, 1) + '%'}</td>
                     <td className="num">{num(c.feedKg, 1)}</td>
-                    <td className="num">{num(c.waterLitres)}</td>
+                    {status.settings.waterTracking && <td className="num">{num(c.waterLitres)}</td>}
                     <td className="num">{num(c.deaths)}</td>
                     <td className="num">{c.mortalityPct === null ? '—' : num(c.mortalityPct, 2)}</td>
                     <td className="num">{num(c.closingHens)}</td>

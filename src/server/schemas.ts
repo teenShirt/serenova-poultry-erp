@@ -81,6 +81,8 @@ const settingsPatch = z
     autoCheckUpdates: z.boolean(),
     currency: text(10),
     grnApprovalRequired: z.boolean(),
+    waterTracking: z.boolean(),
+    feedGramsPerBird: z.number().min(1).max(1000),
     productionStages: z.array(z.object({ name: text(60).min(1), fromWeek: z.number().int().min(0).max(200) })).max(20)
   })
   .partial()
@@ -283,6 +285,18 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
   'feeding.status': z.object({ date }),
   'feeding.markFed': z.object({ scheduleId: id, date, fedAt: z.string().regex(/^\d{2}:\d{2}$/), note: optText() }),
   'medicine.withdrawals': z.object({ date }),
+  'medicine.schedules': none,
+  'medicine.saveSchedule': z.object({
+    id: id.nullable(),
+    cageId: id.nullable(),
+    itemId: id,
+    dose: qty.nullable(),
+    dueDate: date,
+    repeatDays: z.number().int().min(1).max(365).nullable(),
+    notes: optText(),
+    active: z.boolean()
+  }),
+  'medicine.dueSchedules': z.object({ date }),
   'medicine.healthEvents': range,
   'medicine.addHealthEvent': z.object({
     date,
@@ -322,6 +336,16 @@ export const schemas: Record<ApiMethod, z.ZodType> = {
     cageId: id.nullable(),
     warehouseId: id.nullable().optional()
   }),
+  'inventory.updateTxn': z.object({
+    id,
+    quantity: z.number().finite().min(-100_000_000).max(100_000_000),
+    unitCost: qty.nullable(),
+    supplier: optText(100),
+    reference: optText(100),
+    notes: optText(),
+    reason: text(500)
+  }),
+  'inventory.deleteTxn': withReason,
 
   'analytics.dashboard': z.object({ date }),
   'analytics.series': range,

@@ -186,7 +186,8 @@ function InventoryCarried({ preview }: { preview: StartDayPreview }) {
 }
 
 function DayReview({ overview: ov }: { overview: DayOverview }) {
-  const { t, num, can, toast, fail, dateTime } = useApp()
+  const { t, num, can, toast, fail, dateTime, status } = useApp()
+  const water = status.settings.waterTracking
   const [comment, setComment] = useState(ov.managerComment ?? '')
   const [confirmIssue, setConfirmIssue] = useState<DayIssue | null>(null)
   const [confirmGroup, setConfirmGroup] = useState<DayIssue[] | null>(null)
@@ -244,7 +245,7 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
                 <th className="num">{t('col.eggs')}</th>
                 <th className="num">{t('col.production')}</th>
                 <th className="num">{t('col.feed')}</th>
-                <th className="num">{t('col.water')}</th>
+                {water && <th className="num">{t('col.water')}</th>}
                 <th className="num">{t('col.medicine')}</th>
                 <th>{t('col.deaths')} ✓</th>
               </tr>
@@ -287,7 +288,7 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
                     {c.feed.consumption === null ? '—' : num(c.feed.consumption, 1)}
                     {c.feed.isEstimate && <span title={t('common.estimate')}>*</span>}
                   </td>
-                  <td className="num">{c.water.litres === null ? '—' : num(c.water.litres)}</td>
+                  {water && <td className="num">{c.water.litres === null ? '—' : num(c.water.litres)}</td>}
                   <td className="num">{c.medicineUses || '·'}</td>
                   <td>
                     {c.mortalityConfirmed ? (
@@ -321,7 +322,7 @@ function DayReview({ overview: ov }: { overview: DayOverview }) {
                   {tot.feedKg === null ? '—' : num(tot.feedKg, 1)}
                   {tot.feedIsEstimate && '*'}
                 </td>
-                <td className="num">{tot.waterLitres === null ? '—' : num(tot.waterLitres)}</td>
+                {water && <td className="num">{tot.waterLitres === null ? '—' : num(tot.waterLitres)}</td>}
                 <td className="num">{tot.medicineUses}</td>
                 <td />
               </tr>

@@ -186,6 +186,16 @@ function CalcTab() {
             ))}
           </div>
         </Field>
+        <div className="form-grid">
+          <Field label={t('set.feedPerBird')} hint={t('set.feedPerBirdHint')}>
+            <NumInput decimals value={f.feedGramsPerBird} onChange={(v) => setF({ ...f, feedGramsPerBird: v ?? 110 })} />
+          </Field>
+        </div>
+        <label className="check">
+          <input type="checkbox" checked={f.waterTracking} onChange={(e) => setF({ ...f, waterTracking: e.target.checked })} />
+          {t('set.waterTracking')}
+        </label>
+        <div className="muted small">{t('set.waterTrackingHint')}</div>
         <h3>{t('set.alerts')}</h3>
         <Notice tone="info">{t('issue.informational')}</Notice>
         <div className="form-grid">
@@ -198,9 +208,11 @@ function CalcTab() {
           <Field label={t('set.mortAlert')}>
             <NumInput decimals value={f.mortalityAlertPct} onChange={(v) => setF({ ...f, mortalityAlertPct: v ?? 0.1 })} />
           </Field>
-          <Field label={t('set.waterChange')}>
-            <NumInput decimals value={f.waterChangePct} onChange={(v) => setF({ ...f, waterChangePct: v ?? 30 })} />
-          </Field>
+          {f.waterTracking && (
+            <Field label={t('set.waterChange')}>
+              <NumInput decimals value={f.waterChangePct} onChange={(v) => setF({ ...f, waterChangePct: v ?? 30 })} />
+            </Field>
+          )}
           <Field label={t('set.expiryWarn')}>
             <NumInput value={f.medicineExpiryWarnDays} onChange={(v) => setF({ ...f, medicineExpiryWarnDays: v ?? 30 })} />
           </Field>
@@ -233,7 +245,9 @@ function CalcTab() {
                 mortalityAlertPct: f.mortalityAlertPct,
                 waterChangePct: f.waterChangePct,
                 medicineExpiryWarnDays: f.medicineExpiryWarnDays,
-                medicineUnits: f.medicineUnits
+                medicineUnits: f.medicineUnits,
+                feedGramsPerBird: f.feedGramsPerBird,
+                waterTracking: f.waterTracking
               })
             }
           >

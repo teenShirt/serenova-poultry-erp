@@ -18,6 +18,9 @@ const DELETE_TABLES: Partial<Record<ApiMethod, string>> = {
   'medicine.deleteHealthEvent': 'health_events'
 }
 
+/** Requests that add a record, or change a saved one when `expectedId` names it: changing needs 'records.edit'. */
+const SAVE_METHODS = new Set<ApiMethod>(['eggs.save', 'feed.save', 'water.save'])
+
 /** The cages stored for a user (JSON array of cage ids); null = all cages. */
 export function parseCages(json: string | null): number[] | null {
   if (!json) return null
@@ -49,10 +52,11 @@ export async function checkAccess(ctx: Ctx, method: ApiMethod, input: unknown) {
   if (!ctx.user) return
   const need = PERMISSION_FOR_METHOD[method]
   if (need && !ctx.user.permissions.includes(need)) throw new AppError('no_permission')
+  const i = (input ?? {}) as Record<string, unknown>
+  if (SAVE_METHODS.has(method) && i.expectedId != null && !ctx.user.permissions.includes('records.edit')) throw new AppError('no_permission')
   if (ctx.user.role === 'admin') return
   const cages = ctx.user.cages ?? null
   if (cages === null) return
-  const i = (input ?? {}) as Record<string, unknown>
   for (const key of ['cageId', 'fromCageId', 'toCageId']) if (key in i) await assertCage(ctx, cages, i[key])
   if (Array.isArray(i.cageIds)) for (const c of i.cageIds) await assertCage(ctx, cages, c)
   // A treatment for the whole farm (no cage) needs responsibility for all cages.
@@ -103,14 +107,14 @@ export async function dutyTasks(ctx: Ctx, date: string): Promise<DutyTask[]> {
   }
   if (ov.dayId === null) return tasks
   const cages = ov.cages.filter((c) => mine === null || mine.includes(c.cageId))
-  const sessions = (await getSettings(ctx)).expectedEggSessions
+  const { expectedEggSessions: sessions, waterTracking } = await getSettings(ctx)
   for (const c of cages) {
     const base = { cageId: c.cageId, cageName: c.name }
     if (duties.includes('eggs')) {
       for (const s of sessions) tasks.push({ ...base, key: `eggs:${s}:${c.cageId}`, duty: 'eggs', params: { session: s }, done: c.eggs.sessions.includes(s) })
     }
     if (duties.includes('feed')) tasks.push({ ...base, key: `feed:${c.cageId}`, duty: 'feed', params: {}, done: c.feed.records > 0 })
-    if (duties.includes('water')) tasks.push({ ...base, key: `water:${c.cageId}`, duty: 'water', params: {}, done: c.water.recorded })
+    if (waterTracking && duties.includes('water')) tasks.push({ ...base, key: `water:${c.cageId}`, duty: 'water', params: {}, done: c.water.recorded })
     if (duties.includes('flock')) tasks.push({ ...base, key: `deaths:${c.cageId}`, duty: 'flock', params: {}, done: c.mortalityConfirmed })
   }
   return tasks

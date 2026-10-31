@@ -358,8 +358,10 @@ async function computeIssues(ctx: Ctx, day: DayRow, cages: CageDaySummary[], set
       const missing = settings.expectedEggSessions.filter((s) => !c.eggs.sessions.includes(s))
       if (missing.length > 0) add('missing_eggs', 'warning', c.cageId, { sessions: missing.join(', ') })
       if (c.feed.records === 0) add('missing_feed', 'warning', c.cageId)
-      if (!c.water.recorded) add('missing_water', 'warning', c.cageId)
-      else if (c.water.litres === null) add('water_incomplete', 'warning', c.cageId)
+      if (settings.waterTracking) {
+        if (!c.water.recorded) add('missing_water', 'warning', c.cageId)
+        else if (c.water.litres === null) add('water_incomplete', 'warning', c.cageId)
+      }
     }
     if (c.feed.hasError) add('feed_inconsistent', 'error', c.cageId, {}, false)
     else if (c.feed.isEstimate) add('feed_estimated', 'info', c.cageId)
@@ -379,7 +381,7 @@ async function computeIssues(ctx: Ctx, day: DayRow, cages: CageDaySummary[], set
     }
     const baseWater = mean(hist.map((h) => h.water.litres))
     const wch = percentChange(c.water.litres, baseWater)
-    if (wch !== null && Math.abs(wch) >= settings.waterChangePct) {
+    if (settings.waterTracking && wch !== null && Math.abs(wch) >= settings.waterChangePct) {
       add('water_change', 'info', c.cageId, { change: wch, baseline: round(baseWater ?? 0, 0) })
     }
   }

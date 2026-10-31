@@ -32,7 +32,7 @@ export function OverviewPage() {
     { key: 'mortalityPct', label: t('ov.mortalityPct'), digits: 2 },
     { key: 'feedKg', label: t('ov.feedKg'), digits: 1 },
     { key: 'feedPerBirdG', label: t('ov.feedPerBird'), digits: 1 },
-    { key: 'waterLitres', label: t('ov.waterL') },
+    ...(status.settings.waterTracking ? [{ key: 'waterLitres' as const, label: t('ov.waterL') }] : []),
     { key: 'activeFlocks', label: t('ov.flocks') },
     { key: 'tasksOverdue', label: t('ov.tasksOverdue'), tone: (r) => (r.tasksOverdue ? 'bad' : '') },
     { key: 'remindersDue', label: t('ov.reminders'), tone: (r) => (r.remindersDue ? 'warn' : '') },

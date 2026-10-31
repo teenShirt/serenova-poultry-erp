@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { Boxes, Pencil, Plus, Repeat } from 'lucide-react'
+import { Boxes, Pencil, Plus, Repeat, Trash2 } from 'lucide-react'
 import type { ItemInputDto } from '@shared/api'
 import { addDays } from '@shared/dates'
-import { INVENTORY_CATEGORIES, type InventoryBalance, type InventoryCategory, type TxnType } from '@shared/types'
+import { INVENTORY_CATEGORIES, type InventoryBalance, type InventoryCategory, type InventoryTxn, type TxnType } from '@shared/types'
 import { call } from '../lib/api'
 import { useApp, useLoad } from '../lib/app'
-import { Card, Empty, Field, Modal, Notice, NumInput, PageHeader, Seg, Tabs, nz } from '../components/ui'
+import { Card, Empty, Field, Modal, Notice, NumInput, PageHeader, ReasonDialog, Seg, Tabs, nz } from '../components/ui'
 
 export function InventoryPage() {
   const { t, num, can, date, workDate, status } = useApp()
@@ -20,6 +20,8 @@ export function InventoryPage() {
   const { data: batches } = useLoad(() => call('inventory.batches', {}), [])
   const [record, setRecord] = useState<InventoryBalance | 'any' | null>(null)
   const [editing, setEditing] = useState<InventoryBalance | 'new' | null>(null)
+  const [fixing, setFixing] = useState<InventoryTxn | null>(null)
+  const [removing, setRemoving] = useState<InventoryTxn | null>(null)
 
   return (
     <div className="page">
@@ -132,6 +134,7 @@ export function InventoryPage() {
                       </th>
                       <th>{t('common.notes')}</th>
                       <th>{t('common.recordedBy')}</th>
+                      {can('records.edit') && <th />}
                     </tr>
                   </thead>
                   <tbody>
@@ -152,6 +155,20 @@ export function InventoryPage() {
                         <td>{[x.supplier, x.reference].filter(Boolean).join(' · ')}</td>
                         <td>{x.notes}</td>
                         <td>{x.recordedBy}</td>
+                        {can('records.edit') && (
+                          <td className="nowrap">
+                            {isManual(x) && (
+                              <>
+                                <button className="icon-btn" title={t('common.edit')} onClick={() => setFixing(x)}>
+                                  <Pencil size={15} />
+                                </button>
+                                <button className="icon-btn" title={t('common.delete')} onClick={() => setRemoving(x)}>
+                                  <Trash2 size={15} />
+                                </button>
+                              </>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -199,7 +216,86 @@ export function InventoryPage() {
       </div>
       {record && <RecordTxn items={(items ?? []).filter((i) => i.active)} initial={record === 'any' ? null : record} onClose={() => setRecord(null)} />}
       {editing && <ItemForm item={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
+      {fixing && <FixTxn txn={fixing} onClose={() => setFixing(null)} />}
+      {removing && (
+        <ReasonDialog
+          title={t('common.deleteTitle')}
+          hint={`${removing.itemName} ${num(removing.quantity, 2)} ${removing.unit} (${t('txn.' + removing.type)}). ${t('common.deleteHint')}`}
+          danger
+          confirmLabel={t('common.delete')}
+          onClose={() => setRemoving(null)}
+          onSubmit={(reason) => call('inventory.deleteTxn', { id: removing.id, reason })}
+        />
+      )}
     </div>
+  )
+}
+
+/** Movements entered by hand; those made by daily records, GRNs, transfers and counts are changed there. */
+const isManual = (x: InventoryTxn) => !x.sourceType && !['transfer_in', 'transfer_out', 'count', 'reversal'].includes(x.type)
+
+function FixTxn({ txn, onClose }: { txn: InventoryTxn; onClose: () => void }) {
+  const { t, toast, fail } = useApp()
+  const signed = txn.type === 'adjustment' || txn.type === 'opening'
+  const [f, setF] = useState({
+    quantity: signed ? txn.quantity : Math.abs(txn.quantity),
+    unitCost: txn.unitCost,
+    supplier: txn.supplier,
+    reference: txn.reference,
+    notes: txn.notes,
+    reason: ''
+  })
+  const ok = f.quantity !== null && f.quantity !== 0 && (signed || f.quantity > 0) && f.reason.trim().length >= 3
+  return (
+    <Modal
+      title={`${t('common.edit')} — ${txn.itemName} (${t('txn.' + txn.type)})`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            {t('common.cancel')}
+          </button>
+          <button
+            className="btn primary"
+            disabled={!ok}
+            onClick={async () => {
+              try {
+                await call('inventory.updateTxn', { id: txn.id, ...f, quantity: f.quantity!, reason: f.reason.trim() })
+                toast('success', t('common.saved'))
+                onClose()
+              } catch (e) {
+                fail(e)
+              }
+            }}
+          >
+            {t('common.save')}
+          </button>
+        </>
+      }
+    >
+      <div className="stack">
+        <div className="form-grid">
+          <Field label={`${t('common.quantity')} (${txn.unit})`} required>
+            <NumInput decimals value={f.quantity} onChange={(v) => setF({ ...f, quantity: v ?? 0 })} />
+          </Field>
+          <Field label={t('inv.unitCost')}>
+            <NumInput decimals value={f.unitCost} onChange={(v) => setF({ ...f, unitCost: v })} />
+          </Field>
+          <Field label={t('inv.supplier')}>
+            <input className="input" value={f.supplier ?? ''} maxLength={100} onChange={(e) => setF({ ...f, supplier: nz(e.target.value) })} />
+          </Field>
+          <Field label={t('inv.reference')}>
+            <input className="input" value={f.reference ?? ''} maxLength={100} onChange={(e) => setF({ ...f, reference: nz(e.target.value) })} />
+          </Field>
+        </div>
+        <Field label={t('common.notes')}>
+          <input className="input" value={f.notes ?? ''} maxLength={500} onChange={(e) => setF({ ...f, notes: nz(e.target.value) })} />
+        </Field>
+        <Field label={t('inv.fixReason')} required>
+          <input className="input" value={f.reason} maxLength={500} onChange={(e) => setF({ ...f, reason: e.target.value })} />
+        </Field>
+      </div>
+    </Modal>
   )
 }
 

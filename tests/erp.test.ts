@@ -69,7 +69,7 @@ describe('roles, permissions and cage responsibility', () => {
     const f = await makeFarm()
     await startDay(f.admin, { date: D1, corrections: [], acknowledgeWarnings: false })
     const [c1, c2] = f.cageIds
-    const collector = await saveRole(f.admin, { id: null, name: 'Egg collector', description: null, permissions: ['eggs.record', 'flock.record'] })
+    const collector = await saveRole(f.admin, { id: null, name: 'Egg collector', description: null, permissions: ['eggs.record', 'flock.record', 'records.edit'] })
     await updateUser(f.admin, { id: f.worker.user!.id, email: 'worker@test.farm', displayName: 'Worker', roleId: collector, active: true })
     await setUserCages(f.admin, f.worker.user!.id, [c1])
     const w = await f.signIn('worker@test.farm', 'worker123')

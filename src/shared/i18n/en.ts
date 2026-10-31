@@ -1565,7 +1565,41 @@ export const en = {
   'wd.title': 'Egg withdrawal:',
   'wd.line': '{cage} ({item}) — eggs usable from {date}',
   'inv.withdrawalDays': 'Egg withdrawal period (days)',
-  'inv.withdrawalHint': 'From the product label or the veterinarian. Empty = none. The system never fills this in.'
+  'inv.withdrawalHint': 'From the product label or the veterinarian. Empty = none. The system never fills this in.',
+  'perm.records.edit': 'Edit and delete saved records (daily records and stock movements)',
+  'perm.medicine.schedule': 'Plan medicine dates',
+  'set.feedPerBird': 'Feed per bird per day (g)',
+  'set.feedPerBirdHint': 'The Feed page fills in each cage’s feed as its live birds × this amount.',
+  'set.waterTracking': 'Track water',
+  'set.waterTrackingHint':
+    'When off, water is hidden from the menu, the day checks, duties, reports and charts. Water already recorded is kept and comes back when this is turned on again.',
+  'feed.autoHelp':
+    'Feed issued is filled in automatically: live birds at the start of the day × {g} g. Change it if the actual amount was different, then save.',
+  'feed.expected': 'Expected ({g} g / bird)',
+  'alert.medicine_due': '{item} is due today ({cage})',
+  'alert.medicine_overdue': '{item} ({cage}) was due on {date} and has not been recorded',
+  'msch.title': 'Medicine plan',
+  'msch.add': 'Plan a medicine',
+  'msch.rule':
+    'Record the treatment with the same medicine for the same cage (or the whole farm) and the plan moves on by itself: a repeating plan to its next date, a one-off plan is finished. Reminders start 3 days before the due date.',
+  'msch.none': 'No medicines planned for this farm.',
+  'msch.nextDue': 'Next due',
+  'msch.dose': 'Dose',
+  'msch.repeat': 'Repeats',
+  'msch.repeatDays': 'Repeat every (days)',
+  'msch.repeatHint': 'Empty = once.',
+  'msch.everyDays': 'Every {n} days',
+  'msch.once': 'Once',
+  'msch.lastDone': 'Last given',
+  'msch.finished': 'Finished',
+  'msch.dueTitle': 'Planned medicines:',
+  'msch.state.overdue': '{n} days overdue',
+  'msch.state.due': 'Due today',
+  'msch.state.upcoming': 'In {n} days',
+  'inv.fixReason': 'Reason for the correction',
+  'err.txn_not_manual':
+    'Only stock movements entered by hand can be changed here. Change the daily record, goods received note, transfer or count that made this one.',
+  'table.medicine_schedules': 'Medicine plans'
 } as const
 
 export type TranslationKey = keyof typeof en

@@ -1,9 +1,11 @@
-import type { HealthEvent, Treatment } from '@shared/types'
+import { addDays, daysBetween, isIsoDate } from '@shared/dates'
+import type { HealthEvent, MedicineDue, MedicineSchedule, Treatment } from '@shared/types'
 import { type Ctx, requireUser } from '../context'
 import { assert } from '../errors'
 import { audit } from './audit'
 import { requireCageDay, requireWritableDay } from './days'
 import { getItem, syncLinkedTxn } from './inventory'
+import { requirePermission } from './roles'
 
 const treatmentSelect = `SELECT t.id, d.business_date AS date, t.cage_id AS cageId, c.name AS cageName, t.item_id AS itemId,
     i.name AS itemName, i.unit, t.batch_id AS batchId, b.batch_no AS batchNo, b.expiry_date AS expiryDate, t.quantity,
@@ -87,8 +89,105 @@ export async function addTreatment(ctx: Ctx, t: TreatmentInput): Promise<number>
       cageId: t.cageId
     })
     await audit(ctx, { action: 'create', entity: 'treatment', entityId: id, dayId: day.id, details: { ...t, item: item.name } })
+    await completeSchedules(ctx, t)
     return id
   })()
+}
+
+// ---------------------------------------------------------------- medicine schedules
+
+/** Reminders show a planned medicine this many days before it is due. */
+export const REMIND_DAYS = 3
+
+const scheduleSelect = `SELECT s.id, s.cage_id AS cageId, c.name AS cageName, s.item_id AS itemId, i.name AS itemName, i.unit, s.dose,
+    s.due_date AS dueDate, s.repeat_days AS repeatDays, s.notes, s.active, s.last_done_on AS lastDoneOn
+  FROM medicine_schedules s LEFT JOIN cages c ON c.id = s.cage_id JOIN inventory_items i ON i.id = s.item_id`
+
+type ScheduleRow = Omit<MedicineSchedule, 'active'> & { active: number }
+
+export async function listSchedules(ctx: Ctx): Promise<MedicineSchedule[]> {
+  const rows = (await ctx.db
+    .prepare(`${scheduleSelect} WHERE s.organization_id = ? AND s.farm_id = ? ORDER BY s.active DESC, s.due_date, c.sort_order, s.id`)
+    .all(ctx.org, ctx.farm)) as ScheduleRow[]
+  return rows.map((r) => ({ ...r, active: !!r.active }))
+}
+
+/** Plans a medicine routine (or changes one): the date it is next due, and how often it repeats. */
+export async function saveSchedule(ctx: Ctx, s: Omit<MedicineSchedule, 'cageName' | 'itemName' | 'unit' | 'lastDoneOn' | 'id'> & { id: number | null }) {
+  const user = requireUser(ctx)
+  requirePermission(ctx, 'medicine.schedule')
+  assert(isIsoDate(s.dueDate), 'invalid_date')
+  return ctx.db.transaction(async () => {
+    if (s.cageId)
+      assert(
+        await ctx.db.prepare('SELECT 1 AS x FROM cages WHERE id = ? AND organization_id = ? AND farm_id = ?').get(s.cageId, ctx.org, ctx.farm),
+        'cage_not_found'
+      )
+    assert((await getItem(ctx, s.itemId)).category === 'medicine', 'item_not_medicine')
+    const vals = [s.cageId, s.itemId, s.dose, s.dueDate, s.repeatDays, s.notes?.trim() || null, s.active ? 1 : 0]
+    if (s.id) {
+      const r = await ctx.db
+        .prepare(
+          `UPDATE medicine_schedules SET cage_id = ?, item_id = ?, dose = ?, due_date = ?, repeat_days = ?, notes = ?, active = ?
+           WHERE id = ? AND organization_id = ? AND farm_id = ?`
+        )
+        .run(...vals, s.id, ctx.org, ctx.farm)
+      assert(r.changes === 1, 'not_found')
+      await audit(ctx, { action: 'update', entity: 'medicine_schedule', entityId: s.id, details: s })
+      return s.id
+    }
+    const id = Number(
+      (
+        await ctx.db
+          .prepare(
+            `INSERT INTO medicine_schedules (organization_id, farm_id, cage_id, item_id, dose, due_date, repeat_days, notes, active, created_by, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(ctx.org, ctx.farm, ...vals, user.id, ctx.now().toISOString())
+      ).lastInsertRowid
+    )
+    await audit(ctx, { action: 'create', entity: 'medicine_schedule', entityId: id, details: s })
+    return id
+  })()
+}
+
+/**
+ * A treatment with a planned medicine, for the same cage (or the whole farm, when planned for the
+ * whole farm), given from REMIND_DAYS before its due date on, completes it: a repeating plan moves
+ * to its next date (the treatment date + its interval), a one-off plan ends.
+ */
+async function completeSchedules(ctx: Ctx, t: TreatmentInput) {
+  const due = (await ctx.db
+    .prepare(
+      `SELECT id, repeat_days FROM medicine_schedules WHERE organization_id = ? AND farm_id = ? AND active = 1 AND item_id = ?
+         AND cage_id <=> ? AND due_date <= ?`
+    )
+    .all(ctx.org, ctx.farm, t.itemId, t.cageId, addDays(t.date, REMIND_DAYS))) as { id: number; repeat_days: number | null }[]
+  for (const s of due) {
+    if (s.repeat_days) {
+      await ctx.db.prepare('UPDATE medicine_schedules SET due_date = ?, last_done_on = ? WHERE id = ?').run(addDays(t.date, s.repeat_days), t.date, s.id)
+    } else {
+      await ctx.db.prepare('UPDATE medicine_schedules SET active = 0, last_done_on = ? WHERE id = ?').run(t.date, s.id)
+    }
+    await audit(ctx, {
+      action: 'schedule_done',
+      entity: 'medicine_schedule',
+      entityId: s.id,
+      details: { date: t.date, next: s.repeat_days ? addDays(t.date, s.repeat_days) : null }
+    })
+  }
+}
+
+/** Active planned medicines overdue on a date, due on it, or due within REMIND_DAYS after it. */
+export async function dueSchedules(ctx: Ctx, date: string): Promise<MedicineDue[]> {
+  assert(isIsoDate(date), 'invalid_date')
+  const rows = (await ctx.db
+    .prepare(`${scheduleSelect} WHERE s.organization_id = ? AND s.farm_id = ? AND s.active = 1 AND s.due_date <= ? ORDER BY s.due_date, c.sort_order, s.id`)
+    .all(ctx.org, ctx.farm, addDays(date, REMIND_DAYS))) as ScheduleRow[]
+  return rows.map((r) => {
+    const daysLeft = daysBetween(date, r.dueDate)
+    return { ...r, active: true, daysLeft, state: daysLeft < 0 ? 'overdue' : daysLeft === 0 ? 'due' : 'upcoming' }
+  })
 }
 
 export async function deleteTreatment(ctx: Ctx, id: number, reason: string) {
