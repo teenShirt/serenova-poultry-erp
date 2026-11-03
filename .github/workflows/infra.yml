@@ -30,8 +30,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # ansible-lint brings ansible-core with it; --include-deps puts ansible-playbook and ansible-galaxy on PATH too.
-      - run: pipx install --include-deps ansible-lint
+      # One Python environment for ansible-lint and the ansible-core it brings, so both see the same collections.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install ansible-lint
       - run: ansible-galaxy collection install -r infra/ansible/requirements.yml
       - run: ansible-playbook --syntax-check -i infra/ansible/inventory/example.ini infra/ansible/site.yml
       - run: ansible-lint infra/ansible/site.yml

@@ -68,7 +68,7 @@
         name: ssh
         state: restarted
 
-- name: k3s control plane
+- name: K3s control plane
   hosts: k3s_server
   become: true
   tasks:
@@ -104,7 +104,7 @@
       delegate_to: localhost
       become: false
 
-- name: k3s workers
+- name: K3s workers
   hosts: k3s_agent
   become: true
   tasks:

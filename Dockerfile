@@ -16,7 +16,11 @@ ENV NODE_ENV=production \
     BACKUP_DIR=/data/backups
 WORKDIR /app
 # tini forwards SIGTERM so the server shuts down cleanly when Kubernetes stops the pod.
+# npm, npx and corepack are removed: the server runs with node alone, and npm's own bundled
+# packages are where the image scan finds vulnerabilities.
 RUN apt-get update && apt-get install -y --no-install-recommends tini && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+       /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
     && mkdir -p /data/backups && chown -R node:node /data
 COPY --from=build --chown=node:node /app/package.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
