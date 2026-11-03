@@ -30,7 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: pipx install ansible-core && pipx inject ansible-core ansible-lint
+      # ansible-lint brings ansible-core with it; --include-deps puts ansible-playbook and ansible-galaxy on PATH too.
+      - run: pipx install --include-deps ansible-lint
       - run: ansible-galaxy collection install -r infra/ansible/requirements.yml
       - run: ansible-playbook --syntax-check -i infra/ansible/inventory/example.ini infra/ansible/site.yml
       - run: ansible-lint infra/ansible/site.yml

@@ -73,7 +73,8 @@ jobs:
           curl -fsS http://127.0.0.1:9100/metrics | grep -q '^pfm_ready 1' || { docker logs smoke; exit 1; }
 
       - name: Vulnerability scan (fail on fixable high/critical)
-        uses: aquasecurity/trivy-action@0.33.1
+        # Pinned to the commit: this action's tags were rewritten in a March 2026 supply-chain attack.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short }}
           severity: HIGH,CRITICAL
