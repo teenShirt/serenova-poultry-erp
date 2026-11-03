@@ -1,0 +1,115 @@
+# Builds the container image, scans it for vulnerabilities and, on main, publishes it. With the
+# variable GITOPS_ENABLED=true it also hands the new tag to GitOps: the commit to
+# infra/helm/poultry/values-prod.yaml is what Argo CD deploys.
+name: Container
+
+on:
+  push:
+    branches: [test, main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  image:
+    name: Build, scan, publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      packages: write
+      security-events: write
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          # Throw-away server for this run only; not a real credential.
+          MYSQL_ROOT_PASSWORD: ci-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-only"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: meta
+        name: Image name and tags
+        run: |
+          echo "image=${IMAGE,,}" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "short=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short }}
+          build-args: RELEASE_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Container starts, migrates an empty database and reports ready
+        run: |
+          docker run -d --name smoke --network host -e APP_ENV=staging -e DEMO_ENABLED=false \
+            -e DB_HOST=127.0.0.1 -e DB_USER=root -e DB_PASSWORD=ci-only -e DB_NAME=ci_container \
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short }}
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:3000/readyz > /dev/null 2>&1 && break; sleep 1; done
+          curl -fsS http://127.0.0.1:3000/readyz || { docker logs smoke; exit 1; }
+          curl -fsS http://127.0.0.1:9100/metrics | grep -q '^pfm_ready 1' || { docker logs smoke; exit 1; }
+
+      - name: Vulnerability scan (fail on fixable high/critical)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.short }}
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+          build-args: RELEASE_SHA=${{ github.sha }}
+          cache-from: type=gha
+
+      # Off until the k3s cluster runs production: the VM deploy (deploy.yml) owns releases today, and
+      # this step would otherwise push a commit to main on every release. Set the repository variable
+      # GITOPS_ENABLED=true to turn it on.
+      - name: Hand the new tag to GitOps (Argo CD deploys this commit)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.GITOPS_ENABLED == 'true'
+        run: |
+          sed -i -E "s|^(  tag: ).*|\1\"${{ steps.meta.outputs.short }}\"|" infra/helm/poultry/values-prod.yaml
+          git diff --quiet && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Deploy ${{ steps.meta.outputs.short }} to production [skip ci]"
+          git push

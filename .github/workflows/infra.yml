@@ -1,0 +1,64 @@
+# Validates the infrastructure code: Terraform, Ansible, the Helm chart (rendered and checked
+# against Kubernetes schemas), Argo CD manifests and the Prometheus alert rules.
+name: Infra
+
+on:
+  push:
+    branches: [test, main]
+    paths: ['infra/**', '.github/workflows/infra.yml']
+  pull_request:
+    branches: [main]
+    paths: ['infra/**', '.github/workflows/infra.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform/proxmox
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+
+  ansible:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pipx install ansible-core && pipx inject ansible-core ansible-lint
+      - run: ansible-galaxy collection install -r infra/ansible/requirements.yml
+      - run: ansible-playbook --syntax-check -i infra/ansible/inventory/example.ini infra/ansible/site.yml
+      - run: ansible-lint infra/ansible/site.yml
+
+  kubernetes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Install kubeconform
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+      - run: helm lint infra/helm/poultry -f infra/helm/poultry/values-prod.yaml
+      - name: Rendered chart matches Kubernetes schemas (CRDs from the community catalogue)
+        run: |
+          helm template poultry infra/helm/poultry -f infra/helm/poultry/values-prod.yaml \
+            | kubeconform -strict -summary \
+                -schema-location default \
+                -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+      - name: Argo CD manifests
+        run: |
+          kubeconform -strict -summary -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            infra/argocd
+
+  prometheus-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker run --rm -v "$PWD/infra/helm/poultry/files:/w" --entrypoint promtool prom/prometheus:v3.5.0 check rules /w/alerts.yml

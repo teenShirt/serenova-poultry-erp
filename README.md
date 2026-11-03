@@ -181,6 +181,19 @@ npm run reset-password -- <email address>  # set a new password when the recover
 npm run create-super-admin -- <email> "<name>"   # a platform administrator for the console at /#/platform
 ```
 
+## Site reliability platform (Kubernetes, GitOps, SLOs)
+
+A production-style platform built entirely from code: **Terraform** creates k3s VMs on **Proxmox VE**,
+**Ansible** hardens them and bootstraps **Argo CD**, and Argo CD deploys the app's **Helm** chart together with
+Prometheus, Grafana, Loki, Longhorn, Sealed Secrets and cert-manager. GitHub Actions builds, smoke-tests and
+**Trivy**-scans the container image, then hands the new tag to GitOps. The app serves Prometheus metrics on its
+own port, and burn-rate alerts guard a 99.5% availability and 95%-under-500 ms latency SLO, each with a runbook.
+
+- [docs/SRE.md](docs/SRE.md): architecture diagram, SLOs and error budget policy, building the lab from zero,
+  chaos drills.
+- [docs/runbooks](docs/runbooks): what to do for each alert; [postmortem template](docs/postmortem-template.md).
+- `docker compose up --build`: the app with MySQL, Prometheus (alert rules loaded) and the Grafana SLO dashboard.
+
 ## Deployment, recovery and security
 
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): environments, preparing a server, the staging → approval → production

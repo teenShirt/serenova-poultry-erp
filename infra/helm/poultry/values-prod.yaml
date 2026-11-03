@@ -1,0 +1,9 @@
+# Production values deployed by Argo CD. CI rewrites `tag` on every release from main.
+image:
+  repository: ghcr.io/owner/poultry-web-app
+  tag: "latest"
+
+ingress:
+  host: poultry.lab.local
+  tls:
+    enabled: true

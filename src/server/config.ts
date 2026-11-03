@@ -27,6 +27,8 @@ export interface ServerConfig {
   restoreTestDatabase: string | null
   /** Sign-in, sign-up and password-reset requests allowed per minute from one address */
   authRequestsPerMinute: number
+  /** Port for Prometheus metrics, kept off the public port; none = metrics not served */
+  metricsPort: number | null
 }
 
 export const APP_ENVIRONMENTS = ['development', 'staging', 'production'] as const
@@ -98,6 +100,7 @@ export function loadConfig(): ServerConfig {
     releaseSha: process.env['RELEASE_SHA']?.slice(0, 40) || null,
     backupKey: parseKey(process.env['BACKUP_ENCRYPTION_KEY']),
     restoreTestDatabase: process.env['RESTORE_TEST_DB_NAME'] || null,
-    authRequestsPerMinute: Number(env('AUTH_REQUESTS_PER_MINUTE', '10'))
+    authRequestsPerMinute: Number(env('AUTH_REQUESTS_PER_MINUTE', '10')),
+    metricsPort: process.env['METRICS_PORT'] ? Number(process.env['METRICS_PORT']) : null
   }
 }

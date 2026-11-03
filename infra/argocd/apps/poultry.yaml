@@ -1,0 +1,27 @@
+# The app itself. CI commits a new image tag to values-prod.yaml; Argo CD rolls it out.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: poultry
+  namespace: argocd
+  annotations:
+    # After monitoring and secrets, so the ServiceMonitor CRD and the app's Secret exist.
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/OWNER/Poultry-web-app.git
+    targetRevision: main
+    path: infra/helm/poultry
+    helm:
+      releaseName: poultry
+      valueFiles: [values.yaml, values-prod.yaml]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: poultry
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

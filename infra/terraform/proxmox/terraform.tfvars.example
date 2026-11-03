@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars (git-ignored) and adjust to your lab.
+proxmox_node   = "pve"
+template_vm_id = 9000
+datastore      = "local-lvm"
+bridge         = "vmbr0"
+gateway        = "192.168.1.1"
+ssh_public_key = "ssh-ed25519 AAAA... you@laptop"

@@ -1,0 +1,18 @@
+# App of apps: Ansible applies this once; from then on Argo CD installs and updates everything in
+# infra/argocd/apps from git. Replace OWNER with your GitHub user before bootstrapping.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/OWNER/Poultry-web-app.git
+    targetRevision: main
+    path: infra/argocd/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

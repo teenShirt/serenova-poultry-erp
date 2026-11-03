@@ -41,6 +41,7 @@ function config(over: Partial<ServerConfig> = {}): ServerConfig {
     backupKey: null,
     restoreTestDatabase: null,
     authRequestsPerMinute: 10,
+    metricsPort: null,
     ...over
   }
 }
@@ -69,7 +70,7 @@ describe('settings per environment', () => {
     expect(pkg.version).toBe(APP_VERSION)
     const notes = readChangelog(path.join(root, 'CHANGELOG.md'))
     expect(notes[0]).toMatchObject({ version: APP_VERSION })
-    expect(notes[0].body).toContain('Medicine plans')
+    expect(notes[0].body).toContain('false backup alarm')
   })
 })
 
@@ -178,6 +179,11 @@ describe('the HTTP server', () => {
       const refused = await login()
       expect(refused.status).toBe(429)
       expect(await refused.json()).toMatchObject({ ok: false, code: 'too_many_attempts' })
+      // Requests are counted by route pattern (never raw URLs) for Prometheus
+      const metrics = await server.metrics()
+      expect(metrics).toContain('pfm_ready 1')
+      expect(metrics).toMatch(/pfm_http_requests_total\{method="POST",route="\/api\/call\/:method",status="429"\} [1-9]/)
+      expect(metrics).toMatch(/pfm_http_request_duration_seconds_count\{method="GET",route="\/healthz"\} [1-9]/)
     } finally {
       http.close()
       await server.close()

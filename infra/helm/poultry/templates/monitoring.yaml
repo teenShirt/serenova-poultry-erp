@@ -1,0 +1,42 @@
+{{- if .Values.monitoring.serviceMonitor }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "poultry.name" . }}
+  labels:
+    {{- include "poultry.labels" . | nindent 4 }}
+    release: {{ .Values.monitoring.release }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "poultry.selector" . | nindent 6 }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+{{- end }}
+{{- if .Values.monitoring.prometheusRule }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "poultry.name" . }}-slo
+  labels:
+    {{- include "poultry.labels" . | nindent 4 }}
+    release: {{ .Values.monitoring.release }}
+spec:
+  {{- (.Files.Get "files/alerts.yml") | fromYaml | toYaml | nindent 2 }}
+{{- end }}
+{{- if .Values.monitoring.serviceMonitor }}
+---
+# Grafana (kube-prometheus-stack sidecar) loads dashboards from ConfigMaps with this label.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "poultry.name" . }}-dashboards
+  labels:
+    {{- include "poultry.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  {{- (.Files.Glob "files/dashboards/*.json").AsConfig | nindent 2 }}
+{{- end }}

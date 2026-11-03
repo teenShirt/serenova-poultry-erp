@@ -1,0 +1,62 @@
+# SLO recording rules and burn-rate alerts (see docs/SRE.md). Single source: the Helm chart ships
+# these as a PrometheusRule, and docker-compose mounts this same file into local Prometheus.
+#
+# SLOs, 30-day window:
+#   Availability: 99.5% of API requests do not fail with a 5xx  -> error budget 0.5%
+#   Latency:      95% of API requests finish within 500 ms
+groups:
+  - name: pfm-slo-recording
+    rules:
+      - record: pfm:api_requests:rate5m
+        expr: sum(rate(pfm_http_requests_total{route=~"/api/.*"}[5m]))
+      - record: pfm:api_errors:ratio_rate5m
+        expr: sum(rate(pfm_http_requests_total{route=~"/api/.*",status=~"5.."}[5m])) / clamp_min(pfm:api_requests:rate5m, 1e-9)
+      - record: pfm:api_errors:ratio_rate1h
+        expr: sum(rate(pfm_http_requests_total{route=~"/api/.*",status=~"5.."}[1h])) / clamp_min(sum(rate(pfm_http_requests_total{route=~"/api/.*"}[1h])), 1e-9)
+      - record: pfm:api_errors:ratio_rate6h
+        expr: sum(rate(pfm_http_requests_total{route=~"/api/.*",status=~"5.."}[6h])) / clamp_min(sum(rate(pfm_http_requests_total{route=~"/api/.*"}[6h])), 1e-9)
+      - record: pfm:api_latency_good:ratio_rate1h
+        expr: sum(rate(pfm_http_request_duration_seconds_bucket{route=~"/api/.*",le="0.5"}[1h])) / clamp_min(sum(rate(pfm_http_request_duration_seconds_count{route=~"/api/.*"}[1h])), 1e-9)
+
+  - name: pfm-slo-alerts
+    rules:
+      # Fast burn: at this rate the whole 30-day budget is gone in ~2 days.
+      - alert: PfmErrorBudgetFastBurn
+        expr: pfm:api_errors:ratio_rate5m > (14.4 * 0.005) and pfm:api_errors:ratio_rate1h > (14.4 * 0.005)
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: API errors are burning the error budget fast
+          runbook_url: https://github.com/OWNER/Poultry-web-app/blob/main/docs/runbooks/high-error-rate.md
+      # Slow burn: budget gone in ~5 days if nothing changes.
+      - alert: PfmErrorBudgetSlowBurn
+        expr: pfm:api_errors:ratio_rate1h > (6 * 0.005) and pfm:api_errors:ratio_rate6h > (6 * 0.005)
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: API errors are steadily burning the error budget
+          runbook_url: https://github.com/OWNER/Poultry-web-app/blob/main/docs/runbooks/high-error-rate.md
+      - alert: PfmLatencySloBreach
+        expr: pfm:api_latency_good:ratio_rate1h < 0.95
+        for: 15m
+        labels: { severity: ticket }
+        annotations:
+          summary: Fewer than 95% of API requests finished within 500 ms over the last hour
+          runbook_url: https://github.com/OWNER/Poultry-web-app/blob/main/docs/runbooks/slow-responses.md
+
+  - name: pfm-health
+    rules:
+      - alert: PfmNotReady
+        expr: max(pfm_ready) == 0 or absent(pfm_ready)
+        for: 3m
+        labels: { severity: page }
+        annotations:
+          summary: The app cannot reach its database or the schema does not match the release
+          runbook_url: https://github.com/OWNER/Poultry-web-app/blob/main/docs/runbooks/app-not-ready.md
+      - alert: PfmHighMemory
+        expr: max(process_resident_memory_bytes{job=~".*poultry.*"}) > 900e6
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: The app is using more than 900 MB of memory
+          runbook_url: https://github.com/OWNER/Poultry-web-app/blob/main/docs/runbooks/slow-responses.md

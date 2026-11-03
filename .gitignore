@@ -4,3 +4,11 @@ data/
 .env
 *.log
 .vite/
+
+# Infrastructure state and local secrets
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+infra/ansible/inventory/hosts.ini
+infra/ansible/kubeconfig

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: poultry
+description: Poultry Farm Manager web app with probes, autoscaling, SLO alerts and Prometheus scraping
+type: application
+version: 0.1.0
+appVersion: "2.3.0"

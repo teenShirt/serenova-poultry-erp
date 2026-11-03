@@ -1,0 +1,8 @@
+---
+# Pinned so every node runs the same Kubernetes release; upgrade deliberately.
+k3s_version: v1.33.4+k3s1
+# Shared join secret. Supply it at run time, never commit it:
+#   K3S_TOKEN=$(openssl rand -hex 32) ansible-playbook site.yml
+k3s_token: "{{ lookup('ansible.builtin.env', 'K3S_TOKEN') }}"
+k3s_server_ip: "{{ hostvars[groups['k3s_server'][0]]['ansible_host'] }}"
+argocd_version: v3.1.1

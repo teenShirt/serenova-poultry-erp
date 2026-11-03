@@ -1,0 +1,98 @@
+{{- if .Values.mysql.enabled }}
+# Single-instance MySQL for the lab. The app's own encrypted backups (and the weekly restore test)
+# cover recovery; see docs/RECOVERY.md.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "poultry.name" . }}-mysql
+  labels:
+    {{- include "poultry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: database
+  ports:
+    - { name: mysql, port: 3306 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "poultry.name" . }}-mysql
+  labels:
+    {{- include "poultry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  serviceName: {{ include "poultry.name" . }}-mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: database
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: mysql
+          image: {{ .Values.mysql.image }}
+          ports:
+            - { name: mysql, containerPort: 3306 }
+          env:
+            - name: MYSQL_DATABASE
+              value: {{ .Values.env.DB_NAME | quote }}
+            - name: MYSQL_USER
+              value: {{ .Values.env.DB_USER | quote }}
+            - name: MYSQL_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.secrets.existingSecret }}, key: DB_PASSWORD } }
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.secrets.existingSecret }}, key: MYSQL_ROOT_PASSWORD } }
+          readinessProbe:
+            exec: { command: [sh, -c, 'mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD"'] }
+            periodSeconds: 10
+          livenessProbe:
+            exec: { command: [sh, -c, 'mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD"'] }
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 200m, memory: 512Mi }
+            limits: { memory: 1Gi }
+          volumeMounts:
+            - { name: mysql-data, mountPath: /var/lib/mysql }
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql-data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.mysql.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.mysql.storageSize }}
+---
+# The database accepts connections only from the app.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "poultry.name" . }}-mysql
+  labels:
+    {{- include "poultry.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: database
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "poultry.selector" . | nindent 14 }}
+      ports: [{ port: 3306 }]
+{{- end }}

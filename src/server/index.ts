@@ -28,6 +28,7 @@ import { configProblems } from './config'
 import { currentSchemaVersion, latestSchemaVersion } from './db/migrations'
 import { restoreTestDue, runRestoreTest } from './services/restore-test'
 import { audit } from './services/audit'
+import { metricsMiddleware, renderMetrics } from './metrics'
 
 const RATE_LIMITED = new Set(['auth.login', 'platform.login', 'auth.signup', 'auth.resetWithCode', 'setup.complete'])
 import { CSV_KINDS, type CsvKind } from '@shared/overview'
@@ -132,6 +133,7 @@ export async function createServer(cfg: ServerConfig) {
   const app = express()
   app.disable('x-powered-by')
   app.set('trust proxy', cfg.trustProxy)
+  app.use(metricsMiddleware)
 
   app.use((_req, res, next) => {
     res.setHeader(
@@ -324,6 +326,16 @@ export async function createServer(cfg: ServerConfig) {
   return {
     app,
     dbs,
+    /** Prometheus text for the metrics port */
+    async metrics() {
+      let ready = 0
+      try {
+        ready = (await dbs.with('farm', (db) => currentSchemaVersion(db))) === latestSchemaVersion() ? 1 : 0
+      } catch {
+        ready = 0
+      }
+      return renderMetrics({ version: APP_VERSION, release: cfg.releaseSha, environment: cfg.environment, ready })
+    },
     async close() {
       for (const t of timers) clearInterval(t)
       await dbs.close()
@@ -367,12 +379,16 @@ function startSchedulers(cfg: ServerConfig, dbs: Databases, sessions: Sessions) 
         }
         if (orgs.length && (await due(db, null, PLATFORM_BACKUP_HOURS))) {
           const info = await createBackup(db, cfg.backupDir, 'auto', { orgId: null })
-          if (info.status === 'ok') applyRetention(cfg.backupDir, PLATFORM_BACKUP_KEEP, 'all')
-          // Once a week the newest whole-database backup is test-restored into the separate restore-test database.
-          if (info.status === 'ok' && cfg.restoreTestDatabase && (await restoreTestDue(db, RESTORE_TEST_DAYS))) {
-            const r = await runRestoreTest(db, cfg)
-            if (r.status !== 'ok') recordJobFailure('Restore test', new Error(r.problems.join('; ')))
-          } else recordJobFailure('Automatic whole-database backup', new Error(info.message ?? 'failed'))
+          if (info.status !== 'ok') {
+            recordJobFailure('Automatic whole-database backup', new Error(info.message ?? 'failed'))
+          } else {
+            applyRetention(cfg.backupDir, PLATFORM_BACKUP_KEEP, 'all')
+            // Once a week the newest whole-database backup is test-restored into the separate restore-test database.
+            if (cfg.restoreTestDatabase && (await restoreTestDue(db, RESTORE_TEST_DAYS))) {
+              const r = await runRestoreTest(db, cfg)
+              if (r.status !== 'ok') recordJobFailure('Restore test', new Error(r.problems.join('; ')))
+            }
+          }
         }
       } finally {
         await db.query("SELECT RELEASE_LOCK('pfm_auto_backup')")
@@ -400,7 +416,16 @@ async function main() {
     )
     console.log(`Farm data: ${server.dbs.location('farm')} · backups: ${cfg.backupDir}`)
   })
+  // Metrics listen on their own port so the public site never serves them.
+  const metricsHttp =
+    cfg.metricsPort &&
+    express()
+      .get('/metrics', async (_req, res) => {
+        res.type('text/plain; version=0.0.4').send(await server.metrics())
+      })
+      .listen(cfg.metricsPort, cfg.host)
   const stop = () => {
+    if (metricsHttp) metricsHttp.close()
     http.close()
     void server.close().finally(() => process.exit(0))
   }

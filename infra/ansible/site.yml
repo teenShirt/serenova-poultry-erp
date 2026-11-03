@@ -1,0 +1,147 @@
+---
+# Configures the Terraform-built VMs into a k3s cluster and bootstraps GitOps:
+#   ansible-galaxy collection install -r requirements.yml
+#   K3S_TOKEN=... ansible-playbook -i inventory/hosts.ini site.yml
+# Afterwards Argo CD deploys everything else from git (infra/argocd).
+
+- name: Base hardening for every node
+  hosts: k3s_cluster
+  become: true
+  tasks:
+    - name: Fail early without a join token
+      ansible.builtin.assert:
+        that: k3s_token | length >= 32
+        fail_msg: Set K3S_TOKEN (at least 32 characters) in the environment.
+
+    - name: Install base packages
+      ansible.builtin.apt:
+        name: [curl, ca-certificates, unattended-upgrades, qemu-guest-agent, open-iscsi, nfs-common]
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Keep the guest agent running (Proxmox uses it for IPs and clean shutdowns)
+      ansible.builtin.systemd_service:
+        name: qemu-guest-agent
+        state: started
+        enabled: true
+
+    - name: Apply security updates automatically
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        mode: "0644"
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+
+    - name: SSH accepts keys only
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/10-hardening.conf
+        mode: "0644"
+        content: |
+          PasswordAuthentication no
+          PermitRootLogin no
+          KbdInteractiveAuthentication no
+      notify: Restart ssh
+
+    - name: Disable swap now (Kubernetes expects no swap)
+      ansible.builtin.command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+      changed_when: true
+
+    - name: Disable swap on boot
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\sswap\s.*)$'
+        replace: '# \1'
+
+    - name: Kernel settings for container networking
+      ansible.posix.sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        sysctl_file: /etc/sysctl.d/90-k8s.conf
+      loop: "{{ {'net.ipv4.ip_forward': 1, 'fs.inotify.max_user_instances': 512} | dict2items }}"
+
+  handlers:
+    - name: Restart ssh
+      ansible.builtin.systemd_service:
+        name: ssh
+        state: restarted
+
+- name: k3s control plane
+  hosts: k3s_server
+  become: true
+  tasks:
+    - name: Install k3s server
+      ansible.builtin.shell: |
+        set -o pipefail
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" K3S_TOKEN="{{ k3s_token }}" \
+          sh -s - server --write-kubeconfig-mode 0600 --tls-san "{{ ansible_host }}"
+      args:
+        executable: /bin/bash
+        creates: /usr/local/bin/k3s
+      no_log: true
+
+    - name: Wait for the API server
+      ansible.builtin.command: k3s kubectl get --raw=/readyz
+      register: api
+      until: api.rc == 0
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    - name: Copy kubeconfig to the control machine (server address instead of 127.0.0.1)
+      ansible.builtin.fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "{{ playbook_dir }}/kubeconfig"
+        flat: true
+
+    - name: Point the fetched kubeconfig at the server
+      ansible.builtin.replace:
+        path: "{{ playbook_dir }}/kubeconfig"
+        regexp: "https://127.0.0.1:6443"
+        replace: "https://{{ ansible_host }}:6443"
+      delegate_to: localhost
+      become: false
+
+- name: k3s workers
+  hosts: k3s_agent
+  become: true
+  tasks:
+    - name: Join the cluster
+      ansible.builtin.shell: |
+        set -o pipefail
+        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{ k3s_version }}" K3S_TOKEN="{{ k3s_token }}" \
+          K3S_URL="https://{{ k3s_server_ip }}:6443" sh -s - agent
+      args:
+        executable: /bin/bash
+        creates: /usr/local/bin/k3s-agent-uninstall.sh
+      no_log: true
+
+- name: Bootstrap GitOps (Argo CD), which then installs everything else from git
+  hosts: k3s_server
+  become: true
+  tasks:
+    - name: Create the argocd namespace
+      ansible.builtin.command: k3s kubectl create namespace argocd
+      register: ns
+      failed_when: ns.rc != 0 and 'AlreadyExists' not in ns.stderr
+      changed_when: ns.rc == 0
+
+    - name: Install Argo CD
+      ansible.builtin.command: >-
+        k3s kubectl apply -n argocd --server-side --force-conflicts
+        -f https://raw.githubusercontent.com/argoproj/argo-cd/{{ argocd_version }}/manifests/install.yaml
+      register: argo
+      changed_when: "'configured' in argo.stdout or 'created' in argo.stdout"
+
+    - name: Copy the root application (app of apps)
+      ansible.builtin.copy:
+        src: ../argocd/root.yaml
+        dest: /root/argocd-root.yaml
+        mode: "0600"
+
+    - name: Register the root application
+      ansible.builtin.command: k3s kubectl apply -f /root/argocd-root.yaml
+      register: root_app
+      changed_when: "'unchanged' not in root_app.stdout"

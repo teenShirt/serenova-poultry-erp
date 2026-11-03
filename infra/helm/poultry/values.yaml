@@ -1,0 +1,66 @@
+# Defaults; production overrides live in values-prod.yaml (the image tag there is set by CI).
+image:
+  repository: ghcr.io/owner/poultry-web-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+# Non-secret settings (see .env.example). Secrets come from `secrets.existingSecret`.
+env:
+  APP_ENV: production
+  DB_HOST: poultry-mysql
+  DB_NAME: poultry_farm
+  DB_USER: poultry
+  DEMO_ENABLED: "false"
+  COOKIE_SECURE: "true"
+  TRUST_PROXY: "1"
+
+secrets:
+  # A Secret with DB_PASSWORD, SETUP_KEY and BACKUP_ENCRYPTION_KEY (create it with Sealed Secrets,
+  # see docs/SRE.md). The chart never contains secret values.
+  existingSecret: poultry-secrets
+
+resources:
+  requests: { cpu: 100m, memory: 256Mi }
+  limits: { memory: 768Mi }
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  minAvailable: 1
+
+# Backups written by the app (BACKUP_DIR=/data/backups). ReadWriteMany lets every replica mount it;
+# only one replica runs the backup job at a time (database lock).
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteMany
+  size: 20Gi
+
+ingress:
+  enabled: true
+  className: traefik
+  host: poultry.lab.local
+  tls:
+    enabled: false
+    secretName: poultry-tls
+  annotations: {}
+
+monitoring:
+  # ServiceMonitor and PrometheusRule need kube-prometheus-stack (installed by Argo CD).
+  serviceMonitor: true
+  prometheusRule: true
+  # kube-prometheus-stack selects rules and monitors by this label
+  release: kube-prometheus-stack
+
+mysql:
+  # In-cluster MySQL for the lab. Point env.DB_HOST at a managed database and disable this in a real company.
+  enabled: true
+  image: mysql:8.4
+  storageSize: 20Gi
+  storageClass: ""

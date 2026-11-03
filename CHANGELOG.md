@@ -4,6 +4,18 @@ Release history of Serenova Poultry ERP. Each version is deployed from `main` by
 deployment workflow (see `docs/DEPLOYMENT.md`). The newest version listed here is the latest
 approved release; the platform console shows these notes.
 
+## [2.3.1] - 2026-11-03
+
+Monitoring, and a false backup alarm fixed.
+
+- Fixed: every successful daily whole-database backup was reported as failed (in the server log and
+  the platform console's background job failures) unless the weekly restore test ran the same day.
+  The backups themselves were written correctly.
+- Monitoring: with `METRICS_PORT` set, the server serves Prometheus metrics on that separate port
+  (requests and response times by route, readiness, version). Alert rules for the availability and
+  response-time objectives, a Grafana dashboard and a runbook for each alert are in `infra/` and
+  `docs/` (see `docs/SRE.md`).
+
 ## [2.3.0] - 2026-10-31
 
 Feed per bird, medicine plans, water tracking switch, and who may change records.
