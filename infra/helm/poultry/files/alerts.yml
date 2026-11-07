@@ -27,7 +27,7 @@ groups:
         labels: { severity: page }
         annotations:
           summary: API errors are burning the error budget fast
-          runbook_url: https://github.com/OWNER/Poultry-web-app/blob/main/docs/runbooks/high-error-rate.md
+          runbook_url: https://github.com/teenShirt/serenova-poultry-erp/blob/main/docs/runbooks/high-error-rate.md
       # Slow burn: budget gone in ~5 days if nothing changes.
       - alert: PfmErrorBudgetSlowBurn
         expr: pfm:api_errors:ratio_rate1h > (6 * 0.005) and pfm:api_errors:ratio_rate6h > (6 * 0.005)
@@ -35,14 +35,14 @@ groups:
         labels: { severity: ticket }
         annotations:
           summary: API errors are steadily burning the error budget
-          runbook_url: https://github.com/OWNER/Poultry-web-app/blob/main/docs/runbooks/high-error-rate.md
+          runbook_url: https://github.com/teenShirt/serenova-poultry-erp/blob/main/docs/runbooks/high-error-rate.md
       - alert: PfmLatencySloBreach
         expr: pfm:api_latency_good:ratio_rate1h < 0.95
         for: 15m
         labels: { severity: ticket }
         annotations:
           summary: Fewer than 95% of API requests finished within 500 ms over the last hour
-          runbook_url: https://github.com/OWNER/Poultry-web-app/blob/main/docs/runbooks/slow-responses.md
+          runbook_url: https://github.com/teenShirt/serenova-poultry-erp/blob/main/docs/runbooks/slow-responses.md
 
   - name: pfm-health
     rules:
@@ -52,11 +52,11 @@ groups:
         labels: { severity: page }
         annotations:
           summary: The app cannot reach its database or the schema does not match the release
-          runbook_url: https://github.com/OWNER/Poultry-web-app/blob/main/docs/runbooks/app-not-ready.md
+          runbook_url: https://github.com/teenShirt/serenova-poultry-erp/blob/main/docs/runbooks/app-not-ready.md
       - alert: PfmHighMemory
         expr: max(process_resident_memory_bytes{job=~".*poultry.*"}) > 900e6
         for: 10m
         labels: { severity: ticket }
         annotations:
           summary: The app is using more than 900 MB of memory
-          runbook_url: https://github.com/OWNER/Poultry-web-app/blob/main/docs/runbooks/slow-responses.md
+          runbook_url: https://github.com/teenShirt/serenova-poultry-erp/blob/main/docs/runbooks/slow-responses.md
